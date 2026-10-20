@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="DOSBox-Y: an experimental DOSBox-X fork exploring shared debugging, Lua automation, MCP integration and state persistence.">
+  <meta name="color-scheme" content="dark light">
+  <title>DOSBox-Y · Debugging and automation for DOS</title>
+  <style>
+    :root { color-scheme: dark; --bg: #10171d; --panel: #17232c; --text: #eef4f5; --muted: #b2c3cc; --accent: #80e2be; --line: #354a57; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.65 system-ui, sans-serif; }
+    a { color: var(--accent); text-underline-offset: .2em; }
+    a:hover { color: white; }
+    a:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+    .wrap { max-width: 1040px; margin: auto; padding: 0 28px; }
+    header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding-top: 26px !important; padding-bottom: 26px !important; border-bottom: 1px solid var(--line); }
+    .brand { font-weight: 750; letter-spacing: -.03em; font-size: 23px; color: var(--text); text-decoration: none; }
+    nav { display: flex; gap: 24px; font-size: 15px; }
+    .hero { padding: 78px 0 58px; }
+    .eyebrow { color: var(--accent); font: 14px/1.5 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { max-width: 800px; font-size: clamp(38px, 7vw, 70px); line-height: 1.08; letter-spacing: -.055em; margin: 22px 0 25px; }
+    .intro { max-width: 680px; color: var(--muted); font-size: 21px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 30px; }
+    .button { display: inline-block; padding: 11px 19px; background: var(--accent); color: var(--bg); border-radius: 7px; font-weight: 700; text-decoration: none; }
+    .button:hover { background: #b3f1db; color: var(--bg); }
+    .status { border-left: 3px solid var(--accent); background: var(--panel); padding: 18px 23px; margin: 0 0 44px; }
+    .status p { margin: 5px 0; color: var(--muted); }
+    h2 { font-size: 29px; letter-spacing: -.03em; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 22px 0 45px; }
+    article { background: var(--panel); padding: 24px; border: 1px solid var(--line); border-radius: 9px; }
+    article h3 { margin: 0 0 12px; font-size: 20px; }
+    article p, .about p { color: var(--muted); margin-bottom: 0; }
+    .about { max-width: 780px; padding-bottom: 45px; }
+    footer { border-top: 1px solid var(--line); padding: 26px 0 36px; color: var(--muted); font-size: 14px; }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .hero { padding-top: 48px; } .wrap { padding-left: 20px; padding-right: 20px; } }
+    @media (prefers-color-scheme: light) { :root { color-scheme: light; --bg: #f5f8f7; --panel: #fff; --text: #152b32; --muted: #435d68; --accent: #126348; --line: #cbd9da; } a:hover { color: #0a4632; } .button { color: white; } .button:hover { background: #0a4632; color: white; } }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <a class="brand" href="./" aria-label="DOSBox-Y home">DOSBox-Y<span aria-hidden="true">_</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#directions">Directions</a>
+      <a href="https://github.com/salva/dosbox-y">GitHub</a>
+      <a href="https://github.com/joncampbell123/dosbox-x">Upstream</a>
+    </nav>
+  </header>
+  <main class="wrap" id="main">
+    <section class="hero" aria-labelledby="title">
+      <p class="eyebrow">DOSBox-X roots. An experimental direction.</p>
+      <h1 id="title">A closer look inside<br>the DOS machine.</h1>
+      <p class="intro">DOSBox-Y explores debugging and automation on top of DOSBox-X, bringing interactive tools, Lua scripting and programmatic control around a shared native core.</p>
+      <div class="actions">
+        <a class="button" href="https://github.com/salva/dosbox-y">Follow the project on GitHub</a>
+        <a href="#status">Development status</a>
+      </div>
+    </section>
+    <section class="status" id="status" aria-labelledby="status-title">
+      <strong id="status-title">Under active development</strong>
+      <p>The source integration and debugger work are in progress. The directions below are not a claim of completed features or general save-state compatibility.</p>
+      <p>This initial repository publishes the project site. Reviewed integrated source will follow separately; no stable release or downloads are available here yet.</p>
+    </section>
+    <section id="directions" aria-labelledby="directions-title">
+      <p class="eyebrow">Development directions</p>
+      <h2 id="directions-title">One machine. Consistent ways to inspect it.</h2>
+      <div class="grid">
+        <article>
+          <h3>Shared debugging</h3>
+          <p>A common native foundation for interactive and programmatic front ends, with clear ownership of execution, stops, breakpoints and observations.</p>
+        </article>
+        <article>
+          <h3>Lua &amp; MCP</h3>
+          <p>Reusable Lua scripting, interactive evaluation and MCP integration for tooling—without creating competing emulator controllers.</p>
+        </article>
+        <article>
+          <h3>State persistence</h3>
+          <p>Further work on saving and restoring supported machine state, with explicit scope, reproducible checks and honest limits.</p>
+        </article>
+      </div>
+    </section>
+    <section class="about" aria-labelledby="about-title">
+      <h2 id="about-title">Built on DOSBox-X</h2>
+      <p>DOSBox-Y is an independent experimental fork, not an official DOSBox-X release. It builds on the work of the DOSBox and DOSBox-X contributors and aims to keep upstream improvements while developing its own debugging and automation work.</p>
+      <p>For the established upstream emulator and its documentation, visit <a href="https://dosbox-x.com/">dosbox-x.com</a>.</p>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap">DOSBox-Y · Experimental software · <a href="https://github.com/salva/dosbox-y">Repository</a> · <a href="https://github.com/salva/dosbox-y/blob/gh-pages/COPYING">License</a></div>
+  </footer>
+</body>
+</html>
