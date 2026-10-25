@@ -12,26 +12,27 @@ mov [handle],ax
 mov ax,0a000h
 mov es,ax
 xor di,di
+%ifdef GUS_DRAM
+call gus_address_zero
+xor al,al
+out dx,al
+%endif
 loop_next:
+%ifdef GUS_DRAM
+; Check prior guest byte BEFORE replacing it. RAM counter and device byte must
+; agree after load as well as during execution (unlike write-then-read alone).
+call gus_address_zero
+in al,dx
+cmp al,[counter]
+jne fail
+%endif
 inc word [counter]
 mov ax,[counter]
 stosb
 %ifdef GUS_DRAM
 ; Standard GUS at 240h: select guest DRAM address zero, write and read it.
 ; Real allocation/ports, not active voice or DMA playback.
-mov dx,343h
-mov al,43h
-out dx,al
-inc dx
-xor ax,ax
-out dx,ax
-dec dx
-mov al,44h
-out dx,al
-inc dx
-xor ax,ax
-out dx,ax
-mov dx,347h
+call gus_address_zero
 mov al,[counter]
 out dx,al
 in al,dx
@@ -83,6 +84,23 @@ int 21h
 fail:
 mov ax,4c01h
 int 21h
+%ifdef GUS_DRAM
+gus_address_zero:
+mov dx,343h
+mov al,43h
+out dx,al
+inc dx
+xor ax,ax
+out dx,ax
+dec dx
+mov al,44h
+out dx,al
+inc dx
+xor ax,ax
+out dx,ax
+mov dx,347h
+ret
+%endif
 filename db 'LIVE.BIN',0
 handle dw 0
 counter dw 0

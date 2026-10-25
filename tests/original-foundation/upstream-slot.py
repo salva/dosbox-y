@@ -17,6 +17,8 @@ p.add_argument('--cycles', type=int, default=6000)
 p.add_argument('--gus', action='store_true', help='enable native GUS allocation/slot traversal; not active GUS playback proof')
 p.add_argument('--second-sb', action='store_true', help='enable second native Sound Blaster; not DMA/playback qualification')
 a = p.parse_args()
+if a.gus and a.second_sb:
+    p.error('--gus and --second-sb both select port 240h; run these profiles separately')
 a.binary = a.binary.resolve()
 a.work = a.work.resolve()
 a.work.mkdir(parents=True, exist_ok=True)
@@ -107,6 +109,15 @@ try:
             receipts[-1]['loaded_log'] = 'Loaded. (Slot' in (a.work/f'run{index}.log').read_text(errors='replace')
             if not receipts[-1]['loaded_log']:
                 raise RuntimeError('ordinary load acknowledgement absent')
+            if a.gus:
+                # A failed guest comparison exits to the shell but leaves the
+                # emulator alive; require actual witness progress after load.
+                before = (a.work/'LIVE.BIN').stat().st_size
+                time.sleep(2)
+                after = (a.work/'LIVE.BIN').stat().st_size
+                receipts[-1]['post_load_file_growth'] = after - before
+                if after <= before:
+                    raise RuntimeError('GUS guest witness stopped making progress after load')
             if index == 0:
                 shutil.copyfile(a.work/'1.sav', a.work/'retained.sav')
             receipts[-1]['config_sha256'] = hashlib.sha256(config.read_bytes()).hexdigest()
