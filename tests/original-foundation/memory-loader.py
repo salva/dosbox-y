@@ -23,8 +23,8 @@ s=r'''
 #include <vector>
 using Bitu=unsigned;using MemHandle=int;struct PageHandler {};
 '''+struct+r'''
-char bytes[8192];char *MemBase=bytes;size_t MemSize=sizeof(bytes);
-PageHandler handler;PageHandler *handlers[2];MemHandle handles[2];
+char bytes[16384];char *MemBase=bytes;size_t MemSize=sizeof(bytes);
+PageHandler handler;PageHandler *handlers[4];MemHandle handles[4];
 PageHandler *Memory_PageHandler_table[]={nullptr,&handler};
 bool dos_kernel_disabled=false;
 struct SerializeGlobalPOD {static void setBytes(std::istream&) {} static void getBytes(std::ostream&) {}};
@@ -42,16 +42,16 @@ std::string archive(MemoryBlock m,unsigned char id=1) {
  std::string ids(0x40000, char(id));out.write(ids.data(),ids.size());return out.str();
 }
 int main(){
- memory.pages=memory.handler_pages=2;memory.phandlers=handlers;memory.mhandles=handles;
+ memory.pages=memory.handler_pages=4;memory.phandlers=handlers;memory.mhandles=handles;
  memory.lfb.handler=memory.lfb_mmio.handler=&handler;
  Loader loader;MemoryBlock original=memory;
- for(unsigned count:{3u,0x40001u}){memory.pages=count;std::ostringstream out;
+ for(unsigned count:{5u,0x40001u}){memory.pages=count;std::ostringstream out;
  loader.getBytes(out);assert(!out && out.str().empty());memory=original;}
  std::ostringstream valid;loader.getBytes(valid);assert(valid && !valid.str().empty());
  auto hostile=original;hostile.pages=0xffffffff;
  auto reported=original;reported.reported_pages=original.pages+1;
  for(auto h:{hostile,reported}) {std::istringstream in(archive(h));bool fatal=false;
- try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal && memory.pages==2);}
+ try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal && memory.pages==4);}
  auto encoded=original;encoded.phandlers=nullptr;encoded.mhandles=nullptr;
  encoded.lfb.handler=encoded.lfb_mmio.handler=nullptr;
  std::istringstream good(archive(encoded));loader.setBytes(good);
@@ -62,12 +62,17 @@ int main(){
   std::istringstream in(archive(encoded).substr(0,n));bool fatal=false;
   try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);
  }
- for(int next:{-2,1,2,2147483647}) {
+ for(int next:{-2,1,4,2147483647}) {
   handles[1]=next;std::istringstream in(archive(encoded));bool fatal=false;
   try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);
  }
- handles[1]=-1;std::istringstream chain(archive(encoded));loader.setBytes(chain);assert(chain);
- handles[1]=0;
+ handles[1]=2;handles[2]=3;handles[3]=1;
+ {std::istringstream in(archive(encoded));bool fatal=false;
+ try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);}
+ handles[3]=-1;std::istringstream chain(archive(encoded));loader.setBytes(chain);assert(chain);
+ handles[1]=3;handles[2]=3; // Shared tails are acyclic, not validated allocation ownership.
+ {std::istringstream in(archive(encoded));loader.setBytes(in);assert(in);}
+ handles[1]=handles[2]=handles[3]=0;
  std::istringstream bad(archive(encoded,200));bool fatal=false;
  try{loader.setBytes(bad);}catch(int){fatal=true;}assert(fatal);
 }
