@@ -3086,7 +3086,8 @@ bool LocalFile::Seek(uint32_t * pos,uint32_t type) {
 
 bool LocalFile::Close() {
     bool success = true;
-    if (!newtime && fhandle && last_action == WRITE) UpdateLocalDateTime();
+    if (!newtime && fhandle && last_action == WRITE && !UpdateLocalDateTime())
+        success = false;
     if (newtime && fhandle) {
         // force STDIO to flush buffers on this file handle, or else fclose() will write buffered data
         // and cause mtime to reset back to current time.

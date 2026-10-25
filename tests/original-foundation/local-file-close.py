@@ -21,12 +21,13 @@ static uint16_t DOS_PackDate(uint16_t,uint16_t,uint16_t){return 9;}
 struct LocalFile {
  bool newtime=false,open=true;FILE*fhandle=nullptr;int last_action=0,refCtr=1;
  static constexpr int WRITE=2;unsigned time=0,date=0;int file_access_tries=0;
- void UpdateLocalDateTime(){};bool Close();uint32_t GetSeekPos();bool UpdateDateTimeFromHost();
+ bool update_ok=true;bool UpdateLocalDateTime(){return update_ok;};bool Close();uint32_t GetSeekPos();bool UpdateDateTimeFromHost();
 };
 '''+s[a:b]+s[s.index('uint32_t LocalFile::GetSeekPos()'):s.index('LocalFile::LocalFile()')]+s[s.index('bool LocalFile::UpdateDateTimeFromHost'):s.index('bool LocalFile::UpdateLocalDateTime')]+r'''
 int main(){
  {LocalFile f;assert(f.GetSeekPos()==0xffffffff);assert(!f.UpdateDateTimeFromHost());assert(f.Close());}
  {LocalFile f;f.fhandle=tmpfile();assert(f.UpdateDateTimeFromHost());assert(f.time==7 && f.date==9);assert(f.GetSeekPos()==0);close(fileno(f.fhandle));f.time=3;f.date=4;assert(!f.UpdateDateTimeFromHost());assert(f.time==3 && f.date==4);assert(!f.Close());}
+ {LocalFile f;f.fhandle=tmpfile();f.last_action=LocalFile::WRITE;f.update_ok=false;assert(!f.Close());assert(!f.open && !f.fhandle);}
  {LocalFile f;f.fhandle=tmpfile();assert(f.fhandle);assert(f.Close());assert(!f.open && !f.fhandle);assert(f.Close());}
  {LocalFile f;f.fhandle=tmpfile();f.refCtr=2;assert(f.Close());assert(f.open && f.fhandle);f.refCtr=1;assert(f.Close());}
  {LocalFile f;f.fhandle=fopen("/dev/full","w");assert(f.fhandle);assert(fputs("pending",f.fhandle)>=0);assert(!f.Close());assert(!f.open && !f.fhandle);assert(f.Close());}

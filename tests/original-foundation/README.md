@@ -38,6 +38,9 @@ denied while retiring handle/reference once, preserving FCB and shared-reference
 behavior. This makes real LocalFile close failure visible to the DOS caller,
 without retrying an already closed native resource; other device Close bodies
 and guest-time callback safety are not qualified by this wrapper fixture.
+LocalFile close also propagates UpdateLocalDateTime's false return while still
+retiring its native handle. Its failure branch is exercised by a stub; no guest
+time callback or save-frontier claim follows from it.
 
 ## Completed-render identity
 
