@@ -10,6 +10,22 @@
 #include <algorithm>
 #include <climits>
 
+// Transport integrity only: drain a required member before owner installation.
+// CRC is checked by minizip only after the complete member has been read.
+inline int zip_verify_member(unzFile archive, const char *name) {
+	int result = unzLocateFile(archive, name, 1 /* case sensitive */);
+	if (result != UNZ_OK) return result;
+	result = unzOpenCurrentFile(archive);
+	if (result != UNZ_OK) return result;
+	char buffer[16384];
+	int count;
+	do {
+		count = unzReadCurrentFile(archive, buffer, sizeof(buffer));
+	} while (count > 0);
+	const int closed = unzCloseCurrentFile(archive);
+	return count < 0 ? count : closed;
+}
+
 /* std::streambuf for writing to ZIP archive directly.
  * ZIP archive writer can only write one file at a time, do not
  * use multiple instances of this C++ class at a time! No seeking,

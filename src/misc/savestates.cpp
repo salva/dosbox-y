@@ -659,6 +659,18 @@ void SaveState::load(size_t slot) const { //throw (Error)
 	}
 	if (zf == NULL) { load_err=true; goto done; }
 
+	// Integrity only; owner semantic/resource validation remains separate.
+	{
+		const char *metadata[] = {"DOSBox-X_Version", "Program_Name",
+		                         "Memory_Size", "Machine_Type", "Time_Stamp", "Save_Remark"};
+		for (const char *name : metadata) {
+			if ((err=zip_verify_member(zf, name)) != UNZ_OK) { load_err=true; goto done; }
+		}
+		for (CompEntry::const_iterator i = components.begin(); i != components.end(); ++i) {
+			if ((err=zip_verify_member(zf, i->first.c_str())) != UNZ_OK) { load_err=true; goto done; }
+		}
+	}
+
 	{
 		if ((err=unzLocateFile(zf,"DOSBox-X_Version",1/*case sensitive*/)) != UNZ_OK) { load_err=true; goto done; }
 		if ((err=unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0)) != UNZ_OK) { load_err=true; goto done; }

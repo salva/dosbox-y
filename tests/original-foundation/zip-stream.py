@@ -12,6 +12,7 @@ w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'zip-stream';w.mkdir(exist_ok=True)
 #include <string>
 #include <cassert>
 #include <type_traits>
+#include <map>
 #include <fstream>
 #include "zipcppstdbuf.h"
 static_assert(!std::is_copy_constructible<zip_ostreambuf>::value,"exclusive ZIP member");
@@ -34,6 +35,43 @@ int main(int argc,char **argv){
    char c;s.read(&c,1);assert(s.eof());assert(b.close()==UNZ_OK);assert(b.close()==UNZ_OK);}
  }
  assert(unzClose(u)==UNZ_OK);
+ // Integrity pass uses real decompression and CRC, not directory metadata.
+ u=unzOpen64(argv[1]);assert(u);
+ assert(zip_verify_member(u,"first")==UNZ_OK);
+ assert(zip_verify_member(u,"second")==UNZ_OK);
+ assert(zip_verify_member(u,"absent")!=UNZ_OK);
+ assert(unzClose(u)==UNZ_OK);
+ // Actual loader admission loop must finish before any component install.
+ {const char *names[]={"DOSBox-X_Version","Program_Name","Memory_Size",
+                      "Machine_Type","Time_Stamp","Save_Remark","owner"};
+  for(int trial=0;trial<3;++trial){
+   z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
+   for(const char *name:names){
+    if(trial==1 && std::string(name)=="owner")continue;
+    assert(zipOpenNewFileInZip(z,name,nullptr,nullptr,0,nullptr,0,nullptr,0,0)==ZIP_OK);
+    {zip_ostreambuf b(z);const std::string payload=std::string(name)=="owner"?"owner-payload-marker":"metadata";
+     assert(b.sputn(payload.data(),payload.size())==std::streamsize(payload.size()));assert(b.close()==ZIP_OK);}
+   }
+   assert(zipClose(z,nullptr)==ZIP_OK);
+   if(trial==2){
+    std::ifstream in(argv[1],std::ios::binary);std::string bytes((std::istreambuf_iterator<char>(in)),{});
+    const auto at=bytes.find("owner-payload-marker");assert(at!=std::string::npos);bytes[at]^=1;
+    in.close();std::ofstream out(argv[1],std::ios::binary|std::ios::trunc);out.write(bytes.data(),bytes.size());assert(out);
+   }
+   u=unzOpen64(argv[1]);assert(u);
+   {unzFile zf=u;int err=UNZ_OK;bool load_err=false;
+    using CompEntry=std::map<std::string,int>;CompEntry components{{"owner",0}};
+    bool installed=false;
+    auto load=[&](){
+LOADER_INTEGRITY_SEAM
+     installed=true;
+     done: return;
+    };
+    load();assert(installed==(trial==0));assert(load_err==(trial!=0));
+   }
+   assert(unzClose(u)==UNZ_OK);
+  }
+ }
  // Stored member permits deterministic payload corruption without damaging
  // the central directory: CRC failure must survive repeat close/destruction.
  z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
@@ -44,6 +82,9 @@ int main(int argc,char **argv){
  {std::ifstream in(argv[1],std::ios::binary);std::string bytes((std::istreambuf_iterator<char>(in)),{});
   const auto at=bytes.find(marker);assert(at!=std::string::npos);bytes[at]^=1;
   in.close();std::ofstream out(argv[1],std::ios::binary|std::ios::trunc);out.write(bytes.data(),bytes.size());assert(out);}
+ u=unzOpen64(argv[1]);assert(u);
+ assert(zip_verify_member(u,"crc")==UNZ_CRCERROR);
+ assert(unzClose(u)==UNZ_OK);
  u=unzOpen64(argv[1]);assert(u);assert(unzLocateFile(u,"crc",1)==UNZ_OK);assert(unzOpenCurrentFile(u)==UNZ_OK);
  {zip_istreambuf b(u);std::string bytes(marker.size(),' ');assert(b.sgetn(&bytes[0],bytes.size())==std::streamsize(bytes.size()));
   assert(b.close()==UNZ_CRCERROR);assert(b.close()==UNZ_CRCERROR);}
@@ -70,6 +111,9 @@ b=loader.index('\n\t}',a)
 seam=loader[a:b].replace('i->second.comp','i->comp')
 source=w/'test.cpp'
 source.write_text(source.read_text().replace('OWNER_SAVE_SEAM',seam))
+a=loader.index('\t// Integrity only;')
+b=loader.index('\n\t{',loader.index('\n\t}',a)+3)
+source.write_text(source.read_text().replace('LOADER_INTEGRITY_SEAM',loader[a:b]))
 # Compile each actual metadata completion branch with a deliberately failed
 # stream as well: member close cannot hide a formatting/write failure.
 checks=[]

@@ -1,3 +1,17 @@
+## ZIP member integrity before installation
+
+`python3 tests/original-foundation/zip-stream.py` uses real minizip with
+ASan/UBSan: compressed multi-member roundtrips, lookahead, missing member,
+stored-payload CRC corruption, close-error retention and serializer failure.
+It also compiles the actual loader's required-member admission block and checks
+that a missing or CRC-corrupt later owner cannot reach installation, while a
+complete valid archive can. The slot loader drains all
+required metadata/component members before metadata/UI mutation or the first
+live component assignment. This closes transport-integrity late discovery only:
+valid-CRC malformed owner records, native resources, semantic save frontiers,
+archive identity and whole-owner preflight remain outstanding. Audio unpause
+still occurs earlier; no full pre-effect refusal guarantee is claimed.
+
 # Original foundation author probes
 
 ## Shared callback-entry classification
