@@ -428,3 +428,14 @@ returned all bytes. The real save-owner completion seam also receives a failing
 serializer against a valid ZIP member: stream failure must defeat successful
 member close, and failed saves must not invoke the post-save backup notification.
 This is truthful completion reporting, not preservation of an overwritten slot.
+
+## Consumed memory loader
+
+`python3 tests/original-foundation/memory-loader.py` compiles the actual descriptor
+and loader with small real backing allocations under ASan/UBSan. It checks hostile
+allocation lengths, short descriptor/payload, retained native pointers, valid
+handler reconstruction and out-of-table IDs. Archived page/handler allocation
+extents must match current allocations before RAM transfer; raw archived pointers
+are never published. Short payload or invalid handler ID is installation-fatal,
+not rollback: earlier owners and RAM may already have changed. This is not full
+memory/A20/LFB/handle-chain semantic validation or unified pre-effect admission.

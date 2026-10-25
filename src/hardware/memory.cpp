@@ -2890,12 +2890,6 @@ private:
 	void setBytes(std::istream& stream) override
 	{
 		uint8_t pagehandler_idx[0x40000];
-		void *old_ptrs[4];
-
-		old_ptrs[0] = (void *) memory.phandlers;
-		old_ptrs[1] = (void *) memory.mhandles;
-		old_ptrs[2] = (void *) memory.lfb.handler;
-		old_ptrs[3] = (void *) memory.lfb_mmio.handler;
 
 		//***********************************************
 		//***********************************************
@@ -2903,8 +2897,20 @@ private:
 		SerializeGlobalPOD::setBytes(stream);
 
 
-		// - near-pure data
-		READ_POD( &memory, memory );
+		// Allocation extents belong to the current process, never the archive.
+		// Decode the descriptor before it can control a live RAM transfer.
+		MemoryBlock incoming;
+		READ_POD( &incoming, incoming );
+		if (!stream || incoming.pages != memory.pages ||
+		    incoming.handler_pages != memory.handler_pages ||
+		    incoming.pages > sizeof(pagehandler_idx) ||
+		    incoming.pages > MemSize / 4096)
+			E_Exit("Invalid save-state memory allocation extent");
+		incoming.phandlers = memory.phandlers;
+		incoming.mhandles = memory.mhandles;
+		incoming.lfb.handler = memory.lfb.handler;
+		incoming.lfb_mmio.handler = memory.lfb_mmio.handler;
+		memory = incoming;
 
 		// - static 'new' ptr
 		READ_POD_SIZE( MemBase, memory.pages*4096 );
@@ -2912,10 +2918,6 @@ private:
 		//***********************************************
 		//***********************************************
 
-		memory.phandlers = (PageHandler **) old_ptrs[0];
-		memory.mhandles = (MemHandle *) old_ptrs[1];
-		memory.lfb.handler = (PageHandler *) old_ptrs[2];
-		memory.lfb_mmio.handler = (PageHandler *) old_ptrs[3];
 
 
 		if (!dos_kernel_disabled) {
@@ -2929,7 +2931,11 @@ private:
 			}
 		}
 		READ_POD( &pagehandler_idx, pagehandler_idx );
-
+		if (!stream) E_Exit("Short save-state memory payload");
+		const size_t handler_count = sizeof(Memory_PageHandler_table) / sizeof(Memory_PageHandler_table[0]);
+		for (Bitu page = 0; page < memory.pages; ++page)
+			if (pagehandler_idx[page] != 0xff && pagehandler_idx[page] >= handler_count)
+				E_Exit("Invalid save-state memory page handler");
 
 		for( unsigned int lcv=0; lcv<memory.pages; lcv++ ) {
 			if( pagehandler_idx[lcv] != 0xff )
