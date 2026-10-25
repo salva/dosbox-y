@@ -35,6 +35,13 @@ can already have effects. This does not validate all remaining descriptor values
 synchronize output callbacks or qualify whole-owner/save-frontier installation.
 Old component framing is refused; no compatibility codec was added.
 
+`upstream-slot.py --gus` enables the real GUS allocation and original slot
+traversal, while `--second-sb` enables a second SB16 at 240h/IRQ5/DMA3/HDMA6
+with OPL disabled to avoid a second AdLib owner. These switches do not claim
+active DMA/GUS voice playback. Both still use the ordinary running guest witness
+and dummy host audio: slot acknowledgement/CRC and guest RAM/timer/input/file
+variation are smoke evidence, not STOPPED admission or exact sound continuation.
+
 ## Consumed DOS drive descriptions
 
 `python3 tests/original-foundation/dos-drive-descriptions.py` exercises the actual

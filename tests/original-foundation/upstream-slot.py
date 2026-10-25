@@ -14,6 +14,8 @@ p.add_argument('binary', type=Path)
 p.add_argument('work', type=Path)
 p.add_argument('--memory', type=int, default=32)
 p.add_argument('--cycles', type=int, default=6000)
+p.add_argument('--gus', action='store_true', help='enable native GUS allocation/slot traversal; not active GUS playback proof')
+p.add_argument('--second-sb', action='store_true', help='enable second native Sound Blaster; not DMA/playback qualification')
 a = p.parse_args()
 a.binary = a.binary.resolve()
 a.work = a.work.resolve()
@@ -36,6 +38,15 @@ frameskip=0
 [cpu]
 core=normal
 cycles=fixed {a.cycles}
+[sblaster2]
+sbtype={'sb16' if a.second_sb else 'none'}
+sbbase=240
+irq=5
+dma=3
+hdma=6
+oplmode=none
+[gus]
+gus={'true' if a.gus else 'false'}
 [dos]
 xms=true
 ems=true
