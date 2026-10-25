@@ -544,6 +544,15 @@ serializer against a valid ZIP member: stream failure must defeat successful
 member close, and failed saves must not invoke the post-save backup notification.
 This is truthful completion reporting, not preservation of an overwritten slot.
 
+## Original Dosbox scheduler failure boundary
+
+`python3 tests/original-foundation/dosbox-owner.py` compiles the actual original
+`SerializeDosbox` methods with a minimal SDL stream consumer. A failed SDL read
+must not reset host cycle/tick scheduling fields; a complete read retains the
+original successful-load scheduling behavior. This complements `sdl-owner.py`,
+which tests the actual SDL bool consumer. Neither proves archive-wide no-effect
+validation or exact stopped restore; sequential earlier owners can still mutate.
+
 ## Configured mixer output mute
 
 `python3 tests/original-foundation/mixer-mute.py` compiles the actual startup
