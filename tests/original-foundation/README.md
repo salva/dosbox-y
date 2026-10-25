@@ -51,6 +51,16 @@ The sink uses the stored length rather than vsnprintf's would-have-written count
 formatting errors leave an empty message. This preserves selected non-save sink
 behavior but does not qualify ncurses, capture delivery or session lifetimes.
 
+## Text observation dependency
+
+`python3 tests/original-foundation/text-observation.py` exercises the actual
+`VGA_CopyTextSnapshot` body with native-owner doubles under ASan/UBSan. It checks
+planar character/attribute stride, wrap, full-region bounds and refusal preserving
+prior output, with no backing mutation. Production ports the selected non-save
+observer over the current upstream drawer; only the selected ordinary VGA mode3
+80x25 layout is available. This does not qualify live rendering, stopped/context
+admission, text-stop consumer integration or resource lifetimes.
+
 ## Native primitives and worker (not yet emulator-integrated)
 
 `python3 tests/original-foundation/memory-observation.py` compiles the actual

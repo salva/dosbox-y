@@ -36,6 +36,8 @@
 #include "../gui/render_scalers.h"
 #include "vga.h"
 #include "vga_scan_addressing.h"
+#include "native_stop_conditions.h"
+#include "dos_inc.h"
 #include "pic.h"
 #include "jfont.h"
 #include "menu.h"
@@ -2189,6 +2191,33 @@ static const uint8_t* VGA_Text_Memwrap(Bitu vidstart) {
         memcpy(&TempLine[TempLineSize/2 + break_pos],&vga.tandy.draw_base[0], line_end - break_pos);
         return &TempLine[TempLineSize/2];
     } else return &vga.tandy.draw_base[vidstart];
+}
+
+bool VGA_CopyTextSnapshot(const NativeDebug::TextRegion &region,NativeDebug::TextSnapshot &out) {
+    // Observe the planar backing consumed by the text drawer without drawing
+    // or changing latches. Other layouts explicitly remain unavailable.
+    if(!NativeDebug::validRegion(region) || machine!=MCH_VGA || vga.mode!=M_TEXT ||
+       !CurMode || CurMode->mode!=3 || vga.draw.blocks!=80 ||
+       vga.draw.address_add!=160 || vga.draw.height!=400 ||
+       vga.draw.address_line_total!=16 || vga.config.addr_shift!=1 ||
+       vga.draw.panning || vga.draw.bytes_skip || vga.config.hlines_skip ||
+       vga.draw.vblank_skip || vga.draw.split_line<vga.draw.height ||
+       IS_DOSV || IS_JEGA_ARCH || !vga.draw.linear_base)return false;
+#if defined(USE_TTF)
+    if(ttf.inUse)return false;
+#endif
+    NativeDebug::TextSnapshot image;
+    image.region=region;image.tick=PIC_Ticks;image.dos_codepage=dos.loaded_codepage;
+    image.start=vga.config.real_start<<vga.config.addr_shift;
+    image.stride=vga.draw.address_add;
+    image.cells.reserve(region.width*region.height*2);
+    for(unsigned y=region.y;y<region.y+region.height;++y)
+        for(unsigned x=region.x;x<region.x+region.width;++x) {
+            const auto address=((image.start+y*image.stride)*4+x*(4u<<vga.config.addr_shift))&vga.draw.linear_mask;
+            image.cells.push_back(vga.draw.linear_base[address]);
+            image.cells.push_back(vga.draw.linear_base[(address+1)&vga.draw.linear_mask]);
+        }
+    out=std::move(image);return true;
 }
 
 static uint32_t FontMask[2]={0xffffffff,0x0};
