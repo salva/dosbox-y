@@ -498,6 +498,13 @@ access, and a short consumed channel cannot publish its callback. Earlier channe
 fields may already have changed: neither check is pre-effect refusal or complete
 DMA/audio ownership qualification.
 
+`python3 tests/original-foundation/gus-relocation.py` checks the actual consumed
+GUS voice relocation guard with all 256 byte indices and an already-failed stream
+under ASan/UBSan. Invalid or incomplete indices cannot reach the 32-entry native
+voice array or replace its selected pointer. The voice objects are doubles;
+earlier GUS fields can already have effects, and full sound-owner validation,
+prepared resources and callback/PIC continuation remain unqualified.
+
 `python3 tests/original-foundation/dos-file-metadata.py` exercises the consumed
 `DOS_File::LoadState` method under ASan/UBSan: every truncation, invalid bool,
 large discarded-name length, pop-without-publication, and failed seek. Metadata

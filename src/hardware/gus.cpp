@@ -2885,6 +2885,12 @@ void POD_Load_GUS( std::istream& stream )
 	//*******************************************
 	//*******************************************
 
+	// Relocation is consumed only after a complete valid index. Earlier sound
+	// fields may already be installed; failure is not a pre-effect refusal.
+	if (!stream || (curchan_idx != 0xff && curchan_idx >= 32)) {
+		stream.setstate(std::istream::failbit);
+		return;
+	}
 	curchan = NULL;
 	if( curchan_idx != 0xff ) curchan = guschan[curchan_idx];
 
