@@ -4222,6 +4222,7 @@ static void CreateLayout(void) {
     switch(joytype)
     {
     case JOY_NONE:
+    case JOY_LOGICAL:
         (new CTextButton(PX(XO + 0), PY(YO + 0) - CY, BU(3), BV(1), "Disabled"))->SetCanClick(false);
         (new CTextButton(PX(XO + 4), PY(YO + 0) - CY, BU(3), BV(1), "Disabled"))->SetCanClick(false);
         (new CTextButton(PX(XO + 8), PY(YO + 0) - CY, BU(3), BV(1), "Disabled"))->SetCanClick(false);
@@ -5182,7 +5183,7 @@ void BIND_MappingEvents(void) {
 static void InitializeJoysticks(void) {
     mapper.sticks.num=0;
     mapper.sticks.num_groups=0;
-    if (joytype != JOY_NONE) {
+    if (joytype != JOY_NONE && joytype != JOY_LOGICAL) {
         mapper.sticks.num=(Bitu)SDL_NumJoysticks();
         LOG(LOG_MISC,LOG_DEBUG)("Joystick type != none, SDL reports %u sticks",(unsigned int)mapper.sticks.num);
         if (joytype==JOY_AUTO) {
@@ -5248,7 +5249,7 @@ static void CreateBindGroups(void) {
 #else
     new CKeyBindGroup(SDLK_LAST);
 #endif
-    if (joytype != JOY_NONE) {
+    if (joytype != JOY_NONE && joytype != JOY_LOGICAL) {
 #if defined (REDUCE_JOYSTICK_POLLING)
         // direct access to the SDL joystick, thus removed from the event handling
         if (mapper.sticks.num) SDL_JoystickEventState(SDL_DISABLE);

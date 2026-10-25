@@ -1534,7 +1534,7 @@ void DOSBOX_SetupConfigSections(void) {
     const char* guspantables[] = { "old", "accurate", "default", nullptr };
     const char *sidbaseno[] = { "240", "220", "260", "280", "2a0", "2c0", "2e0", "300", nullptr };
     const char *wssbaseno[] = { "530", "604", "e80", "f40", nullptr };
-    const char* joytypes[] = { "auto", "2axis", "4axis", "4axis_2", "fcs", "ch", "none", nullptr};
+    const char* joytypes[] = { "auto", "2axis", "4axis", "4axis_2", "fcs", "ch", "none", "logical", nullptr};
 //    const char* joydeadzone[] = { "0.26", nullptr };
 //    const char* joyresponse[] = { "1.0", nullptr };
     const char* iosgus[] = { "240", "220", "260", "280", "2a0", "2c0", "2e0", "300", "210", "230", "250", nullptr };
@@ -4399,6 +4399,7 @@ void DOSBOX_SetupConfigSections(void) {
     Pstring->Set_help(
         "Type of joystick to emulate: auto (default),\n"
         "none (disables joystick emulation),\n"
+        "logical (one centered two-axis gameport, no host bindings; timed or read-count),\n"
         "2axis (supports two joysticks),\n"
         "4axis (supports one joystick, first joystick used),\n"
         "4axis_2 (supports one joystick, second joystick used),\n"

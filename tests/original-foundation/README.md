@@ -5,6 +5,17 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Logical gameport
+
+`python3 tests/original-foundation/logical-gameport.py` compiles actual original
+port handlers and the selected logical initialization under ASan/UBSan. Checks
+cover centered initialization, 64-read discharge, timeout, timed deadline and
+existing second-stick swapped-axis/button behavior. `joysticktype=logical` retains
+the selected non-save centered gameport without SDL discovery/bindings. The
+original single serializer continues to own deadlines/counters/write state; no
+JL/JU/JN codec or registry is imported. This extracted probe is not SDL lifetime,
+full input/save admission or fresh-process continuation qualification.
+
 ## POSIX RPC transport
 
 `python3 tests/original-foundation/unix-transport.py` compiles the actual transport

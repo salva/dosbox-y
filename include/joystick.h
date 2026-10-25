@@ -41,7 +41,8 @@ enum JoystickType {
 	JOY_4AXIS,
 	JOY_4AXIS_2,
 	JOY_FCS,
-	JOY_CH
+	JOY_CH,
+	JOY_LOGICAL
 };
 
 extern JoystickType joytype;

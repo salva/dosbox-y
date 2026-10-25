@@ -253,6 +253,7 @@ void JOYSTICK_Init() {
 		else if (!strcasecmp(type,"4axis_2")) joytype = JOY_4AXIS_2;
 		else if (!strcasecmp(type,"fcs"))   joytype = JOY_FCS;
 		else if (!strcasecmp(type,"ch"))    joytype = JOY_CH;
+		else if (!strcasecmp(type,"logical")) joytype = JOY_LOGICAL;
 		else joytype = JOY_AUTO;
 
 		autofire = section->Get_bool("autofire");
@@ -260,6 +261,11 @@ void JOYSTICK_Init() {
 		button_wrapping_enabled = section->Get_bool("buttonwrap");
 		stick[0].enabled = false;
 		stick[1].enabled = false;
+		if (joytype == JOY_LOGICAL) {
+			stick[0] = JoyStick{};
+			stick[1] = JoyStick{};
+			stick[0].enabled = true;
+		}
 		stick[0].xtick = stick[0].ytick = stick[1].xtick =
 		                 stick[1].ytick = PIC_FullIndex();
 		
