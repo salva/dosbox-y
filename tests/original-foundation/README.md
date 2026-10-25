@@ -43,6 +43,14 @@ decoder primitive (normal and DEBUG_Run callers); after observes restored policy
 also during exception unwind. Observer callbacks cannot throw, execute guest or
 pump services. Its binding does not grant input, execution or save authority.
 
+## Debugger message sink
+
+`python3 tests/original-foundation/message-format.py` runs the actual formatting
+and newline-trimming fragment under ASan/UBSan, including oversized messages.
+The sink uses the stored length rather than vsnprintf's would-have-written count;
+formatting errors leave an empty message. This preserves selected non-save sink
+behavior but does not qualify ncurses, capture delivery or session lifetimes.
+
 ## Native primitives and worker (not yet emulator-integrated)
 
 `python3 tests/original-foundation/memory-observation.py` compiles the actual

@@ -769,8 +769,12 @@ void DEBUG_ShowMsg(char const* format,...) {
     }
 
     va_start(msg,format);
-	len = (size_t)vsnprintf(buf,sizeof(buf)-2u,format,msg); /* <- NTS: Did you know sprintf/vsnprintf returns number of chars written? */
+	const int formatted = vsnprintf(buf,sizeof(buf)-2u,format,msg);
 	va_end(msg);
+	// vsnprintf returns the would-have-written length, not the stored length.
+	// Formatting failure has no usable message; keep the sink safely empty.
+	if (formatted < 0) buf[0] = 0;
+	len = strlen(buf);
 
     /* remove newlines if present */
     while (len > 0 && buf[len-1] == '\n') buf[--len] = 0;
