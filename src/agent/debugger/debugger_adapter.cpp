@@ -145,17 +145,15 @@ bool ReadResolvedByte(const MemoryAddress& address,
             SetAccessError(access_error, "physical_out_of_range", resolved);
             return false;
         }
-        *value = phys_readb(resolved);
-        return true;
+        if (MEM_InspectPhysicalMemory(resolved, 1, value))
+            return true;
+        SetAccessError(access_error, "physical_not_inspectable", resolved);
+        return false;
     }
 
-    try {
-        if (!mem_readb_checked(resolved, value))
-            return true;
-    } catch (const GuestPageFaultException&) {
-    } catch (const GuestGenFaultException&) {
-    }
-    SetAccessError(access_error, "page_not_present", resolved);
+    if (PAGING_InspectLinear(resolved, 1, value))
+        return true;
+    SetAccessError(access_error, "linear_not_inspectable", resolved);
     return false;
 }
 

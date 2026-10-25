@@ -34,6 +34,18 @@ the source-level repair restores normal configured compilation, not a forced
 compiler define. An enabled linked build and runtime self-tests are required;
 an agent-disabled archive or manually forced syntax check is not equivalent.
 
+## RPC memory observation
+
+The RPC read primitive now consumes `MEM_InspectPhysicalMemory` or
+`PAGING_InspectLinear`, rather than ordinary physical handlers or checked guest
+reads that may dispatch MMIO or modify paging state. `rpc-read-observation.py`
+compiles that actual routing body with observer doubles and checks all address
+spaces, explicit refusal reasons, bounds and unchanged refused byte. Existing
+`memory-observation.py` checks the real observer bodies and
+`rpc-read-publication.py` checks whole-result publication. Unsupported device or
+alias memory is explicitly not inspectable; no effectful fallback is used.
+These are not live RPC admission, write, execution or session-lifetime proofs.
+
 ## Descriptor observation
 
 `python3 tests/original-foundation/descriptor-observation.py` checks the actual
