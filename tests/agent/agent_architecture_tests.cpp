@@ -249,8 +249,12 @@ TEST(AgentSession, BlocksStateOperationsWhileRunningAndWaitsForPause)
     EXPECT_NE(std::string::npos, continued.find("\"operation_id\":\"op-1\""));
     EXPECT_NE(std::string::npos, server.HandleJsonRpc(
             "{\"jsonrpc\":\"2.0\",\"id\":\"registers\",\"method\":\"state.get_registers\",\"params\":{\"session_id\":\"ses-1\"}}").find("TARGET_RUNNING"));
+    // Use a valid read so this checks stopped-state admission rather than
+    // malformed-request precedence. Keep a separate invalid-request assertion.
     EXPECT_NE(std::string::npos, server.HandleJsonRpc(
-            "{\"jsonrpc\":\"2.0\",\"id\":\"read\",\"method\":\"memory.read\",\"params\":{\"session_id\":\"ses-1\"}}").find("TARGET_RUNNING"));
+            "{\"jsonrpc\":\"2.0\",\"id\":\"read\",\"method\":\"memory.read\",\"params\":{\"session_id\":\"ses-1\",\"address\":{\"space\":\"physical\",\"offset\":\"0x00000000\"},\"length\":1}}").find("TARGET_RUNNING"));
+    EXPECT_NE(std::string::npos, server.HandleJsonRpc(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"invalid-read\",\"method\":\"memory.read\",\"params\":{\"session_id\":\"ses-1\"}}").find("-32602"));
     EXPECT_NE(std::string::npos, server.HandleJsonRpc(
             "{\"jsonrpc\":\"2.0\",\"id\":\"write\",\"method\":\"memory.write\",\"params\":{\"session_id\":\"ses-1\"}}").find("TARGET_RUNNING"));
 
