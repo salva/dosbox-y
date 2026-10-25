@@ -51,6 +51,15 @@ The sink uses the stored length rather than vsnprintf's would-have-written count
 formatting errors leave an empty message. This preserves selected non-save sink
 behavior but does not qualify ncurses, capture delivery or session lifetimes.
 
+## Breakpoint identity dependency
+
+`python3 tests/original-foundation/breakpoint-identity.py` runs actual native
+constructor, delete-by-identity and retained-hit bodies under ASan/UBSan. Adapter
+handles are monotonic nonzero identities, never allocator addresses; stale handles
+cannot delete a replacement, and explicit deletion clears a retained hit. One-shot
+hit identity can survive native object retirement without dereferencing freed
+storage. This is an owner seam, not full attachment or RPC transport qualification.
+
 ## Text observation dependency
 
 `python3 tests/original-foundation/text-observation.py` exercises the actual

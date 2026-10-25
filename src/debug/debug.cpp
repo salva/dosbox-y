@@ -645,6 +645,8 @@ class CBreakpoint
 public:
 
 	CBreakpoint(void);
+	uintptr_t GetId() const { return id; }
+	static bool DeleteById(uintptr_t id);
 	void					SetAddress		(uint16_t seg, uint32_t off)	{ location = (PhysPt)GetAddress(seg,off); type = BKPNT_PHYSICAL; segment = seg; offset = off; };
 	void					SetAddress		(PhysPt adr)				{ location = adr; type = BKPNT_PHYSICAL; };
 	void					SetInt			(uint8_t _intNr, uint16_t ah, uint16_t al)	{ intNr = _intNr; ahValue = ah; alValue = al; type = BKPNT_INTERRUPT; };
@@ -682,7 +684,7 @@ public:
 	static bool				DeleteByIndex		(uint16_t index);
 	static void				DeleteAll			(void);
 	static void				ShowList			(void);
-	static CBreakpoint*				ConsumeLastTriggered			(void);
+	static uintptr_t ConsumeLastTriggered(void);
 
 
 private:
@@ -701,9 +703,11 @@ private:
 	// Shared
 	bool		active;
 	bool		once;
+	uintptr_t id;
+	static uintptr_t next_id;
 
 	static std::list<CBreakpoint*>	BPoints;
-	static CBreakpoint*	lastTriggered;
+	static uintptr_t lastTriggered;
 #if C_HEAVY_DEBUG
 	friend bool DEBUG_HeavyIsBreakpoint(void);
 #endif
@@ -713,7 +717,11 @@ CBreakpoint::CBreakpoint(void):type(BKPNT_UNKNOWN),location(0),
 #if !C_HEAVY_DEBUG
 oldData(0xCC),
 #endif
-segment(0),offset(0),intNr(0),ahValue(0),alValue(0),active(false),once(false) { }
+segment(0),offset(0),intNr(0),ahValue(0),alValue(0),active(false),once(false),id(0) {
+    // Retained adapter handles must not gain authority through address reuse.
+    if (next_id == UINTPTR_MAX) E_Exit("Debugger breakpoint identity exhausted");
+    id = next_id++;
+}
 
 void CBreakpoint::Activate(bool _active)
 {
@@ -757,7 +765,8 @@ void CBreakpoint::Activate(bool _active)
 
 // Statics
 std::list<CBreakpoint*> CBreakpoint::BPoints;
-CBreakpoint* CBreakpoint::lastTriggered = nullptr;
+uintptr_t CBreakpoint::lastTriggered = 0;
+uintptr_t CBreakpoint::next_id = 1;
 
 CBreakpoint* CBreakpoint::AddBreakpoint(uint16_t seg, uint32_t off, bool once)
 {
@@ -829,7 +838,7 @@ bool CBreakpoint::CheckBreakpoint(uint16_t seg, uint32_t off)
 		if ((bp->GetType() == BKPNT_PHYSICAL) && bp->IsActive() &&
 		    (bp->GetLocation() == GetAddress(seg, off))) {
 			// Found
-			lastTriggered = bp;
+			lastTriggered = bp->GetId();
 			if (bp->GetOnce()) {
 				// delete it, if it should only be used once
 				(BPoints.erase)(i);
@@ -873,7 +882,7 @@ bool CBreakpoint::CheckBreakpoint(uint16_t seg, uint32_t off)
                     }
 					DEBUG_ShowMsg("DEBUG: Memory breakpoint %s: %04X:%04X - %02X -> %02X\n",(bp->GetType()==BKPNT_MEMORY_PROT)?"(Prot)":"",bp->GetSegment(),bp->GetOffset(),bp->GetValue(),value);
 					bp->SetValue(value);
-					lastTriggered = bp;
+					lastTriggered = bp->GetId();
 					return true;
 				}
 			}
@@ -897,8 +906,8 @@ bool CBreakpoint::CheckIntBreakpoint(PhysPt adr, uint8_t intNr, uint16_t ahValue
 		CBreakpoint* bp = (*i);
 		if ((bp->GetType()==BKPNT_INTERRUPT) && bp->IsActive() && (bp->GetIntNr()==intNr)) {
 			if (((bp->GetValue()==BPINT_ALL) || (bp->GetValue()==ahValue)) && ((bp->GetOther()==BPINT_ALL) || (bp->GetOther()==alValue))) {
-				// Ignore it once ?
-				// Found
+				// Freeze identity before retiring a one-shot interrupt breakpoint.
+				lastTriggered = bp->GetId();
 				if (bp->GetOnce()) {
 					// delete it, if it should only be used once
 					(BPoints.erase)(i);
@@ -921,7 +930,7 @@ void CBreakpoint::DeleteAll()
 		delete bp;
 	}
 	(BPoints.clear)();
-	lastTriggered = nullptr;
+	lastTriggered = 0;
 }
 
 
@@ -934,6 +943,7 @@ bool CBreakpoint::DeleteByIndex(uint16_t index)
 	for(i=BPoints.begin(); i != BPoints.end(); ++i) {
 		if (nr==index) {
 			bp = (*i);
+			if (lastTriggered == bp->GetId()) lastTriggered = 0;
 			(BPoints.erase)(i);
 			bp->Activate(false);
 			delete bp;
@@ -1012,18 +1022,26 @@ bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)
 			continue;
 		BPoints.erase(it);
 		breakpoint->Activate(false);
-		if (lastTriggered == breakpoint)
-			lastTriggered = nullptr;
+		if (lastTriggered == breakpoint->GetId())
+			lastTriggered = 0;
 		delete breakpoint;
 		return true;
 	}
 	return false;
 }
 
-CBreakpoint* CBreakpoint::ConsumeLastTriggered(void)
+bool CBreakpoint::DeleteById(uintptr_t id)
 {
-	CBreakpoint* result = lastTriggered;
-	lastTriggered = nullptr;
+    if (!id) return false;
+    for (auto bp : BPoints)
+        if (bp->GetId() == id) return DeleteBreakpoint(bp);
+    return false;
+}
+
+uintptr_t CBreakpoint::ConsumeLastTriggered(void)
+{
+	const uintptr_t result = lastTriggered;
+	lastTriggered = 0;
 	return result;
 }
 #endif // C_DOSBOX_AGENT
@@ -1180,7 +1198,7 @@ bool DEBUG_AgentCreateExecutionBreakpoint(uint16_t seg, uint32_t off, bool once,
 	if (handle == nullptr || GetAddress(seg,off) == mem_no_address)
 		return false;
 	CBreakpoint* breakpoint = CBreakpoint::AddBreakpoint(seg,off,once);
-	*handle = reinterpret_cast<uintptr_t>(breakpoint);
+	*handle = breakpoint->GetId();
 	return breakpoint != nullptr;
 }
 
@@ -1207,7 +1225,7 @@ bool DEBUG_AgentCreateMemoryBreakpoint(uint16_t seg,
 	else if (linear)
 		breakpoint->SetType(BKPNT_MEMORY_LINEAR);
 	breakpoint->SetValue(value);
-	*handle = reinterpret_cast<uintptr_t>(breakpoint);
+	*handle = breakpoint->GetId();
 	return true;
 #else
 	(void)seg;
@@ -1221,12 +1239,12 @@ bool DEBUG_AgentCreateMemoryBreakpoint(uint16_t seg,
 
 bool DEBUG_AgentDeleteBreakpoint(uintptr_t handle)
 {
-	return CBreakpoint::DeleteBreakpoint(reinterpret_cast<CBreakpoint*>(handle));
+	return CBreakpoint::DeleteById(handle);
 }
 
 uintptr_t DEBUG_AgentConsumeLastBreakpoint(void)
 {
-	return reinterpret_cast<uintptr_t>(CBreakpoint::ConsumeLastTriggered());
+	return CBreakpoint::ConsumeLastTriggered();
 }
 
 void DEBUG_AgentClearLastBreakpoint(void)
