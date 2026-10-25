@@ -31,8 +31,10 @@ qualification, and only the Linux timestamp branch is exercised here.
 Default LocalFile handles/actions are initialized; unavailable seek returns the
 existing sentinel and failed fstat does not consume uninitialized metadata.
 The same probe exercises actual seek/stat bodies, absent handles and invalidated
-FDs, preserving prior time/date on stat failure (packing is stubbed). Guest
-UpdateLocalDateTime callbacks remain open. `dos-close-result.py` exercises the
+FDs, preserving prior time/date on stat failure (packing is stubbed). Failed
+host localtime conversion likewise returns false without publishing invented
+metadata; the probe injects a null conversion result on an actual tmpfile.
+Guest UpdateLocalDateTime callbacks remain open. `dos-close-result.py` exercises the
 actual DOS_CloseFile wrapper with native-close stand-ins: failure reports access
 denied while retiring handle/reference once, preserving FCB and shared-reference
 behavior. This makes real LocalFile close failure visible to the DOS caller,

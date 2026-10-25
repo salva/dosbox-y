@@ -3194,7 +3194,7 @@ bool LocalFile::UpdateDateTimeFromHost(void) {
 		time=DOS_PackTime((uint16_t)ltime->tm_hour,(uint16_t)ltime->tm_min,(uint16_t)ltime->tm_sec);
 		date=DOS_PackDate((uint16_t)(ltime->tm_year+1900),(uint16_t)(ltime->tm_mon+1),(uint16_t)ltime->tm_mday);
 	} else {
-		time=1;date=1;
+		return false;
 	}
 	return true;
 }

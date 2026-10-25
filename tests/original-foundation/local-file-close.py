@@ -12,6 +12,9 @@ static uint16_t DOS_PackTime(uint16_t,uint16_t,uint16_t){return 7;}
 static uint16_t DOS_PackDate(uint16_t,uint16_t,uint16_t){return 9;}
 #include <cstdio>
 #include <ctime>
+static bool conversion_ok=true;
+static tm* probe_localtime(const time_t* value){return conversion_ok?std::localtime(value):nullptr;}
+#define localtime probe_localtime
 #include <cstring>
 #include <cerrno>
 #include <sys/stat.h>
@@ -25,6 +28,7 @@ struct LocalFile {
 };
 '''+s[a:b]+s[s.index('uint32_t LocalFile::GetSeekPos()'):s.index('LocalFile::LocalFile()')]+s[s.index('bool LocalFile::UpdateDateTimeFromHost'):s.index('bool LocalFile::UpdateLocalDateTime')]+r'''
 int main(){
+ {LocalFile f;f.fhandle=tmpfile();assert(f.fhandle);f.time=3;f.date=4;conversion_ok=false;assert(!f.UpdateDateTimeFromHost());assert(f.time==3 && f.date==4);conversion_ok=true;assert(f.Close());}
  {LocalFile f;assert(f.GetSeekPos()==0xffffffff);assert(!f.UpdateDateTimeFromHost());assert(f.Close());}
  {LocalFile f;f.fhandle=tmpfile();assert(f.UpdateDateTimeFromHost());assert(f.time==7 && f.date==9);assert(f.GetSeekPos()==0);close(fileno(f.fhandle));f.time=3;f.date=4;assert(!f.UpdateDateTimeFromHost());assert(f.time==3 && f.date==4);assert(!f.Close());}
  {LocalFile f;f.fhandle=tmpfile();f.last_action=LocalFile::WRITE;f.update_ok=false;assert(!f.Close());assert(!f.open && !f.fhandle);}
