@@ -356,3 +356,14 @@ This is not live full-machine archive reconstruction, real MIDI/audio or native
 resource/lifetime qualification. Initial generator failures (NULL/duplicate
 stand-ins, unsigned fixture constant unlike production's integer macro) were
 corrected without production changes to accommodate them.
+
+## Native input vocabulary and observational profile
+
+`python3 tests/original-foundation/input-primitives.py` compiles the selected
+`include/native_input.h` vocabulary/cursor primitive under ASan/UBSan. It checks
+all admitted names, null/unknown names, endpoints/rounding, first-delta and
+invalidation, coordinate/dimension/overflow refusal. Keyboard tuple/profile
+queries retain selected semantics without importing save codec/whitelist logic.
+These queries are observational; they grant no input, state or execution
+permission. Frontend ownership, release/close, viewport lifetime and save-input
+joins remain to be connected and qualified. Raw input is not yet lease-gated.

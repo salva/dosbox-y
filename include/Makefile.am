@@ -4,6 +4,7 @@ native_frontier.h \
 native_slice_observer.h \
 machine_service.h \
 native_debug_execution.h \
+native_input.h \
 native_stop_conditions.h \
 lua_driver_handoff.h \
 lua_driver_options.h \

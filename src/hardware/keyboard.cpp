@@ -1902,6 +1902,18 @@ static void KEYBOARD_TickHandler(void) {
 
 void APM_Suspend_Wakeup_Key(void);
 
+// Observational identity/profile for native debugger input admission. These
+// do not enqueue input or grant execution/save authority.
+uint64_t KEYBOARD_NativeInputTuple() {
+    return uint64_t(keyb.scanset) | (uint64_t(keyb.cb_xlat)<<8) |
+        (uint64_t(keyb.active)<<9) | (uint64_t(keyb.scanning)<<10) | (uint64_t(keyb.reset)<<11);
+}
+
+bool KEYBOARD_NativeInputProfile() {
+    return !IS_PC98_ARCH && machine!=MCH_PCJR && keyb.active && keyb.scanning &&
+        !keyb.reset && keyb.cb_xlat;
+}
+
 void KEYBOARD_AddKey(KBD_KEYS keytype,bool pressed) {
     /* If the BIOS has put the system into APM suspend, let certain keys wake it up again.
      * Send on RELEASE so that the key isn't also typed into the guest OS. */
