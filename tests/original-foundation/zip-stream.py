@@ -29,6 +29,7 @@ int main(int argc,char **argv){
  for(int i=0;i<2;++i){
   assert(unzLocateFile(u,i?"second":"first",1)==UNZ_OK);assert(unzOpenCurrentFile(u)==UNZ_OK);
   {zip_istreambuf b(u);std::istream s(&b);const std::string expected="header:42\n!"+value;std::string got(expected.size(),' ');
+   assert(s.peek()=='h');assert(s.peek()=='h');
    s.read(&got[0],got.size());assert(s && got==expected);
    char c;s.read(&c,1);assert(s.eof());assert(b.close()==UNZ_OK);assert(b.close()==UNZ_OK);}
  }

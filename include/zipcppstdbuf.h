@@ -64,9 +64,22 @@ public:
 	zip_istreambuf(const zip_istreambuf &) = delete;
 	zip_istreambuf &operator=(const zip_istreambuf &) = delete;
 public:
+	virtual Base::int_type underflow() override {
+		assert(zf != NULL && !closed);
+		if (gptr() && gptr() < egptr())
+			return Base::traits_type::to_int_type(*gptr());
+		const int got = unzReadCurrentFile(zf, &lookahead, 1);
+		if (got < 0) zf_err = got;
+		if (got != 1) return Base::traits_type::eof();
+		setg(&lookahead, &lookahead, &lookahead+1);
+		return Base::traits_type::to_int_type(lookahead);
+	}
 	virtual std::streamsize xsgetn(Base::char_type *s, std::streamsize count) override {
 		assert(zf != NULL && !closed);
 		std::streamsize done = 0;
+		if (count > 0 && gptr() && gptr() < egptr()) {
+			*s = *gptr(); gbump(1); ++done;
+		}
 		while (done < count) {
 			const auto chunk = static_cast<unsigned>(std::min<std::streamsize>(count-done, INT_MAX));
 			const int got = unzReadCurrentFile(zf, s+done, chunk);
@@ -87,6 +100,7 @@ public:
 	}
 private:
 	unzFile zf = NULL;
+	char lookahead = 0;
 	int zf_err = UNZ_OK;
 	bool closed = false;
 };
