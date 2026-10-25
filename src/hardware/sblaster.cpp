@@ -4876,22 +4876,34 @@ void POD_Load_Sblaster( std::istream& stream )
 	//************************************************
 	//************************************************
 
-	uint8_t dma_idx;
-	MixerChannel *mixer_old;
+	uint8_t dma_idx = 0xff;
+	SB_INFO incoming[MAX_CARDS];
 
 
-	// save static ptr
-	mixer_old = sb[ci].chan;
+	// Decode separately: archived pointers do not own native resources.
+
 
 	//*******************************************
 	//*******************************************
 	//*******************************************
 
 	// - near-pure data
-	READ_POD( &sb, sb );
+	READ_POD( &incoming, incoming );
 
 	// - reloc ptr
 	READ_POD( &dma_idx, dma_idx );
+	if (!stream || (dma_idx != 0xff && dma_idx >= 8)) {
+		stream.setstate(std::istream::failbit);
+		return;
+	}
+	// Only card zero has a DMA relocation in this format. Other cards must
+	// retain their live bindings rather than consume saved host pointers.
+	for (size_t card = 0; card < MAX_CARDS; ++card) {
+		incoming[card].chan = sb[card].chan;
+		incoming[card].dma.chan = sb[card].dma.chan;
+	}
+	for (size_t card = 0; card < MAX_CARDS; ++card)
+		sb[card] = incoming[card];
 
 	//*******************************************
 	//*******************************************
@@ -4904,8 +4916,7 @@ void POD_Load_Sblaster( std::istream& stream )
 	//*******************************************
 	//*******************************************
 
-	// restore static ptr
-	sb[ci].chan = mixer_old;
+	// Native mixer bindings were retained before descriptor installation.
 
 
 	sb[ci].chan->LoadState(stream);

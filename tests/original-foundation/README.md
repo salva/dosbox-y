@@ -5,6 +5,18 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Consumed Sound Blaster bindings
+
+`python3 tests/original-foundation/sb-bindings.py` compiles the actual load
+function against mixer/DMA doubles. All 256 relocation bytes and descriptor
+truncations verify that both cards retain native mixer bindings, card zero's
+DMA relocation is bounded, and the second card never consumes an archived host
+pointer. Full descriptor input is read before publishing card state. This fixes
+pointer ownership, not second-card saved DMA reconstruction: the old format has
+only one relocation and still serializes only the first mixer channel. Full sound
+state/format coverage, output synchronization and scalar semantic validation
+remain unfinished. These tests are not live sound or whole-save acceptance.
+
 ## Consumed GUS native DRAM
 
 `python3 tests/original-foundation/gus-dram.py` extracts the actual native
