@@ -2822,8 +2822,12 @@ void POD_Load_DOS_Files( std::istream& stream )
     char dinfo[256];
     std::vector<int> clist;
     clist.clear();
-    uint8_t ZDRIVE_CUR = ZDRIVE_NUM;
-    READ_POD( &ZDRIVE_NUM, ZDRIVE_NUM);
+    const uint8_t ZDRIVE_CUR = ZDRIVE_NUM;
+    uint8_t saved_zdrive = 0;
+    READ_POD( &saved_zdrive, saved_zdrive);
+    if (!stream || saved_zdrive >= DOS_DRIVES)
+        E_Exit("Invalid save-state DOS virtual drive index");
+    ZDRIVE_NUM = saved_zdrive;
 	if (!dos_kernel_disabled) {
         if (ZDRIVE_CUR != ZDRIVE_NUM) {
             Drives[ZDRIVE_NUM] = Drives[ZDRIVE_CUR];

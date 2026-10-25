@@ -471,4 +471,6 @@ and slot effects remain possible; this is not resource admission or rollback.
 tags, short metadata, absent native system slot and negative references. Invalid
 consumed data is fatal before dereference/refcount publication. Existing native
 system slots are retained; exact system-device identity remains resource-admission
-work, not established by these checks.
+work, not established by these checks. The same test covers all 256 virtual-drive
+indices and truncation: the incoming index must fit the native drive table before
+publication/relocation. This is not destination-drive/resource identity validation.
