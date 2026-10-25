@@ -317,7 +317,10 @@ and exception-enabled short stream preserves both live fields; a complete
 payload installs both. The owning primitive now buffers its complete registered
 payload before assignment. The original sequential slot loader consumes stream
 failure as fatal installation failure, never a successful load or resumable
-pre-effect refusal (also exercised with a fatal stand-in). This retains native byte layout and registration
+pre-effect refusal (also exercised with a fatal stand-in). Missing later
+components and ZIP close/CRC failure after installation starts are also fatal;
+pre-install refusal does not invoke `flagged_restore`, while successful install
+does. These completion branches are exercised with a fatal stand-in. This retains native byte layout and registration
 order; it is not semantic validation, native-resource preparation, complete
 archive validation or multi-owner atomicity. Original slot loading still has
 unsafe sequential install/metadata/error behavior and is not qualified as the

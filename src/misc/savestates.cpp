@@ -595,6 +595,7 @@ bool loadstateconfirm(int ind) {
 void SaveState::load(size_t slot) const { //throw (Error)
 	//	if (isEmpty(slot)) return;
 	bool load_err=false;
+	bool installation_started=false;
 	if((MEM_TotalPages()*4096/1024/1024)>1024) {
 		LOG_MSG("Stopped. 1 GB is the maximum memory size for saving/loading states.");
 		notifyError("Unsupported memory size for loading states.", false);
@@ -771,6 +772,7 @@ void SaveState::load(size_t slot) const { //throw (Error)
 		if ((err=unzOpenCurrentFile(zf)) != UNZ_OK) { load_err=true; goto done; }
 		zip_istreambuf zis(zf); std::istream ss(&zis);
 
+		installation_started=true;
 		i->second.comp.setBytes(ss);
 		// A component may already have installed live state. A short stream
 		// is not a pre-effect refusal and this sequential loader cannot roll
@@ -786,7 +788,12 @@ done:
 		if (err != UNZ_OK) load_err = true;
 	}
 
-	if (!dos_kernel_disabled) flagged_restore((char *)save.c_str());
+	// CRC/close failures or missing later components after installation are
+	// just as non-resumable as a consumed short stream. Earlier owners may
+	// already have changed; do not publish restore completion or resume.
+	if (load_err && installation_started)
+		E_Exit("Save-state installation failed after live state may have changed");
+	if (!load_err && !dos_kernel_disabled) flagged_restore((char *)save.c_str());
 	if (!load_err) LOG_MSG("[%s]: Loaded. (Slot %d)", getTime().c_str(), (int)slot+1);
 }
 

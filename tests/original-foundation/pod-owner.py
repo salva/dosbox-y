@@ -58,6 +58,21 @@ int main(){
  {Owner owner;std::istringstream ss("x");bool fatal=false;
   try{install_owner(owner,ss);}catch(int n){fatal=n==7;}assert(fatal);}
 ''')
+tail_start=loader.index('\t// CRC/close failures or missing later components')
+tail=loader[tail_start:loader.index('\n}',tail_start)]
+s += '\nunsigned completions=0;\nvoid flagged_restore(char*){++completions;}\n'
+s += '[[noreturn]] void E_Exit(const char*){throw 8;}\n'
+s += 'void finish(bool load_err,bool installation_started){bool dos_kernel_disabled=false;std::string save="test";\n'
+# The log is presentation only; retain the actual completion/fatal decisions.
+s += tail[:tail.index('\tif (!load_err) LOG_MSG')]+'\n}\n'
+s += '''
+struct CheckFinish {CheckFinish(){
+ finish(true,false);assert(completions==0);
+ bool fatal=false;try{finish(true,true);}catch(int n){fatal=n==8;}
+ assert(fatal && completions==0);
+ finish(false,true);assert(completions==1);
+}} check_finish;
+'''
 (work/'test.cpp').write_text(s)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(work/'test.cpp'),'-o',str(work/'test')],check=True)
 subprocess.run([str(work/'test')],check=True)
