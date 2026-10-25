@@ -134,6 +134,14 @@ void BeginCapture()
     g_capture_active = true;
 }
 
+void AbortCapture()
+{
+    std::lock_guard<std::mutex> lock(g_capture_mutex);
+    g_capture_active = false;
+    g_capture_discarded = 0;
+    g_capture_lines.clear();
+}
+
 std::vector<std::string> EndCapture()
 {
     std::lock_guard<std::mutex> lock(g_capture_mutex);
@@ -568,10 +576,17 @@ void ProcessControlCommand(const std::string& line)
     BeginCapture();
 
     bool ok = true;
-    if (request.command == "BREAK") {
-        DEBUG_EnableDebugger();
-    } else {
-        ok = DEBUG_ExecuteCommand(request.payload.c_str());
+    try {
+        if (request.command == "BREAK") {
+            DEBUG_EnableDebugger();
+        } else {
+            ok = DEBUG_ExecuteCommand(request.payload.c_str());
+        }
+    } catch (...) {
+        // Command effects may already have occurred. Retire this capture and
+        // propagate the original failure; do not replay or publish partial output.
+        AbortCapture();
+        throw;
     }
 
     auto output = EndCapture();

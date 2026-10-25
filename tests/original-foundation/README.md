@@ -122,6 +122,13 @@ releases retained contents; an inactive end cannot restore stale paging values.
 This is synchronous sink ownership, not full native session or ncurses lifetime
 qualification.
 
+`bridge-capture.py` executes the actual native MCP Bridge command body with
+command/sink doubles under ASan/UBSan. Ordinary EXEC and BREAK exceptions end
+capture before propagating the original failure, without replay or a partial
+response; rejection and subsequent requests retain normal capture behavior.
+This does not qualify Bridge connection/attachment retirement, execution admission
+or transport delivery, which still need the full native facade port.
+
 ## Breakpoint identity dependency
 
 `python3 tests/original-foundation/breakpoint-identity.py` runs actual native
