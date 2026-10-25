@@ -5293,10 +5293,8 @@ Bitu DEBUG_Loop(void) {
     else {
         //TODO Disable sound
         GFX_Events();
-        // Interrupt started ? - then skip it
-        uint16_t oldCS	= SegValue(cs);
-        uint32_t oldEIP	= reg_eip;
-        PIC_runIRQs();
+        // Held means host service only. Pending IRQs belong to the next
+        // explicit execution grant, not an implicit return-from-IRQ resume.
         SDL_Delay(1);
 
 #if (C_DYNAMIC_X86)
@@ -5305,25 +5303,6 @@ Bitu DEBUG_Loop(void) {
 		dyn_core_dh_debug_flush();
 	}
 #endif
-
-        if ((oldCS!=SegValue(cs)) || (oldEIP!=reg_eip)) {
-            CBreakpoint::AddBreakpoint(oldCS,oldEIP,true);
-            CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
-            debugging=false;
-
-            logBuffSuppressConsole = false;
-            if (logBuffSuppressConsoleNeedUpdate) {
-                logBuffSuppressConsoleNeedUpdate = false;
-                DEBUG_RefreshPage(0);
-            }
-
-            mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
-            mainMenu.get_item("debugger_runnormal").check(true).refresh_item(mainMenu);
-            mainMenu.get_item("debugger_runwatch").check(false).refresh_item(mainMenu);
-            DOSBOX_SetNormalLoop();
-            DrawRegistersUpdateOld();
-            return 0;
-        }
 
         /* between DEBUG_Enable and DEBUG_Loop CS:EIP can change */
         if (check_rescroll) {

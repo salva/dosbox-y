@@ -75,6 +75,15 @@ and a guest INT3 is not replaced with invented bytes. This closes the extracted
 non-heavy patch-restoration coverage gap, not a real non-heavy emulator build,
 instruction-execution, physical bus, attachment or transport lifetime check.
 
+## Held debugger loop dependency
+
+`python3 tests/original-foundation/held-loop.py` compiles the actual DEBUG_Loop
+body with host/UI spies. Repeated held turns preserve guest registers/ticks and
+never deliver PIC IRQs or synthesize an implicit resume; host polling, keyboard
+handling, redraw and the explicit running-loop branch remain. Pending IRQs wait
+for the next explicit execution grant. This ports selected held-loop semantics,
+not full execution-owner/frontier integration or live frontend qualification.
+
 ## Text observation dependency
 
 `python3 tests/original-foundation/text-observation.py` exercises the actual
