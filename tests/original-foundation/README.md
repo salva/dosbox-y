@@ -5,6 +5,17 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Agent build feature selection
+
+Agent translation units and SDL startup must include generated `config.h` before
+checking `C_DOSBOX_AGENT`/`C_DEBUG`. Automake supplies `HAVE_CONFIG_H`, not those
+feature macros directly. Otherwise agent source files silently compile empty and
+SDL startup sees agent declarations only after their guarded includes have been
+skipped. The first actual enabled-agent build exposed the SDL declaration error;
+the source-level repair restores normal configured compilation, not a forced
+compiler define. An enabled linked build and runtime self-tests are required;
+an agent-disabled archive or manually forced syntax check is not equivalent.
+
 ## Descriptor observation
 
 `python3 tests/original-foundation/descriptor-observation.py` checks the actual
