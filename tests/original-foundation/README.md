@@ -378,3 +378,8 @@ silently choose a trap/HLT range or preserve an arbitrary core. This is an
 installation-time fatal boundary after CPU fields may already have changed,
 not pre-effect owner preparation, CPU semantic validation or fresh-process core
 reconstruction. The existing valid-ID transition logic remains unchanged.
+The reverse identity helper now maps its actual argument, not global
+`cpudecoder`: HLT-to-trap restoration queries `cpu.hlt.old_decoder` and must not
+mistake the active HLT decoder for that saved continuation. The same eight-way
+probe verifies pointer/ID roundtrips for every available core and unknown-pointer
+refusal with an unrelated global decoder absent from the fixture.

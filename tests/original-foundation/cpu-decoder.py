@@ -7,7 +7,7 @@ root=Path(__file__).resolve().parents[2]
 work=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'cpu-decoder'
 work.mkdir(exist_ok=True)
 t=(root/'src/cpu/cpu.cpp').read_text()
-a=t.index('CPU_Decoder* CPU_IndexDecoderType(')
+a=t.index('uint16_t CPU_FindDecoderType(')
 b=t.index('extern void POD_Save_CPU_Flags',a)
 mapping=t[a:b]
 a=t.index('    // Earlier CPU fields are already live.')
@@ -30,6 +30,10 @@ int main(){
   const bool valid=i==0 || i==1 || i==100 || i==200 ||
    (!C_EMSCRIPTEN && (i==2 || i==3)) ||
    (C_DYNAMIC_X86 && (i==4 || i==101)) || (C_DYNREC && (i==5 || i==102));
+  auto *mapped=CPU_IndexDecoderType(uint16_t(i));
+  assert(bool(mapped)==valid);
+  if(mapped)assert(CPU_FindDecoderType(mapped)==i);
+  assert(CPU_FindDecoderType(nullptr)==0xffff);
   std::istringstream stream;bool fatal=false;
   try{consume(stream,uint16_t(i));}catch(int n){assert(n==7);fatal=true;}
   assert(fatal==!valid);

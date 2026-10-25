@@ -4423,38 +4423,27 @@ void TaskStateSegment::LoadState( std::istream& stream )
 // TODO: This looks to be unused
 uint16_t CPU_FindDecoderType( CPU_Decoder *decoder )
 {
-    (void)decoder;//UNUSED
-
-	uint16_t decoder_idx;
-
-	decoder_idx = 0xffff;
-
-
-	if(0) {}
-	else if( cpudecoder == &CPU_Core_Normal_Run ) decoder_idx = 0;
-	else if( cpudecoder == &CPU_Core_Prefetch_Run ) decoder_idx = 1;
+	if (decoder == &CPU_Core_Normal_Run) return 0;
+	if (decoder == &CPU_Core_Prefetch_Run) return 1;
 #if !defined(C_EMSCRIPTEN)
-	else if( cpudecoder == &CPU_Core_Simple_Run ) decoder_idx = 2;
-	else if( cpudecoder == &CPU_Core_Full_Run ) decoder_idx = 3;
-	else if( cpudecoder == &CPU_Core_Normal_Trap_Run ) decoder_idx = 100;
+	if (decoder == &CPU_Core_Simple_Run) return 2;
+	if (decoder == &CPU_Core_Full_Run) return 3;
 #endif
 #if C_DYNAMIC_X86
-	else if( cpudecoder == &CPU_Core_Dyn_X86_Run ) decoder_idx = 4;
+	if (decoder == &CPU_Core_Dyn_X86_Run) return 4;
 #endif
-#if (C_DYNREC)
-	else if( cpudecoder == &CPU_Core_Dynrec_Run ) decoder_idx = 5;
+#if C_DYNREC
+	if (decoder == &CPU_Core_Dynrec_Run) return 5;
 #endif
-	else if( cpudecoder == &CPU_Core_Normal_Trap_Run ) decoder_idx = 100;
+	if (decoder == &CPU_Core_Normal_Trap_Run) return 100;
 #if C_DYNAMIC_X86
-	else if( cpudecoder == &CPU_Core_Dyn_X86_Trap_Run ) decoder_idx = 101;
+	if (decoder == &CPU_Core_Dyn_X86_Trap_Run) return 101;
 #endif
-#if(C_DYNREC)
-	else if( cpudecoder == &CPU_Core_Dynrec_Trap_Run ) decoder_idx = 102;
+#if C_DYNREC
+	if (decoder == &CPU_Core_Dynrec_Trap_Run) return 102;
 #endif
-	else if( cpudecoder == &HLT_Decode ) decoder_idx = 200;
-
-
-	return decoder_idx;
+	if (decoder == &HLT_Decode) return 200;
+	return 0xffff;
 }
 
 // TODO: This looks to be unused
