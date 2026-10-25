@@ -3584,6 +3584,10 @@ void DOSBOX_SetupConfigSections(void) {
     Pbool->SetBasic(true);
 
     secprop=control->AddSection_prop("mixer",&Null_Init);
+    Pbool = secprop->Add_bool("mute",Property::Changeable::OnlyAtStart,false);
+    Pbool->Set_help("Start with mixer output muted, preserving device emulation and mixer timing. The menu can unmute output.");
+    Pbool->SetBasic(true);
+
     Pbool = secprop->Add_bool("nosound",Property::Changeable::OnlyAtStart,false);
     Pbool->Set_help("Enable silent mode, sound is still emulated though.");
     Pbool->SetBasic(true);

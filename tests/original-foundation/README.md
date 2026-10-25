@@ -544,6 +544,18 @@ serializer against a valid ZIP member: stream failure must defeat successful
 member close, and failed saves must not invoke the post-save backup notification.
 This is truthful completion reporting, not preservation of an overwritten slot.
 
+## Configured mixer output mute
+
+`python3 tests/original-foundation/mixer-mute.py` compiles the actual startup
+configuration reads under ASan/UBSan and exercises all eight combinations of
+`mute`, `nosound`, and command-line silent mode. `[mixer] mute=true` initializes
+the existing menu-toggle output mute without changing the audio-device selection,
+rate, tick handler or device emulation; default false preserves upstream startup.
+This ports selected non-save configuration behavior, not a restricted audio
+profile or a second mixer codec. The menu can unmute normally. The check uses
+configuration doubles: it is not host playback, stopped restoration, resource
+quiescence or mixer/device-state qualification.
+
 ## Consumed memory loader
 
 `python3 tests/original-foundation/memory-loader.py` compiles the actual descriptor

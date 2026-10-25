@@ -1143,7 +1143,7 @@ void MIXER_Init() {
     mixer.swapstereo=section->Get_bool("swapstereo");
     mixer.sampleaccurate=section->Get_bool("sample accurate");
     mixer.dc_bias_adj=section->Get_bool("dc bias correction");
-    mixer.mute=false;
+    mixer.mute=section->Get_bool("mute");
     if (control->opt_silent) mixer.nosound = true;
 
     /* Initialize the internal stuff */
