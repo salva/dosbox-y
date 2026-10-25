@@ -558,7 +558,11 @@ void SaveState::save(size_t slot) { //throw (Error)
 
 		i->second.comp.getBytes(ss);
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		// Serialization can fail before minizip itself reports a close error.
+		// Closing a valid ZIP member does not certify a complete owner payload.
+		if (!ss) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 
 done:
@@ -567,7 +571,7 @@ done:
 		if (errclose != ZIP_OK) save_err = true;
 	}
 
-	if (!dos_kernel_disabled) flagged_backup((char *)save.c_str());
+	if (!save_err && !dos_kernel_disabled) flagged_backup((char *)save.c_str());
 
 	if (save_err)
 		notifyError(MSG_Get("SAVE_FAILED"));

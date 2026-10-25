@@ -47,8 +47,28 @@ int main(int argc,char **argv){
  {zip_istreambuf b(u);std::string bytes(marker.size(),' ');assert(b.sgetn(&bytes[0],bytes.size())==std::streamsize(bytes.size()));
   assert(b.close()==UNZ_CRCERROR);assert(b.close()==UNZ_CRCERROR);}
  assert(unzClose(u)==UNZ_OK);
+ // Actual owner completion seam with a serializer failbit and valid ZIP close.
+ z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
+ assert(zipOpenNewFileInZip(z,"failed-owner",nullptr,nullptr,0,nullptr,0,nullptr,0,0)==ZIP_OK);
+ {zip_ostreambuf zos(z);std::ostream ss(&zos);bool save_err=false;int errclose=ZIP_OK;
+  struct Owner {void getBytes(std::ostream &s){s<<"partial";s.setstate(std::ios::failbit);}} owner;
+  struct Entry {Owner &comp;};Entry entry{owner};Entry *i=&entry;
+  auto serialize=[&](){
+OWNER_SAVE_SEAM
+   return;
+   done: return;
+  };
+  serialize();assert(save_err);assert(zos.close()==ZIP_OK);
+ }
+ assert(zipClose(z,nullptr)==ZIP_OK);
 }
 ''')
+loader=(root/'src/misc/savestates.cpp').read_text()
+a=loader.index('\t\ti->second.comp.getBytes(ss);')
+b=loader.index('\n\t}',a)
+seam=loader[a:b].replace('i->second.comp','i->comp')
+source=w/'test.cpp'
+source.write_text(source.read_text().replace('OWNER_SAVE_SEAM',seam))
 objects=[]
 for name in ('zip','unzip','ioapi'):
  obj=w/(name+'.o');objects.append(str(obj))

@@ -424,4 +424,7 @@ streambuf override, numeric metadata/newlines can set badbit and silently stop
 writing even though ZIP member close succeeds. The probe also corrupts an actual
 stored member's payload and verifies CRC failure remains observable on both first
 and repeated close; it does not claim the archive is valid because a stream read
-returned all bytes.
+returned all bytes. The real save-owner completion seam also receives a failing
+serializer against a valid ZIP member: stream failure must defeat successful
+member close, and failed saves must not invoke the post-save backup notification.
+This is truthful completion reporting, not preservation of an overwritten slot.
