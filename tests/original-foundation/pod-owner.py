@@ -73,6 +73,27 @@ struct CheckFinish {CheckFinish(){
  finish(false,true);assert(completions==1);
 }} check_finish;
 '''
+s += t[t.index('template <class T>\ninline\nvoid writePOD'):t.index('#endif //SAVE_STATE_H_INCLUDED')]
+s += r'''
+struct CheckStrings {CheckStrings(){
+ for(const auto &value:std::vector<std::string>{"", "abc", std::string(8193,'x')}){
+  std::ostringstream out;writeString(out,value);const auto bytes=out.str();
+  for(size_t n=0;n<bytes.size();++n){
+   std::string dest="unchanged";std::istringstream in(bytes.substr(0,n));
+   readString(in,dest);assert(in.fail() && dest=="unchanged");
+   std::istringstream throwing(bytes.substr(0,n));
+   throwing.exceptions(std::ios::failbit|std::ios::badbit);
+   bool failed=false;try{readString(throwing,dest);}catch(const std::ios_base::failure&){failed=true;}
+   assert(failed && dest=="unchanged");
+  }
+  std::string dest="old";std::istringstream in(bytes);readString(in,dest);
+  assert(!in.fail() && dest==value);
+ }
+ std::ostringstream out;writePOD(out,size_t(-1));
+ std::string dest="unchanged";std::istringstream in(out.str());
+ readString(in,dest);assert(in.fail() && dest=="unchanged");
+}} check_strings;
+'''
 (work/'test.cpp').write_text(s)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(work/'test.cpp'),'-o',str(work/'test')],check=True)
 subprocess.run([str(work/'test')],check=True)

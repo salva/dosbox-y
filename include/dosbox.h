@@ -494,8 +494,18 @@ void readString(std::istream& stream, std::string& data)
 {
     size_t stringSize = 0;
     readPOD(stream, stringSize);
-    data.resize(stringSize);
-    stream.read(&data[0], stringSize * sizeof(std::string::value_type));
+    if (!stream) return;
+    // Do not allocate an archive-supplied length up front, or publish a
+    // partially consumed string. Grow only as bytes are actually consumed.
+    std::string pending;
+    char chunk[4096];
+    while (stringSize) {
+        const size_t count = std::min(stringSize, sizeof(chunk));
+        if (!stream.read(chunk, count)) return;
+        pending.append(chunk, count);
+        stringSize -= count;
+    }
+    data.swap(pending);
 }
 #endif //SAVE_STATE_H_INCLUDED
 

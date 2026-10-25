@@ -322,7 +322,12 @@ components and ZIP close/CRC failure after installation starts are also fatal;
 pre-install refusal does not invoke `flagged_restore`, while successful install
 does. These completion branches are exercised with a fatal stand-in. This retains native byte layout and registration
 order; it is not semantic validation, native-resource preparation, complete
-archive validation or multi-owner atomicity. Original slot loading still has
+archive validation or multi-owner atomicity. `readString` likewise publishes
+only a complete consumed string and grows by consumed chunks rather than
+allocating an unchecked declared length immediately. The same probe checks
+all truncations of empty/small/8193-byte strings, exception-enabled reads and
+a maximum-size declaration with no payload. This is not an archive size limit
+or semantic string validation. Original slot loading still has
 unsafe sequential install/metadata/error behavior and is not qualified as the
 unified save join.
 
