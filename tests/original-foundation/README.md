@@ -18,6 +18,10 @@ preflight nor drive identity, resource preparation or safe install qualification
 primitive: empty and maximum fitting names, overlong refusal without destination
 writes, and zeroed padding. Drive info, overlay and image names use that primitive
 instead of unbounded strcpy; it does not qualify native drive construction.
+`dos-system-slot.py` verifies that a non-system incoming slot colliding with a
+live named system object fails fatally rather than breaking out of the loader
+and returning apparent success with unread entries. Earlier owner effects can
+already exist; ordinary detached-file ownership remains unresolved.
 
 ## Completed-render identity
 

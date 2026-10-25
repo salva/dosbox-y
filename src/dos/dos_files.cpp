@@ -3035,12 +3035,13 @@ void POD_Load_DOS_Files( std::istream& stream )
 			// during same-session restore for active protected-mode titles.
 			if( Files[lcv] && Files[lcv]->GetName() != NULL ) {
 				// invalid file state - abort
-				if( strcmp( Files[lcv]->GetName(), "NUL" ) == 0 ) break;
-				if( strcmp( Files[lcv]->GetName(), "CON" ) == 0 ) break;
-				if( strcmp( Files[lcv]->GetName(), "LPT1" ) == 0 ) break;
-				if( strcmp( Files[lcv]->GetName(), "PRN" ) == 0 ) break;
-				if( strcmp( Files[lcv]->GetName(), "AUX" ) == 0 ) break;
-				if( strcmp( Files[lcv]->GetName(), "EMMXXXX0" ) == 0 ) break;//raiden needs this
+				if( strcmp( Files[lcv]->GetName(), "NUL" ) == 0 ||
+				    strcmp( Files[lcv]->GetName(), "CON" ) == 0 ||
+				    strcmp( Files[lcv]->GetName(), "LPT1" ) == 0 ||
+				    strcmp( Files[lcv]->GetName(), "PRN" ) == 0 ||
+				    strcmp( Files[lcv]->GetName(), "AUX" ) == 0 ||
+				    strcmp( Files[lcv]->GetName(), "EMMXXXX0" ) == 0 )
+					E_Exit("Save-state DOS system file slot mismatch");
 				Files[lcv]=nullptr;
 			}
 
