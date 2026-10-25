@@ -727,10 +727,14 @@ bool DEBUG_AgentBeginOutputCapture(void)
 
 std::string DEBUG_AgentEndOutputCapture(void)
 {
+    if (!agent_output_capture_active)
+        return std::string();
     agent_output_capture_active = false;
     debugPageCounter = agent_saved_debug_page_counter;
     debugPageStopAt = agent_saved_debug_page_stop_at;
-    return agent_output_capture;
+    std::string captured;
+    captured.swap(agent_output_capture);
+    return captured;
 }
 #endif
 

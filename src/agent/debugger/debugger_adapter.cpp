@@ -582,7 +582,15 @@ bool DebuggerAdapter::ExecuteDiagnosticCommand(const std::string& command,
             *error = "Debugger output capture is already active";
         return false;
     }
-    const bool accepted = ParseCommand(&mutable_command[0]);
+    bool accepted = false;
+    try {
+        accepted = ParseCommand(&mutable_command[0]);
+    } catch (...) {
+        // Restore paging/capture ownership before propagating the original
+        // parser failure. Never replay the command or strand the sink.
+        DEBUG_AgentEndOutputCapture();
+        throw;
+    }
     *raw_output = DEBUG_AgentEndOutputCapture();
     if (!accepted && error != NULL)
         *error = "Debugger rejected diagnostic command";

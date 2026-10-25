@@ -113,6 +113,15 @@ The sink uses the stored length rather than vsnprintf's would-have-written count
 formatting errors leave an empty message. This preserves selected non-save sink
 behavior but does not qualify ncurses, capture delivery or session lifetimes.
 
+`diagnostic-capture.py` compiles the actual RPC diagnostic tail and GUI capture
+functions under ASan/UBSan. Parser exceptions restore the capture/paging owner
+before propagating, without replay or replacement output. Normal rejection still
+returns captured diagnostics; nested begin refuses without stealing the active
+capture. End restores paging once, transfers its string without allocation and
+releases retained contents; an inactive end cannot restore stale paging values.
+This is synchronous sink ownership, not full native session or ncurses lifetime
+qualification.
+
 ## Breakpoint identity dependency
 
 `python3 tests/original-foundation/breakpoint-identity.py` runs actual native
