@@ -35,6 +35,14 @@ can already have effects. This does not validate all remaining descriptor values
 synchronize output callbacks or qualify whole-owner/save-frontier installation.
 Old component framing is refused; no compatibility codec was added.
 
+`mixer-channel.py` compiles the actual `MixerChannel::LoadState` with output-state
+doubles under ASan/UBSan. Each truncation and all invalid byte boolean values
+preserve channel fields and output counters; complete records publish fields and
+reset counters as before. This is local completeness/boolean validation, not
+float semantics, callback synchronization, output continuity or archive admission.
+The enclosing mixer owner also avoids its final counter reset on a failed stream;
+earlier successfully loaded subdevices may already have effects.
+
 `upstream-slot.py --gus` enables the real GUS allocation and original slot
 traversal, and assembles the witness with `GUS_DRAM`: every loop writes and
 reads guest DRAM byte zero via standard 240h GUS ports (343h/344h/347h), exiting

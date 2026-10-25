@@ -1285,12 +1285,27 @@ void MixerChannel::SaveState( std::ostream& stream )
 
 void MixerChannel::LoadState( std::istream& stream )
 {
-	// - pure data
-	READ_POD( &volmain, volmain );
-	READ_POD( &scale, scale );
-	READ_POD( &volmul, volmul );
-	//READ_POD( &freq_add, freq_add );
-	READ_POD( &enabled, enabled );
+	// Consume the complete channel before publishing fields or resetting output.
+	// Local completeness is not whole-owner semantic admission.
+	decltype(volmain) incoming_volmain;
+	decltype(scale) incoming_scale;
+	decltype(volmul) incoming_volmul;
+	unsigned char incoming_enabled = 0;
+	READ_POD( &incoming_volmain, incoming_volmain );
+	READ_POD( &incoming_scale, incoming_scale );
+	READ_POD( &incoming_volmul, incoming_volmul );
+	static_assert(sizeof(enabled) == sizeof(incoming_enabled), "bool framing");
+	READ_POD( &incoming_enabled, incoming_enabled );
+	if (!stream || incoming_enabled > 1) {
+		stream.setstate(std::istream::failbit);
+		return;
+	}
+	for (unsigned i = 0; i < 2; ++i) {
+		volmain[i] = incoming_volmain[i];
+		scale[i] = incoming_scale[i];
+		volmul[i] = incoming_volmul[i];
+	}
+	enabled = incoming_enabled != 0;
 
 	//********************************************
 	//********************************************
@@ -1363,6 +1378,7 @@ private:
 		POD_Load_PCSpeaker(stream);
 		POD_Load_Sblaster(stream);
 		POD_Load_Tandy_Sound(stream);
+		if (!stream) return;
 
 		// reset mixer channel (system data)
 		mixer.pos = 0;
