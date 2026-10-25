@@ -14,6 +14,15 @@
 #pragma comment(lib, "Advapi32.lib")
 #endif
 
+#ifndef WIN32
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cstring>
+#include <cerrno>
+#endif
+
 namespace dosbox_agent {
 namespace {
 
@@ -305,16 +314,177 @@ public:
         return true;
     }
 
-    bool Start(const AgentConfig&,
-               RequestHandler,
+    ~UnixSocketTransport() override { Stop(); }
+
+    bool Start(const AgentConfig& config,
+               RequestHandler handler,
                std::string* error) override
     {
-        if (error != NULL)
-            *error = "Unix socket transport is outside the Windows v1 scope";
+#ifndef WIN32
+        if (!ValidateConfiguration(config, error) || !handler) return false;
+        if (worker.joinable()) {
+            if (error) *error = "Transport is already running";
+            return false;
+        }
+        sockaddr_un address = {};
+        address.sun_family = AF_UNIX;
+        if (config.endpoint.size() >= sizeof(address.sun_path)) {
+            if (error) *error = "Unix socket endpoint is too long";
+            return false;
+        }
+        const auto slash = config.endpoint.rfind('/');
+        const std::string directory = slash ? config.endpoint.substr(0, slash) : "/";
+        struct stat parent = {};
+        if (stat(directory.c_str(), &parent) < 0 || !S_ISDIR(parent.st_mode) ||
+            parent.st_uid != geteuid() || (parent.st_mode & 0077)) {
+            if (error) *error = "Unix socket requires an owner-private directory";
+            return false;
+        }
+        std::memcpy(address.sun_path, config.endpoint.c_str(), config.endpoint.size() + 1);
+        const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) {
+            if (error) *error = "Cannot create Unix socket";
+            return false;
+        }
+        // Never remove an endpoint owned by an earlier/independent server.
+        if (bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
+            close(fd);
+            if (error) *error = "Cannot bind Unix socket (endpoint retained)";
+            return false;
+        }
+        struct stat owned = {};
+        if (lstat(config.endpoint.c_str(), &owned) < 0) {
+            close(fd);
+            if (error) *error = "Cannot identify bound endpoint (path retained)";
+            return false;
+        }
+        path = config.endpoint;
+        device = owned.st_dev;
+        inode = owned.st_ino;
+        if (chmod(path.c_str(), 0600) < 0 || listen(fd, 4) < 0) {
+            close(fd);
+            RemoveEndpoint();
+            if (error) *error = "Cannot prepare private Unix socket";
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            listener = fd;
+            stopping = false;
+        }
+        try {
+            worker = std::thread([this, config, handler, fd]() {
+                Serve(config, handler, fd);
+            });
+        } catch (...) {
+            close(fd);
+            listener = -1;
+            RemoveEndpoint();
+            if (error) *error = "Cannot start Unix socket worker";
+            return false;
+        }
+        return true;
+#else
+        (void)config;
+        (void)handler;
+        if (error) *error = "Unix sockets are unavailable on this platform";
         return false;
+#endif
     }
 
-    void Stop() override {}
+    void Stop() override
+    {
+#ifndef WIN32
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            stopping = true;
+            if (active >= 0) shutdown(active, SHUT_RDWR);
+            if (listener >= 0) shutdown(listener, SHUT_RDWR);
+        }
+        if (worker.joinable()) worker.join();
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (listener >= 0) close(listener);
+            listener = -1;
+        }
+        RemoveEndpoint();
+#endif
+    }
+
+private:
+#ifndef WIN32
+    void Serve(const AgentConfig& config, const RequestHandler& handler, int fd)
+    {
+        for (;;) {
+            const int client = accept(fd, nullptr, nullptr);
+            if (client < 0) {
+                if (errno == EINTR) continue;
+                break;
+            }
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                if (stopping) { close(client); break; }
+                active = client;
+            }
+            // Handler failure may have effects. Close the connection, never replay.
+            try {
+                ServeClient(config, handler, client);
+            } catch (...) {}
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                active = -1;
+                close(client);
+                if (stopping) break;
+            }
+        }
+    }
+
+    void ServeClient(const AgentConfig& config, const RequestHandler& handler, int client)
+    {
+        std::string request;
+        char buffer[4096];
+        for (;;) {
+            const auto count = recv(client, buffer, sizeof(buffer), 0);
+            if (count < 0 && errno == EINTR) continue;
+            if (count <= 0) return;
+            for (ssize_t n = 0; n < count; ++n) {
+                if (buffer[n] == '\n') {
+                    if (!request.empty() && request.back() == '\r') request.pop_back();
+                    const std::string response = handler(request) + "\n";
+                    request.clear();
+                    std::size_t offset = 0;
+                    while (offset < response.size()) {
+                        const auto sent = send(client, response.data() + offset,
+                                               response.size() - offset, MSG_NOSIGNAL);
+                        if (sent < 0 && errno == EINTR) continue;
+                        if (sent <= 0) return;
+                        offset += static_cast<std::size_t>(sent);
+                    }
+                } else if (request.size() < config.max_message_bytes) {
+                    request += buffer[n];
+                } else {
+                    return;
+                }
+            }
+        }
+    }
+
+    void RemoveEndpoint()
+    {
+        struct stat current = {};
+        if (!path.empty() && lstat(path.c_str(), &current) == 0 &&
+            current.st_dev == device && current.st_ino == inode)
+            unlink(path.c_str());
+        path.clear();
+    }
+    std::mutex mutex;
+    std::thread worker;
+    int listener = -1, active = -1;
+    bool stopping = false;
+    std::string path;
+    dev_t device = 0;
+    ino_t inode = 0;
+#endif
 };
 
 } // namespace

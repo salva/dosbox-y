@@ -5,6 +5,19 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## POSIX RPC transport
+
+`python3 tests/original-foundation/unix-transport.py` compiles the actual transport
+with C++14/Werror/ASan/UBSan and exercises fragmented and multiple newline/CRLF
+requests, the exact message bound, an oversized connection, handler exception,
+idle-client Stop, restart, existing-path refusal and replacement-path retention.
+The selected non-save Unix transport is ported onto the original agent transport
+owner. It requires an owner-private directory, publishes a mode0600 socket and
+never removes a pre-existing endpoint. Disposal only removes the recorded inode.
+It serially serves connections as in the selected implementation; this does not
+qualify guest/native execution ownership, stop overtaking or full RPC lifetime.
+Handler failure closes its connection without replaying possibly-effectful work.
+
 ## Agent build feature selection
 
 Agent translation units and SDL startup must include generated `config.h` before
