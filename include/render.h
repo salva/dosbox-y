@@ -198,4 +198,10 @@ void TempLineFree(void);
 void scalerSourceCacheBufferFree(void);
 bool scalerSourceCacheBufferAlloc(unsigned int p,unsigned int h);
 
+// Emulator-thread native observer; not completed-PNG or host-callback API.
+#include "capture_frame.h"
+bool RENDER_SetCompletedFrameObserver(CaptureFrame::Observer observer, void *context);
+uint64_t RENDER_CompletedFrameSequence();
+bool RENDER_CompletedFrameExhausted();
+
 #endif

@@ -1,4 +1,5 @@
 noinst_HEADERS =  \
+capture_frame.h \
 native_frontier.h \
 native_slice_observer.h \
 machine_service.h \

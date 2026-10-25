@@ -5,6 +5,16 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Completed-render identity
+
+`python3 tests/original-foundation/completed-frame.py` checks selected native
+clock and actual registration seam under ASan/UBSan: eligibility combinations,
+unchanged-frame identities, observer exclusivity/detach and exhaustion without
+wrap. `RENDER_EndUpdate` synchronously supplies a borrowed cache/palette view to
+a bounded native observer; callbacks may not pause, mutate renderer state or
+retain pointers. This is not completed-PNG delivery or consumer/resource lifetime
+qualification. No selected renderer save codec/dispatch catalogue is imported.
+
 ## Renderer allocation
 
 `python3 tests/original-foundation/render-allocation.py` compiles the actual

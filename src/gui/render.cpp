@@ -474,6 +474,19 @@ void AspectRatio_mapper_shortcut(bool pressed) {
 
 void VGA_DebugOverlay();
 
+// Synchronous borrowed view: no retained pointers, pausing or renderer mutation.
+static CaptureFrame::Clock completed_frame_clock;
+static CaptureFrame::Observer completed_frame_observer = nullptr;
+static void *completed_frame_context = nullptr;
+bool RENDER_SetCompletedFrameObserver(CaptureFrame::Observer observer, void *context) {
+    if (observer && completed_frame_observer) return false;
+    completed_frame_observer = observer;
+    completed_frame_context = observer ? context : nullptr;
+    return true;
+}
+uint64_t RENDER_CompletedFrameSequence() { return completed_frame_clock.sequence(); }
+bool RENDER_CompletedFrameExhausted() { return completed_frame_clock.exhausted(); }
+
 void RENDER_EndUpdate( bool abort ) {
     //LOG_MSG("RENDER_EndUpdate called abort=%d", abort ? 1 : 0);
     if (GCC_UNLIKELY(!render.updating))
@@ -484,6 +497,21 @@ void RENDER_EndUpdate( bool abort ) {
 
     if (!abort && render.active && RENDER_DrawLine == RENDER_ClearCacheHandler)
         render.scale.clearCache = false;
+
+    // Static pixels still receive a new identity; aborted/skipped frames do not.
+    uint32_t frame_flags = 0;
+    if (render.src.dblw != render.src.dblh) {
+        if (render.src.dblw) frame_flags |= CAPTURE_FLAG_DBLW;
+        if (render.src.dblh) frame_flags |= CAPTURE_FLAG_DBLH;
+    }
+    if (Scaler_ChangedLineIndex == 0) frame_flags |= CAPTURE_FLAG_NOCHANGE;
+    CaptureFrame::View frame = {0, static_cast<uint32_t>(PIC_Ticks),
+        static_cast<uint32_t>(render.src.width), static_cast<uint32_t>(render.src.height),
+        static_cast<uint32_t>(render.src.bpp), frame_flags, render.scale.cachePitch,
+        static_cast<const uint8_t *>(scalerSourceCacheBuffer),
+        reinterpret_cast<const uint8_t *>(&render.pal.rgb)};
+    completed_frame_clock.end(render.updating, render.active, render.disablerender,
+        abort, frame, completed_frame_observer, completed_frame_context);
 
     RENDER_DrawLine = RENDER_EmptyLineHandler;
     if (render.disablerender) {
