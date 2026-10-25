@@ -383,3 +383,17 @@ The reverse identity helper now maps its actual argument, not global
 mistake the active HLT decoder for that saved continuation. The same eight-way
 probe verifies pointer/ID roundtrips for every available core and unknown-pointer
 refusal with an unrelated global decoder absent from the fixture.
+
+## Paging host-cache reconstruction
+
+`python3 tests/original-foundation/paging-rebuild.py` extracts the real loader
+and `PAGING_InitTLB`, checks hostile serialized link indices/count, every short
+payload, fault-queue overflow and all host pointer/handler/count resets under
+ASan/UBSan. The original loader forced `links.used=PAGING_LINKS` then walked
+archived indices, including unused tail entries, before clearing the full cache.
+It now rebuilds via the existing full reset without consuming archived indices.
+Incomplete reads and impossible fault-queue counts are installation-fatal, not
+pre-effect refusal. The existing archive layout is unchanged. Serialized pointer
+bytes remain in that legacy layout but grant no host-cache authority. This does
+not validate guest paging semantics, reconstruct a suspended native fault stack,
+qualify large-profile performance or supply unified save admission.

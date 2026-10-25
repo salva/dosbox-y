@@ -1533,16 +1533,15 @@ void POD_Load_CPU_Paging( std::istream& stream )
 
 	READ_POD( &pf_queue, pf_queue );
 
-	// reset all information
-	paging.links.used = PAGING_LINKS;
-	PAGING_ClearTLB();
-
-	for( int lcv=0; lcv<TLB_SIZE; lcv++ ) {
-		paging.tlb.read[lcv] = nullptr;
-		paging.tlb.write[lcv] = nullptr;
-		paging.tlb.readhandler[lcv] = &init_page_handler;
-		paging.tlb.writehandler[lcv] = &init_page_handler;
-	}
+	// No serialized host cache entry is authoritative. In particular, do not
+	// walk archived links (including unused entries) through PAGING_ClearTLB.
+	// Rebuild all host pointers and link counts without dereferencing archive
+	// indices. Earlier paging fields are live, so incomplete input is fatal.
+	if (!stream)
+		E_Exit("Incomplete paging state during save-state installation");
+	if (pf_queue.used > PF_QUEUESIZE)
+		E_Exit("Invalid page fault queue during save-state installation");
+	PAGING_InitTLB();
 }
 
 uint8_t PageHandler_HostPtReadB(PageHandler *p,PhysPt addr) {
