@@ -2911,6 +2911,13 @@ private:
 		    incoming.pages > sizeof(pagehandler_idx) ||
 		    incoming.pages > MemSize / 4096)
 			E_Exit("Invalid save-state memory allocation extent");
+		// Address-line geometry is configured with native backing and callouts.
+		// A20 may mask its own line, not introduce arbitrary aliasing.
+		if (incoming.address_bits != memory.address_bits ||
+		    incoming.mem_alias_pagemask != memory.mem_alias_pagemask ||
+		    (incoming.mem_alias_pagemask_active != incoming.mem_alias_pagemask &&
+		     incoming.mem_alias_pagemask_active != (incoming.mem_alias_pagemask & ~0x100u)))
+			E_Exit("Invalid save-state memory address geometry");
 		incoming.phandlers = memory.phandlers;
 		incoming.mhandles = memory.mhandles;
 		incoming.lfb.handler = memory.lfb.handler;

@@ -44,16 +44,24 @@ std::string archive(MemoryBlock m,unsigned char id=1) {
 int main(){
  memory.pages=memory.handler_pages=4;memory.phandlers=handlers;memory.mhandles=handles;
  memory.lfb.handler=memory.lfb_mmio.handler=&handler;
+ memory.address_bits=32;memory.mem_alias_pagemask=0xfffff;
+ memory.mem_alias_pagemask_active=memory.mem_alias_pagemask;
  Loader loader;MemoryBlock original=memory;
  for(unsigned count:{5u,0x40001u}){memory.pages=count;std::ostringstream out;
  loader.getBytes(out);assert(!out && out.str().empty());memory=original;}
  std::ostringstream valid;loader.getBytes(valid);assert(valid && !valid.str().empty());
  auto hostile=original;hostile.pages=0xffffffff;
  auto reported=original;reported.reported_pages=original.pages+1;
- for(auto h:{hostile,reported}) {std::istringstream in(archive(h));bool fatal=false;
+ auto bits=original;bits.address_bits=40;
+ auto mask=original;mask.mem_alias_pagemask=0xffffffff;
+ auto active=original;active.mem_alias_pagemask_active ^= 0x200;
+ for(auto h:{hostile,reported,bits,mask,active}) {std::istringstream in(archive(h));bool fatal=false;
  try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal && memory.pages==4);}
  auto encoded=original;encoded.phandlers=nullptr;encoded.mhandles=nullptr;
  encoded.lfb.handler=encoded.lfb_mmio.handler=nullptr;
+ {auto masked=encoded;masked.mem_alias_pagemask_active &= ~0x100u;
+ std::istringstream in(archive(masked));loader.setBytes(in);assert(in);
+ assert(memory.mem_alias_pagemask_active==masked.mem_alias_pagemask_active);}
  std::istringstream good(archive(encoded));loader.setBytes(good);
  assert(good && memory.phandlers==handlers && memory.mhandles==handles);
  assert(memory.lfb.handler==&handler && memory.lfb_mmio.handler==&handler);

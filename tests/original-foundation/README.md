@@ -443,7 +443,10 @@ are never published. Short payload or invalid handler ID is installation-fatal,
 not rollback: earlier owners and RAM may already have changed. Consumed handle links
 must be -1, zero or an in-range positive page, and cycles are fatal before continuation;
 these checks do not establish cross-owner XMS/EMS allocation identity. This is not full
-memory/A20/LFB semantic validation or unified pre-effect admission.
+memory/A20/LFB semantic validation or unified pre-effect admission. Configured address
+bits and base alias mask must match the native allocation; the active mask may
+only differ at A20. This prevents arbitrary archived alias geometry but does not
+qualify cross-owner A20 policy or LFB callout reconstruction.
 
 `python3 tests/original-foundation/dma-callback.py` checks the actual DMA callback
 lookup for all byte IDs under ASan/UBSan, plus native channel-field serialization,
