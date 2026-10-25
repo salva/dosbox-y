@@ -64,6 +64,17 @@ All builds now share pointer deletion (including no-agent builds), so address
 removal deactivates patched instructions and clears retained identity before free.
 This is an owner seam, not full attachment or RPC transport qualification.
 
+`python3 tests/original-foundation/breakpoint-patches.py` additionally compiles
+the actual non-heavy breakpoint class and activation, physical-hit, lookup and
+deletion bodies. A bounded byte array stands in for instruction memory; actual
+patch writes are observed rather than replacing Activate with a no-op. All four
+explicit removal routes restore the instruction, co-located permanent/temporary
+patches survive either deletion order, bulk retirement unlinks freed peers before
+subsequent activation searches, one-shot hit receipts survive retirement,
+and a guest INT3 is not replaced with invented bytes. This closes the extracted
+non-heavy patch-restoration coverage gap, not a real non-heavy emulator build,
+instruction-execution, physical bus, attachment or transport lifetime check.
+
 ## Text observation dependency
 
 `python3 tests/original-foundation/text-observation.py` exercises the actual

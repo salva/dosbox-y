@@ -923,13 +923,15 @@ bool CBreakpoint::CheckIntBreakpoint(PhysPt adr, uint8_t intNr, uint16_t ahValue
 
 void CBreakpoint::DeleteAll()
 {
-	std::list<CBreakpoint*>::iterator i;
-	for(i=BPoints.begin(); i != BPoints.end(); ++i) {
-		CBreakpoint* bp = (*i);
-		bp->Activate(false);
-		delete bp;
-	}
-	(BPoints.clear)();
+    // Activate(false) searches live peers sharing the patched instruction.
+    // Remove each list entry before freeing it so subsequent searches cannot
+    // traverse retired objects, and the last peer restores the original byte.
+    while (!BPoints.empty()) {
+        CBreakpoint* bp = BPoints.front();
+        BPoints.pop_front();
+        bp->Activate(false);
+        delete bp;
+    }
 	lastTriggered = 0;
 }
 
