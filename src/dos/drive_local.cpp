@@ -3163,6 +3163,7 @@ uint16_t LocalFile::GetInformation(void) {
 
 
 uint32_t LocalFile::GetSeekPos() {
+	if (!fhandle) return 0xffffffff;
 	return file_access_tries>0?(uint32_t)lseek(fileno(fhandle),0,SEEK_CUR):(uint32_t)ftell( fhandle );
 }
 
@@ -3184,9 +3185,9 @@ void LocalFile::FlagReadOnlyMedium(void) {
 }
 
 bool LocalFile::UpdateDateTimeFromHost(void) {
-	if(!open) return false;
+	if(!open || !fhandle) return false;
 	struct stat temp_stat;
-	fstat(fileno(fhandle),&temp_stat);
+	if (fstat(fileno(fhandle),&temp_stat) != 0) return false;
     const struct tm* ltime;
 	if((ltime=localtime(&temp_stat.st_mtime))!=nullptr) {
 		time=DOS_PackTime((uint16_t)ltime->tm_hour,(uint16_t)ltime->tm_min,(uint16_t)ltime->tm_sec);

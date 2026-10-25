@@ -28,6 +28,11 @@ to verify flush/close error truth, once-only close, and shared-reference retenti
 LocalFile now returns flush/time/close failures rather than unconditional success;
 a possibly completed close is never retried. This is not DOS ownership/admission
 qualification, and only the Linux timestamp branch is exercised here.
+Default LocalFile handles/actions are initialized; unavailable seek returns the
+existing sentinel and failed fstat does not consume uninitialized metadata.
+The same probe exercises actual seek/stat bodies, absent handles and invalidated
+FDs, preserving prior time/date on stat failure (packing is stubbed). Guest
+UpdateLocalDateTime callbacks and DOS_CloseFile result propagation remain open.
 
 ## Completed-render identity
 

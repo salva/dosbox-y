@@ -190,11 +190,11 @@ public:
 	void FlagReadOnlyMedium(void);
 	void Flush(void) override;
 	uint32_t GetSeekPos(void) override;
-	FILE * fhandle;
+	FILE * fhandle = nullptr;
 	bool other_handles = true; // other open handles for the same file may exist
 private:
 	bool read_only_medium = false;
-	enum { NONE,READ,WRITE } last_action;
+	enum { NONE,READ,WRITE } last_action = NONE;
 };
 
 /* The following variable can be lowered to free up some memory.
