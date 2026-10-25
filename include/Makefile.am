@@ -1,4 +1,11 @@
 noinst_HEADERS =  \
+native_frontier.h \
+machine_service.h \
+native_debug_execution.h \
+native_stop_conditions.h \
+lua_driver_handoff.h \
+lua_driver_options.h \
+lua_driver_worker.h \
 bios.h \
 bios_disk.h \
 util_pointer.h \

@@ -5,6 +5,23 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Native primitives and worker (not yet emulator-integrated)
+
+Run `python3 tests/original-foundation/native-primitives.py` with g++, pthread,
+pkg-config and Lua 5.4. It compiles actual selected non-save owners and worker
+with `-Wall -Wextra -Werror`; outputs live only under
+`$SAIVAGE_CARD_WORK_ROOT/native-primitives`. Headers/worker and existing fixtures
+are preserved from74b5fa198e619686d506d152b0edcd1d52d5bd0f, without codec families.
+New `tests/machine-service/execution.cpp` covers exclusive attachment, stale
+context, Pending/Active/Terminal, retained result, attachment/owner departure,
+unlimited RUN and finite step budgets. Selected fixtures cover call-local
+frontier authority, classified service, stop arbitration, worker file/code,
+full libraries/require/observations/finalizers and cooperative close.
+These passing primitive/transport checks do not establish machine admission:
+CLI selection, actual frontend integration, semantic save joins and real native
+resource/lifetime qualification are still unfinished. Worker is not yet linked
+into the emulator. No complete usable debugger handoff is claimed.
+
 ## Ordinary upstream baseline
 
 Use a separate upstream build and a new disposable directory on each invocation:
