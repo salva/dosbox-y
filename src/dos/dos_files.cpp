@@ -2987,15 +2987,24 @@ void POD_Load_DOS_Files( std::istream& stream )
 		DOS_File *dummy = NULL;
 
 		for( unsigned int lcv=0; lcv<DOS_FILES; lcv++ ) {
-			uint8_t file_valid;
+			uint8_t file_valid = 0;
 			char *file_name;
 			uint8_t file_namelen, file_drive, file_flags;
 
 			// - reloc ptr
 			READ_POD( &file_valid, file_valid );
-			// ignore system files
+			if (!stream || (file_valid != 0 && file_valid != 0xfe && file_valid != 0xff))
+				E_Exit("Invalid save-state DOS file slot tag");
+			// A system slot must already have a native object. Device identity
+			// reconciliation belongs to resource admission, not this byte transfer.
 			if( file_valid == 0xfe ) {
-				READ_POD( &Files[lcv]->refCtr, Files[lcv]->refCtr );
+				if (!Files[lcv])
+					E_Exit("Save-state DOS system file identity mismatch");
+				Bits refs = 0;
+				READ_POD( &refs, refs );
+				if (!stream || refs < 0)
+					E_Exit("Invalid save-state DOS system file references");
+				Files[lcv]->refCtr = refs;
 				continue;
 			}
 

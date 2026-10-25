@@ -467,3 +467,8 @@ capture/consumption seam: 254-character names fit the legacy byte length, longer
 names fail capture without overflow, and truncated/zero-length/nonterminated or
 embedded-NUL archived names are installation-fatal before FileOpen. Earlier drive
 and slot effects remain possible; this is not resource admission or rollback.
+`python3 tests/original-foundation/dos-file-slots.py` checks all 256 incoming slot
+tags, short metadata, absent native system slot and negative references. Invalid
+consumed data is fatal before dereference/refcount publication. Existing native
+system slots are retained; exact system-device identity remains resource-admission
+work, not established by these checks.
