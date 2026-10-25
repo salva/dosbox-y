@@ -35,6 +35,7 @@
 #include "render.h"
 #include "../gui/render_scalers.h"
 #include "vga.h"
+#include "vga_scan_addressing.h"
 #include "pic.h"
 #include "jfont.h"
 #include "menu.h"
@@ -7051,120 +7052,10 @@ void VGA_ResetDebugOverrides(void) {
 }
 
 void VGA_CheckScanLength(void) {
-	if (vga.dosboxig.svga) {
-		vga.draw.address_add=vga.dosboxig.bytes_per_scanline;
-		return;
-	}
-
-	switch (vga.mode) {
-		case M_EGA:
-		case M_LIN4:
-			vga.draw.address_add=vga.config.scan_len*(8u<<(unsigned int)vga.config.addr_shift);
-			break;
-		case M_PACKED4:
-			vga.draw.address_add=vga.config.scan_len*8;
-			break;
-		case M_VGA:
-		case M_LIN8:
-		case M_LIN15:
-		case M_LIN16:
-		case M_LIN24:
-		case M_LIN32:
-			if (vga.mode == M_VGA) {
-				if (svgaCard == SVGA_TsengET3K || svgaCard == SVGA_TsengET4K) {
-					/* Observed ET4000AX behavior:
-					 *    byte mode OR dword mode scans 256-color 4-pixel groups byte by byte from
-					 *    planar RAM. word mode scans every other byte (skips by two).
-					 *    We can just scan the buffer normally as linear because of the address
-					 *    translation carried out by the ET4000 in chained mode:
-					 *
-					 *    plane = (addr & 3)   addr = (addr >> 2)
-					 *
-					 *    TODO: Validate that this is correct. */
-					vga.draw.address_add=vga.config.scan_len*((vga.config.addr_shift == 1)?16:8);
-				}
-				else if (machine == MCH_MCGA) {
-					vga.draw.address_add=vga.draw.blocks*4;
-				}
-				else {
-					/* Most (almost ALL) VGA clones render chained modes as 4 8-bit planes one DWORD apart.
-					 * They all act as if writes to chained VGA memory are translated as:
-					 * addr = ((addr & ~3) << 2) + (addr & 3) */
-					vga.draw.address_add=(unsigned int)vga.config.scan_len*((unsigned int)(2*4)<<(unsigned int)vga.config.addr_shift);
-				}
-			}
-			else {
-				/* the rest (SVGA modes) can be rendered with sanity */
-				if (svgaCard == SVGA_TsengET3K || svgaCard == SVGA_TsengET4K || svgaCard == SVGA_S3Trio) {
-					// Real hardware testing (Tseng ET4000) shows that in SVGA modes the
-					// standard VGA byte/word/dword mode bits have no effect.
-					//
-					// This was verified by using TMOTSENG.EXE on real hardware, setting
-					// mode 0x2F (640x400 256-color mode) and then playing with the
-					// word/dword/byte mode bits.
-					//
-					// Also noted is that the "count memory clock by 4" bit is set. If
-					// you clear it, the hardware acts as if it completes the scanline
-					// early and 3/4ths of the screen is the last 4-pixel block repeated.
-					//
-					// S3 Trio: Testing on a real S3 Virge PCI card shows that the
-					//          byte/word/dword bits have no effect on SVGA modes other
-					//          than the 16-color 800x600 SVGA mode.
-					vga.draw.address_add=vga.config.scan_len*(2u<<2u);
-				}
-				else {
-					// Other cards (?)
-					vga.draw.address_add=vga.config.scan_len*(2u<<vga.config.addr_shift);
-				}
-			}
-			break;
-		case M_PC98:
-			vga.draw.address_add=vga.draw.blocks;
-			break;
-		case M_TEXT:
-		case M_CGA2:
-		case M_CGA16:
-		case M_DCGA:
-		case M_AMSTRAD: // Next line.
-			if (IS_EGAVGA_ARCH)
-				vga.draw.address_add=vga.config.scan_len*(2u<<vga.config.addr_shift);
-			else if (machine == MCH_3270PC && vga.mode == M_CGA2) // 3270 APA 720x350: linear, scanlines contiguous
-				vga.draw.address_add=vga.draw.blocks*vga.draw.address_line_total;
-			else
-				vga.draw.address_add=vga.draw.blocks;
-			break;
-		case M_CGA4:
-			// 2023/04/26: This path M_CGA2 and M_CGA4 is no longer set for EGA/VGA.
-			if (machine == MCH_3270PC) // 3270 APA 360x350: linear, scanlines contiguous
-				vga.draw.address_add=vga.draw.blocks*vga.draw.address_line_total;
-			else
-				vga.draw.address_add=vga.draw.blocks;
-			break;
-		case M_TANDY2:
-			if (machine == MCH_MCGA)
-				vga.draw.address_add=vga.draw.blocks;
-			else
-				vga.draw.address_add=vga.draw.blocks/4u;
-			break;
-		case M_TANDY4:
-			vga.draw.address_add=vga.draw.blocks;
-			break;
-		case M_TANDY16:
-			vga.draw.address_add=vga.draw.blocks;
-			break;
-		case M_TANDY_TEXT:
-			vga.draw.address_add=vga.draw.blocks*2;
-			break;
-		case M_HERC_TEXT:
-			vga.draw.address_add=vga.draw.blocks*2;
-			break;
-		case M_HERC_GFX:
-			vga.draw.address_add=vga.draw.blocks;
-			break;
-		default:
-			vga.draw.address_add=vga.draw.blocks*8;
-			break;
-	}
+    vga.draw.address_add = VGA_ResolveScanAddressing(vga.mode, machine, svgaCard,
+        IS_EGAVGA_ARCH, vga.dosboxig.svga, vga.dosboxig.bytes_per_scanline,
+        vga.config.scan_len, vga.config.addr_shift, vga.draw.blocks,
+        vga.draw.address_line_total);
 }
 
 void VGA_ActivateHardwareCursor(void) {

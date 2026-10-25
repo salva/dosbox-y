@@ -3,7 +3,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/aviwriter -I$(top_srcd
 SUBDIRS = serialport parport reSID mame
 
 EXTRA_DIST = opl.cpp opl.h adlib.h dbopl.h hardopl.h pci_devices.h voodoo_types.h voodoo_def.h voodoo_data.h \
-             voodoo_interface.h voodoo_emu.h voodoo_vogl.h voodoo_opengl.h mic_input_win32.h
+             voodoo_interface.h voodoo_emu.h voodoo_vogl.h voodoo_opengl.h mic_input_win32.h vga_scan_addressing.h
 
 noinst_LIBRARIES = libhardware.a
 

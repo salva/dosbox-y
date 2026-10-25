@@ -1138,6 +1138,7 @@ extern void *PIC_IRQCheckDelayed_PIC_Event;
 //extern void *NE2000_TX_Event_PIC_Event;						// Ne2000.cpp
 
 
+extern void *GUS_MidiTxDone_PIC_Event;
 // PIC_TimerHandlers
 #if C_IPX
 //extern void *IPX_ClientLoop_PIC_Timer;						// Ipx.cpp
@@ -1188,7 +1189,8 @@ const void *pic_state_event_table[] = {
 	PIC_IRQCheckDelayed_PIC_Event,
 
 	//NE2000_TX_Event_PIC_Event,
-	PC98_Mouse_Tick_PIC_Event,	// last, so the indexes of the others stay as older states have them
+	PC98_Mouse_Tick_PIC_Event,	// preserve earlier callback indices
+	GUS_MidiTxDone_PIC_Event,
 };
 
 
@@ -1241,6 +1243,8 @@ uint16_t PIC_State_FindTimer( Bitu addr ) {
 
 Bitu PIC_State_IndexEvent( uint16_t index ) {
 	if( index == 0xffff ) return 0;
+	if (index >= sizeof(pic_state_event_table) / sizeof(pic_state_event_table[0]))
+		E_Exit("Invalid saved PIC event callback index");
 
 	return (Bitu) (pic_state_event_table[index]);
 }
@@ -1248,6 +1252,8 @@ Bitu PIC_State_IndexEvent( uint16_t index ) {
 
 Bitu PIC_State_IndexTimer( uint16_t index ) {
 	if( index == 0xffff ) return 0;
+	if (index >= sizeof(pic_state_timer_table) / sizeof(pic_state_timer_table[0]))
+		E_Exit("Invalid saved PIC timer callback index");
 
 	return (Bitu) (pic_state_timer_table[index]);
 }
@@ -1395,7 +1401,7 @@ private:
 
 
 				for( int lcv=0; lcv<PIC_QUEUESIZE; lcv++ ) {
-					uint16_t event_idx, next_idx;
+					uint16_t event_idx = 0xffff, next_idx = 0xffff;
 
 					// - data
 					/* Read .index as fixed 8-byte double (see save side). */
@@ -1413,6 +1419,8 @@ private:
 					// - reloc ptr
 					stream.read(reinterpret_cast<char*>(&next_idx), sizeof(next_idx) );
 
+					if (!stream || (next_idx != 0xffff && next_idx >= PIC_QUEUESIZE))
+						E_Exit("Invalid or truncated saved PIC queue link");
 					pic_queue.entries[lcv].next = NULL;
 					if( next_idx != 0xffff )
 						pic_queue.entries[lcv].next = &pic_queue.entries[next_idx];
@@ -1422,6 +1430,9 @@ private:
         stream.read(reinterpret_cast<char*>(&free_idx), sizeof(free_idx) );
         stream.read(reinterpret_cast<char*>(&next_idx), sizeof(next_idx) );
 
+				if (!stream || (free_idx != 0xffff && free_idx >= PIC_QUEUESIZE) ||
+				    (next_idx != 0xffff && next_idx >= PIC_QUEUESIZE))
+					E_Exit("Invalid or truncated saved PIC queue head");
 				pic_queue.free_entry = NULL;
 				if( free_idx != 0xffff )
 					pic_queue.free_entry = &pic_queue.entries[free_idx];
@@ -1455,12 +1466,14 @@ private:
 				// - reloc ptr
         stream.read(reinterpret_cast<char*>(&ticker_size), sizeof(ticker_size) );
 
+        if (!stream) E_Exit("Truncated saved PIC ticker count");
+
 				firstticker = NULL;
 				if( ticker_size ) {
 					TickerBlock *ticker_ptr;
 
 					for( int lcv = 0; lcv<ticker_size; lcv++ ) {
-						uint16_t ticker_idx;
+						uint16_t ticker_idx = 0xffff;
 
 						if( lcv == 0 ) {
 							ticker_ptr = new TickerBlock;
@@ -1474,6 +1487,7 @@ private:
 
 						// - function ptr
 						stream.read(reinterpret_cast<char*>(&ticker_idx), sizeof(ticker_idx) );
+						if (!stream) E_Exit("Truncated saved PIC ticker callback");
 						ticker_ptr->handler = (TIMER_TickHandler) PIC_State_IndexTimer( ticker_idx );
 
 						// - reloc new ptr (linked list)

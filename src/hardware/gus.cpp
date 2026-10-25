@@ -2778,6 +2778,7 @@ void GUS_Init() {
 
 // save state support
 void *GUS_TimerEvent_PIC_Event = (void*)((uintptr_t)GUS_TimerEvent);
+void *GUS_MidiTxDone_PIC_Event = (void*)((uintptr_t)GUS_MidiTxDone);
 void *GUS_DMA_Callback_Func = (void*)((uintptr_t)GUS_DMA_Callback);
 
 
