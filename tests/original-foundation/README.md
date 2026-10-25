@@ -38,6 +38,10 @@ frontend binds this hook yet, and these seams do not themselves admit saves.
 setup/restoration, restricting descriptors and exception scope expiry. Upstream
 register restoration on exceptional exit is not invented or claimed. The
 `dispatch.py` fixture checks actual entered scopes under normal and throw paths.
+The optional CPU slice observer receives before/after notifications at the shared
+decoder primitive (normal and DEBUG_Run callers); after observes restored policy
+also during exception unwind. Observer callbacks cannot throw, execute guest or
+pump services. Its binding does not grant input, execution or save authority.
 
 ## Native primitives and worker (not yet emulator-integrated)
 

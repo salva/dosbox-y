@@ -1,5 +1,6 @@
 noinst_HEADERS =  \
 native_frontier.h \
+native_slice_observer.h \
 machine_service.h \
 native_debug_execution.h \
 native_stop_conditions.h \

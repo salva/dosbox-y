@@ -66,6 +66,7 @@
 #include "callback.h"
 #include "machine_service.h"
 #include "native_frontier.h"
+#include "native_slice_observer.h"
 #include "inout.h"
 #include "mixer.h"
 #include "timer.h"
@@ -438,9 +439,13 @@ Bits DOSBOX_DispatchDecoder() {
     NativeFrontier::Frontiers::Scope entered(NativeFrontier::frontiers(),true);
     struct Restore {
         bool allow = dosbox_allow_nonrecursive_page_fault;
-        ~Restore() { dosbox_allow_nonrecursive_page_fault = allow; }
+        ~Restore() {
+            dosbox_allow_nonrecursive_page_fault = allow;
+            NativeExecution::slice_observer().notify(false);
+        }
     } restore;
     dosbox_allow_nonrecursive_page_fault = true;
+    NativeExecution::slice_observer().notify(true);
     return (*cpudecoder)();
 }
 

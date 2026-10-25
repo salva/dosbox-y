@@ -13,6 +13,7 @@ fixture = r'''
 #include <stdexcept>
 #include "machine_service.h"
 #include "native_frontier.h"
+#include "native_slice_observer.h"
 MachineService::Owner DOSBOX_MachineServiceOwner();
 using Bits=int; using Bitu=unsigned;
 constexpr unsigned CB_MAX=4;
@@ -44,7 +45,14 @@ void frontier(void*,const NativeFrontier::Descriptor &d) {
  if(d.kind==NativeFrontier::Kind::NativeReturn && !d.callback_entered)assert(!d.decoder_entered);
  ++frontier_calls;
 }
+unsigned slice_before=0,slice_after=0;
+bool incoming_allow=false;
+void slice(void*,bool before) noexcept {
+ if(before){assert(dosbox_allow_nonrecursive_page_fault);++slice_before;}
+ else{assert(dosbox_allow_nonrecursive_page_fault==incoming_allow);++slice_after;}
+}
 int main() {
+ assert(NativeExecution::slice_observer().bind(slice,nullptr));
  assert(NativeFrontier::frontiers().bind(frontier,nullptr));
  DOSBOX_SetMachineService(service,nullptr);
  DOSBOX_RequestMachineService();
@@ -73,6 +81,7 @@ int main() {
  try {DOSBOX_RunMachine();assert(false);}catch(int n){assert(n==3);}
  assert(last_callback==9);
  for(bool initial:{false,true}) {
+  incoming_allow=initial;
   dosbox_allow_nonrecursive_page_fault=initial;
   fail=false;assert(DOSBOX_DispatchDecoder()==2);
   assert(dosbox_allow_nonrecursive_page_fault==initial);
@@ -90,6 +99,8 @@ int main() {
    assert(last_callback==9 && dosbox_allow_nonrecursive_page_fault==initial);
   }
  }
+ assert(slice_before==4 && slice_after==4);
+ assert(NativeExecution::slice_observer().unbind(slice,nullptr));
 }
 '''
 (work / 'dispatch.cpp').write_text(fixture)
