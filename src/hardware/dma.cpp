@@ -865,6 +865,8 @@ void DmaChannel::SaveState( std::ostream& stream )
 
 void DmaChannel::LoadState( std::istream& stream )
 {
+	const uint8_t expected_channel = channum;
+	const uint8_t expected_width = DMA16;
 	uint8_t dma_callback;
 
 
@@ -897,6 +899,8 @@ void DmaChannel::LoadState( std::istream& stream )
 	// - reloc func ptr
 	READ_POD( &dma_callback, dma_callback );
 	if (!stream) E_Exit("Short save-state DMA channel");
+	if (channum != expected_channel || DMA16 != expected_width)
+		E_Exit("Invalid save-state DMA channel identity");
 
 	callback = (DMA_CallBack) POD_State_Index_DMA_Callback( dma_callback );
 }

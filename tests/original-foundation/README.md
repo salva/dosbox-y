@@ -441,7 +441,8 @@ not rollback: earlier owners and RAM may already have changed. This is not full
 memory/A20/LFB/handle-chain semantic validation or unified pre-effect admission.
 
 `python3 tests/original-foundation/dma-callback.py` checks the actual DMA callback
-lookup for all byte IDs under ASan/UBSan. Invalid IDs are fatal before table
+lookup for all byte IDs under ASan/UBSan, plus native channel-field serialization,
+every channel truncation and channel/width identity mismatches. Invalid IDs are fatal before table
 access, and a short consumed channel cannot publish its callback. Earlier channel
 fields may already have changed: neither check is pre-effect refusal or complete
 DMA/audio ownership qualification.
