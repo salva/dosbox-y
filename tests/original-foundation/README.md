@@ -5,6 +5,15 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Renderer allocation
+
+`python3 tests/original-foundation/render-allocation.py` compiles the actual
+allocation bodies with a poisoned allocator and ASan/UBSan. It checks complete
+source-cache initialization including slack/guards, rejection/allocation failure,
+size overflow refusal and every odd-height changed-line guard entry. These are
+selected non-save confidentiality/initialization fixes, not presentation rebuild,
+completed-frame observation or real output/resource lifetime qualification.
+
 ## Logical gameport
 
 `python3 tests/original-foundation/logical-gameport.py` compiles actual original

@@ -88,6 +88,8 @@ bool scalerSourceCacheBufferAlloc(unsigned int p,unsigned int h) {
 		return false;
 	}
 
+	// Captures include guard/slack bytes, not only guest-visible pixels.
+	memset(scalerSourceCacheBuffer, 0, scalerSourceCacheBufferSize);
 	return true;
 }
 
