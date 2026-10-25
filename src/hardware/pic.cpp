@@ -17,6 +17,8 @@
  */
 
 #include <assert.h>
+#include <memory>
+#include <vector>
 
 #include "dosbox.h"
 #include "inout.h"
@@ -1451,8 +1453,23 @@ private:
         }
 
 
-				// 1- wipe old data
-				// 2- insert new data
+        // Retain actual native replacement nodes before releasing live tickers.
+        // Earlier PIC fields are already installed: failure is fatal partial
+        // installation, not a pre-effect refusal.
+        stream.read(reinterpret_cast<char*>(&ticker_size), sizeof(ticker_size));
+        if (!stream) E_Exit("Truncated saved PIC ticker count");
+        std::vector<std::unique_ptr<TickerBlock>> prepared;
+        prepared.reserve(ticker_size);
+        for (unsigned i = 0; i < ticker_size; ++i) {
+            uint16_t ticker_idx = 0xffff;
+            stream.read(reinterpret_cast<char*>(&ticker_idx), sizeof(ticker_idx));
+            if (!stream) E_Exit("Truncated saved PIC ticker callback");
+            auto handler = (TIMER_TickHandler)PIC_State_IndexTimer(ticker_idx);
+            if (!handler) E_Exit("Invalid saved PIC ticker callback");
+            prepared.emplace_back(new TickerBlock{handler, nullptr});
+        }
+
+        // Commit owned nodes without allocating after release.
 				while( firstticker != NULL ) {
 					TickerBlock *ticker_ptr;
 
@@ -1463,37 +1480,11 @@ private:
 				}
 
 
-				// - reloc ptr
-        stream.read(reinterpret_cast<char*>(&ticker_size), sizeof(ticker_size) );
-
-        if (!stream) E_Exit("Truncated saved PIC ticker count");
-
-				firstticker = NULL;
-				if( ticker_size ) {
-					TickerBlock *ticker_ptr;
-
-					for( int lcv = 0; lcv<ticker_size; lcv++ ) {
-						uint16_t ticker_idx = 0xffff;
-
-						if( lcv == 0 ) {
-							ticker_ptr = new TickerBlock;
-							firstticker = ticker_ptr;
-						}
-						else {
-							ticker_ptr->next = new TickerBlock;
-							ticker_ptr = ticker_ptr->next;
-						}
-
-
-						// - function ptr
-						stream.read(reinterpret_cast<char*>(&ticker_idx), sizeof(ticker_idx) );
-						if (!stream) E_Exit("Truncated saved PIC ticker callback");
-						ticker_ptr->handler = (TIMER_TickHandler) PIC_State_IndexTimer( ticker_idx );
-
-						// - reloc new ptr (linked list)
-						ticker_ptr->next = NULL;
-					}
-				}
+        TickerBlock **tail = &firstticker;
+        for (auto &node : prepared) {
+            *tail = node.release();
+            tail = &(*tail)->next;
+        }
 
 
 				// - system (leave alone)

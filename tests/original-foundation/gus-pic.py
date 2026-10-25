@@ -28,7 +28,7 @@ standins = ''.join('void *'+name+' = (void*)&inert;\n' for name in dict.fromkeys
 timer_table = pic[pic.index('const void *pic_state_timer_table[]'):]
 timer_table = timer_table[:timer_table.index('};')+2]
 timer_entries = re.findall(r'^\s*([A-Za-z_][A-Za-z_0-9]*),', timer_table, re.M)
-standins += ''.join('void *'+name+' = (void*)&inert;\n' for name in dict.fromkeys(timer_entries) if name != 'NULL' and name not in entries)
+standins += ''.join('void timer_'+name+'() {}\nvoid *'+name+' = (void*)&timer_'+name+';\n' for name in dict.fromkeys(timer_entries) if name != 'NULL' and name not in entries)
 export = re.search(r'^void \*GUS_MidiTxDone_PIC_Event = .*;', gus, re.M).group()
 # Exact ingress case consumed by GUS write handler, including its delay and value.
 start = gus.index('\t\tcase 0x301:', gus.index('PIC_RemoveEvents(GUS_MidiTxDone)'))
@@ -39,6 +39,8 @@ serializer = pic[pic.index('class SerializePic :'):]
 serializer = serializer[:serializer.index('} dummy;')+len('} dummy;')]
 serializer_fixture = r'''
 #include <sstream>
+#include <memory>
+#include <vector>
 struct SerializeGlobalPOD {
  static SerializeGlobalPOD *component;
  explicit SerializeGlobalPOD(const char*) {component=this;}
@@ -121,6 +123,20 @@ int main(){
  assert((double)pic_queue.next_entry->index==0.32);
  assert(pic_queue.free_entry==&pic_queue.entries[1]);
  assert(firstticker && firstticker->next && !firstticker->next->next);
+ assert(firstticker->handler==(TIMER_TickHandler)pic_state_timer_table[1]);
+ assert(firstticker->next->handler==(TIMER_TickHandler)pic_state_timer_table[3]);
+ auto retained=firstticker;
+ // A malformed second callback must not dispose or replace live ticker nodes.
+ for (unsigned mode=0; mode<2; ++mode) {
+  std::string broken=saved;
+  if(mode==0) broken.pop_back();
+  else {uint16_t invalid=0xffff;broken.replace(broken.size()-2,2,
+   reinterpret_cast<const char*>(&invalid),2);}
+  rejected=false;
+  try {std::stringstream input(broken);SerializeGlobalPOD::component->setBytes(input);}
+  catch(const std::runtime_error&) {rejected=true;}
+  assert(rejected && firstticker==retained && firstticker->next);
+ }
  while(firstticker){auto next=firstticker->next;delete firstticker;firstticker=next;}
  // Queue link corruption/truncation must stop at the fatal install boundary.
  // Base POD fixture is empty; offset follows actual serialized fields above.
