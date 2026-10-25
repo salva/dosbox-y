@@ -5,6 +5,17 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Descriptor observation
+
+`python3 tests/original-foundation/descriptor-observation.py` checks the actual
+GDT/LDT descriptor inspection body: complete inclusive descriptor limits, overflow,
+explicit little-endian decode and unchanged output on refusal. It consumes the
+shared non-mutating linear observation primitive rather than `Descriptor::Load`
+(which changes mpl and uses ordinary guest memory reads). The fixture substitutes
+paging; `memory-observation.py` separately covers that primitive. This API is not
+yet consumed by the production RPC segmented resolver, whose effectful descriptor
+lookup remains outstanding alongside context/attachment admission.
+
 ## Shared native dispatch restoration
 
 `python3 tests/original-foundation/dispatch.py` compiles the actual shared

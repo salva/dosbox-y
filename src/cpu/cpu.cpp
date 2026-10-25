@@ -661,6 +661,25 @@ void CPU_Check_NMI() {
 #endif
 
 
+bool GDTDescriptorTable::InspectDescriptor(Bitu selector, Descriptor& desc) const {
+    const Bitu offset = selector & ~Bitu(7);
+    const Bitu limit = (selector & 4) ? ldt_limit : table_limit;
+    const uint64_t base = (selector & 4) ? ldt_base : table_base;
+    // Limits are inclusive; the complete eight-byte descriptor must exist.
+    if (offset > limit || limit - offset < 7 || base + offset > UINT32_MAX - 7)
+        return false;
+    uint8_t bytes[8];
+    if (!PAGING_InspectLinear(static_cast<uint32_t>(base + offset), 8, bytes))
+        return false;
+    Descriptor observed;
+    observed.saved.fill[0] = uint32_t(bytes[0]) | (uint32_t(bytes[1]) << 8) |
+                             (uint32_t(bytes[2]) << 16) | (uint32_t(bytes[3]) << 24);
+    observed.saved.fill[1] = uint32_t(bytes[4]) | (uint32_t(bytes[5]) << 8) |
+                             (uint32_t(bytes[6]) << 16) | (uint32_t(bytes[7]) << 24);
+    desc = observed;
+    return true;
+}
+
 void Descriptor::Load(PhysPt address) {
 	cpu.mpl=0;
 	uint32_t* data = (uint32_t*)&saved;

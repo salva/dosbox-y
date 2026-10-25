@@ -502,6 +502,8 @@ protected:
 
 class GDTDescriptorTable : public DescriptorTable {
 public:
+	// Debugger observation: no page faults, privilege changes or accessed bits.
+	bool InspectDescriptor(Bitu selector, Descriptor& desc) const;
 	bool GetDescriptor(Bitu selector, Descriptor& desc) {
 		Bitu address=selector & ~7U;
 		if (selector & 4U) {
