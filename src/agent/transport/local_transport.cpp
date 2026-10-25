@@ -19,6 +19,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <cstring>
 #include <cerrno>
 #endif
@@ -341,9 +342,19 @@ public:
             return false;
         }
         std::memcpy(address.sun_path, config.endpoint.c_str(), config.endpoint.size() + 1);
+#if defined(__linux__)
+        const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#else
         const int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+#endif
         if (fd < 0) {
             if (error) *error = "Cannot create Unix socket";
+            return false;
+        }
+        // Borrowed worker/guest subprocesses must not retain the listener.
+        if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
+            close(fd);
+            if (error) *error = "Cannot isolate Unix listener lifetime";
             return false;
         }
         // Never remove an endpoint owned by an earlier/independent server.
@@ -416,10 +427,18 @@ private:
     void Serve(const AgentConfig& config, const RequestHandler& handler, int fd)
     {
         for (;;) {
+#if defined(__linux__)
+            const int client = accept4(fd, nullptr, nullptr, SOCK_CLOEXEC);
+#else
             const int client = accept(fd, nullptr, nullptr);
+#endif
             if (client < 0) {
                 if (errno == EINTR) continue;
                 break;
+            }
+            if (fcntl(client, F_SETFD, FD_CLOEXEC) < 0) {
+                close(client);
+                continue;
             }
             {
                 std::lock_guard<std::mutex> lock(mutex);

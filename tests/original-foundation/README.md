@@ -17,6 +17,11 @@ never removes a pre-existing endpoint. Disposal only removes the recorded inode.
 It serially serves connections as in the selected implementation; this does not
 qualify guest/native execution ownership, stop overtaking or full RPC lifetime.
 Handler failure closes its connection without replaying possibly-effectful work.
+Listener and accepted descriptors are close-on-exec; Linux uses atomic socket /
+accept4 flags so concurrent Lua worker exec cannot inherit them. Other POSIX
+platforms use fcntl and retain an unqualified concurrent-fork window. The Linux
+fixture checks both actual production socket FD flags (ignoring unrelated
+inherited sockets) and counts the throwing handler once, without replay.
 
 ## Agent build feature selection
 
