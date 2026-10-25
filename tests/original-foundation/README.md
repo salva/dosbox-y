@@ -454,3 +454,11 @@ every channel truncation and channel/width identity mismatches. Invalid IDs are 
 access, and a short consumed channel cannot publish its callback. Earlier channel
 fields may already have changed: neither check is pre-effect refusal or complete
 DMA/audio ownership qualification.
+
+`python3 tests/original-foundation/dos-file-metadata.py` exercises the consumed
+`DOS_File::LoadState` method under ASan/UBSan: every truncation, invalid bool,
+large discarded-name length, pop-without-publication, and failed seek. Metadata
+publishes only after complete consumption; seek/close failure after publication is
+installation-fatal, including uncertain host position/close effects. This is not
+prepared native file admission: drive reconstruction, detached old handles,
+reopen/share modes, aliases and actual host-resource lifetime remain unfinished.

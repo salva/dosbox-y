@@ -2547,39 +2547,53 @@ void DOS_File::SaveState( std::ostream& stream )
 
 void DOS_File::LoadState( std::istream& stream, bool pop )
 {
-	uint32_t file_namelen, seek_pos;
-	char *file_name;
-
-	//******************************************
-	//******************************************
-	//******************************************
-
-	// - pure data
+	uint32_t file_namelen = 0, seek_pos = 0;
 	READ_POD( &file_namelen, file_namelen );
-	file_name = (char*)alloca( file_namelen * sizeof(char) );
-	READ_POD_SIZE( file_name, file_namelen );
-
-	READ_POD( &flags, flags );
-	READ_POD( &open, open );
-
-	READ_POD( &attr, attr );
-	READ_POD( &time, time );
-	READ_POD( &date, date );
-	READ_POD( &refCtr, refCtr );
-	READ_POD( &hdrive, hdrive );
-
-	//******************************************
-	//******************************************
-	//******************************************
-
-	// - reloc ptr
+	// This duplicate name is not used to reopen the file. Consume it without
+	// letting an archived length control a stack allocation.
+	char discarded[256];
+	while (stream && file_namelen) {
+		const auto count = std::min<uint32_t>(file_namelen, sizeof(discarded));
+		stream.read(discarded, count);
+		file_namelen -= count;
+	}
+	decltype(flags) saved_flags = 0;
+	uint8_t saved_open = 0;
+	decltype(attr) saved_attr = 0;
+	decltype(time) saved_time = 0;
+	decltype(date) saved_date = 0;
+	decltype(refCtr) saved_refs = 0;
+	decltype(hdrive) saved_drive = 0;
+	static_assert(sizeof(open) == sizeof(saved_open), "save-state bool encoding");
+	READ_POD( &saved_flags, saved_flags );
+	READ_POD( &saved_open, saved_open );
+	READ_POD( &saved_attr, saved_attr );
+	READ_POD( &saved_time, saved_time );
+	READ_POD( &saved_date, saved_date );
+	READ_POD( &saved_refs, saved_refs );
+	READ_POD( &saved_drive, saved_drive );
 	READ_POD( &seek_pos, seek_pos );
-
-	if (pop)
-		return;
-
-	if( open ) Seek( &seek_pos, DOS_SEEK_SET );
-	else Close();
+	if (!stream) E_Exit("Truncated save-state DOS file metadata");
+	if (saved_open > 1 || saved_refs < 0)
+		E_Exit("Invalid save-state DOS file metadata");
+	// Discarded entries must not change the dummy/native file object.
+	if (pop) return;
+	flags = saved_flags;
+	open = saved_open != 0;
+	attr = saved_attr;
+	time = saved_time;
+	date = saved_date;
+	refCtr = saved_refs;
+	hdrive = saved_drive;
+	// Native close consumes the restored reference count and timestamps.
+	// Failure may have host effects and is not a resumable refusal.
+	if (saved_open) {
+		const uint32_t expected = seek_pos;
+		if (!Seek(&seek_pos, DOS_SEEK_SET) || seek_pos != expected)
+			E_Exit("Cannot restore save-state DOS file position");
+	} else if (!Close()) {
+		E_Exit("Cannot close save-state DOS file");
+	}
 }
 
 extern bool dos_kernel_disabled;
