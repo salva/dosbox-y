@@ -21,7 +21,7 @@ a.binary = a.binary.resolve()
 a.work = a.work.resolve()
 a.work.mkdir(parents=True, exist_ok=True)
 source = Path(__file__).with_name('upstream-slot.asm')
-subprocess.run(['nasm', '-f', 'bin', str(source), '-o', str(a.work/'WITNESS.COM')], check=True)
+subprocess.run(['nasm', '-f', 'bin', *(['-DGUS_DRAM'] if a.gus else []), str(source), '-o', str(a.work/'WITNESS.COM')], check=True)
 config = a.work/'baseline.conf'
 config.write_text(f'''[sdl]
 output=surface

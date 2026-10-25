@@ -36,7 +36,11 @@ synchronize output callbacks or qualify whole-owner/save-frontier installation.
 Old component framing is refused; no compatibility codec was added.
 
 `upstream-slot.py --gus` enables the real GUS allocation and original slot
-traversal, while `--second-sb` enables a second SB16 at 240h/IRQ5/DMA3/HDMA6
+traversal, and assembles the witness with `GUS_DRAM`: every loop writes and
+reads guest DRAM byte zero via standard 240h GUS ports (343h/344h/347h), exiting
+with error on mismatch. This proves live port/storage access while ordinary
+slots run, not immediate restored byte inspection or voice playback.
+`--second-sb` enables a second SB16 at 240h/IRQ5/DMA3/HDMA6
 with OPL disabled to avoid a second AdLib owner. These switches do not claim
 active DMA/GUS voice playback. Both still use the ordinary running guest witness
 and dummy host audio: slot acknowledgement/CRC and guest RAM/timer/input/file

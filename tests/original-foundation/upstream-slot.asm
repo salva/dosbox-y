@@ -16,6 +16,28 @@ loop_next:
 inc word [counter]
 mov ax,[counter]
 stosb
+%ifdef GUS_DRAM
+; Standard GUS at 240h: select guest DRAM address zero, write and read it.
+; Real allocation/ports, not active voice or DMA playback.
+mov dx,343h
+mov al,43h
+out dx,al
+inc dx
+xor ax,ax
+out dx,ax
+dec dx
+mov al,44h
+out dx,al
+inc dx
+xor ax,ax
+out dx,ax
+mov dx,347h
+mov al,[counter]
+out dx,al
+in al,dx
+cmp al,[counter]
+jne fail
+%endif
 mov ah,0
 int 1ah
 mov [ticks],dx
