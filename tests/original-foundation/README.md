@@ -43,6 +43,15 @@ float semantics, callback synchronization, output continuity or archive admissio
 The enclosing mixer owner also avoids its final counter reset on a failed stream;
 earlier successfully loaded subdevices may already have effects.
 
+`tests/machine-service/worker.cpp` also exercises actual Lua file loading and a
+compiled C ABI `require` module (`worker-native.cpp`), in addition to code,
+protected observers, libraries and cooperative close. Build the module with
+`g++ -shared -fPIC $(pkg-config --cflags lua5.4) tests/machine-service/worker-native.cpp $(pkg-config --libs lua5.4) -o <work>/worker_native.so`;
+build the fixture with `g++ -std=c++14 -pthread -Iinclude $(pkg-config --cflags lua5.4) tests/machine-service/worker.cpp src/debug/lua_driver_worker.cpp $(pkg-config --libs lua5.4) -o <work>/worker`.
+Run in that disposable work directory with `WORKER_CPATH="$PWD/?.so" timeout 30 ./worker`.
+This uses real Lua and its loader, but a handoff double, not linked debugger
+consumers or save joins. Run without `NDEBUG`; assertions are test checks.
+
 `upstream-slot.py --gus` enables the real GUS allocation and original slot
 traversal, and assembles the witness with `GUS_DRAM`: every loop writes and
 reads guest DRAM byte zero via standard 240h GUS ports (343h/344h/347h), exiting

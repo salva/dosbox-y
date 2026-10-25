@@ -1,6 +1,9 @@
 #include "lua_driver_worker.h"
 #include <cassert>
 #include <thread>
+#include <fstream>
+#include <cstdlib>
+#include <unistd.h>
 using namespace LuaDriver;
 int main() {
     Options options;options.select("lua-driver-code",
@@ -201,4 +204,29 @@ int main() {
     Handoff closing;WorkerResult stopped;closing.close();
     std::thread early([&]{runWorker(cancelled,closing,stopped);});early.join();
     assert(!stopped.completed && stopped.error=="driver closing" && closing.isLuaClosed());
+    // File loading and actual shared-library require, not a preload closure.
+    char file[]="worker-file-XXXXXX";
+    const int fd=mkstemp(file);assert(fd>=0);assert(close(fd)==0);
+    {
+        std::ofstream script(file);
+        script << "package.cpath=assert(os.getenv('WORKER_CPATH')); "
+                  "assert(require('worker_native').answer()==42); "
+                  "assert(io.type(io.stdout)=='file'); "
+                  "assert(require('dosbox').context()~=nil)";
+        script.close();assert(script);
+    }
+    Options from_file;assert(from_file.select("lua-driver-file",file));
+    Handoff files;WorkerResult file_result;assert(files.ready());
+    std::thread file_worker([&]{runWorker(from_file,files,file_result);});
+    unsigned file_calls=0;
+    while(!files.isLuaClosed()) {
+        Request request;
+        if(files.take(request)) {
+            assert(request.operation==Operation::Context);
+            Response response;response.context={9,1};
+            assert(files.complete(response));++file_calls;
+        } else std::this_thread::yield();
+    }
+    file_worker.join();assert(unlink(file)==0);
+    assert(file_result.completed && file_result.error.empty() && file_calls==1);
 }
