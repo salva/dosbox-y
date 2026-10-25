@@ -2838,10 +2838,12 @@ void POD_Load_DOS_Files( std::istream& stream )
 
 		for( int i=2; i<DOS_DRIVES+2; i++ ) {
             int lcv=i<DOS_DRIVES?i:i-DOS_DRIVES;
-			uint8_t drive_valid;
+			uint8_t drive_valid = 0;
 
 			// - reloc ptr
 			READ_POD( &drive_valid, drive_valid );
+            if (!stream || (drive_valid != 0 && drive_valid != 0xff))
+                E_Exit("Invalid save-state DOS drive slot tag");
 			if( drive_valid == 0xff ) {
                 if (Drives[lcv] && lcv<DOS_DRIVES-1) unmount(lcv);
                 continue;
@@ -2852,6 +2854,9 @@ void POD_Load_DOS_Files( std::istream& stream )
             READ_POD( &lalloc, lalloc);
             READ_POD( &oalloc, oalloc);
             READ_POD( &opts, opts);
+            if (!stream || !memchr(dinfo, '\0', sizeof(dinfo)) ||
+                !memchr(overlaydir, '\0', sizeof(overlaydir)))
+                E_Exit("Invalid save-state DOS drive description");
 #if !defined(WIN32)
             /* The mount path is stored verbatim, so a state saved on Windows
              * carries '\' separators. The code below unmounts the current
@@ -3078,14 +3083,18 @@ void POD_Load_DOS_Files( std::istream& stream )
 	} else {
         for( int i=2; i<DOS_DRIVES+2; i++ ) {
             int lcv=i<DOS_DRIVES?i:i-DOS_DRIVES;
-			uint8_t drive_valid;
+			uint8_t drive_valid = 0;
 
 			READ_POD( &drive_valid, drive_valid );
+            if (!stream || (drive_valid != 0 && drive_valid != 0xff))
+                E_Exit("Invalid save-state DOS drive slot tag");
 			if( drive_valid == 0xff ) {
                 if (Drives[lcv]) unmount(lcv);
                 continue;
             }
             READ_POD( &dinfo, dinfo);
+            if (!stream || !memchr(dinfo, '\0', sizeof(dinfo)))
+                E_Exit("Invalid save-state DOS drive description");
             if( Drives[lcv] && strcasecmp(Drives[lcv]->info, dinfo))
                 unmount(lcv);
             if (!Drives[lcv] && !strncmp(dinfo,"isoDrive ",9)) {
@@ -3109,8 +3118,10 @@ void POD_Load_DOS_Files( std::istream& stream )
         int d=i<MAX_DISK_IMAGES?i:i-MAX_DISK_IMAGES;
         bool ide_slave = false;
         signed char ide_index = -1;
-        bool valid=false;
+        uint8_t valid = 0;
         READ_POD( &valid, valid );
+        if (!stream || valid > 1)
+            E_Exit("Invalid save-state DOS disk image tag");
         if (!valid) {
             if (imageDiskList[d]) {
                 if (d > 1) IDE_Hard_Disk_Detach(d);
@@ -3130,6 +3141,8 @@ void POD_Load_DOS_Files( std::istream& stream )
         char diskname[256];
         READ_POD( &diskname, diskname );
         READ_POD( &opts, opts);
+        if (!stream || !memchr(diskname, '\0', sizeof(diskname)))
+            E_Exit("Invalid save-state DOS disk image description");
         Bitu sizes[4] = { 0,0,0,0 };
         ide_slave = false;
         ide_index = -1;

@@ -5,6 +5,16 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Consumed DOS drive descriptions
+
+`python3 tests/original-foundation/dos-drive-descriptions.py` exercises the actual
+read/validation spans for both drive branches and disk images under ASan/UBSan.
+All 256 tag values, missing tags, every description truncation and unterminated
+fixed strings are covered before their immediate string/native consumers. Image
+tags are decoded as bytes, not invalid C++ bool representations. Refusal is fatal:
+earlier owners/slots can already have effects. This is neither whole-archive
+preflight nor drive identity, resource preparation or safe install qualification.
+
 ## Completed-render identity
 
 `python3 tests/original-foundation/completed-frame.py` checks selected native
