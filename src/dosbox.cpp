@@ -432,6 +432,40 @@ extern bool DOSBox_Paused(), isDBCSCP(), InitCodePage();
 
 static Uint32 SDL_ticks_last = 0,SDL_ticks_next = 0;
 
+Bits DOSBOX_DispatchDecoder() {
+    struct Restore {
+        bool allow = dosbox_allow_nonrecursive_page_fault;
+        ~Restore() { dosbox_allow_nonrecursive_page_fault = allow; }
+    } restore;
+    dosbox_allow_nonrecursive_page_fault = true;
+    return (*cpudecoder)();
+}
+
+Bitu DOSBOX_DispatchCallback(Bits callback) {
+    if (callback <= 0 || (unsigned int)callback >= CB_MAX)
+        E_Exit("Invalid machine decoder callback");
+    extern unsigned int last_callback;
+    struct Restore {
+        unsigned int identity = last_callback;
+        bool allow = dosbox_allow_nonrecursive_page_fault;
+        ~Restore() {
+            last_callback = identity;
+            dosbox_allow_nonrecursive_page_fault = allow;
+        }
+    } restore;
+    last_callback = (unsigned int)callback;
+    dosbox_allow_nonrecursive_page_fault = false;
+    const Bitu result = (*CallBack_Handlers[callback])();
+#ifdef DEBUG_CYCLE_OVERRUN_CALLBACK
+    extern char* CallBack_Description[CB_MAX];
+    const cpu_cycles_count_t overrun = -std::min(CPU_Cycles,(cpu_cycles_count_t)0);
+    if (overrun > (CPU_CycleMax/100))
+        LOG_MSG("Machine callback: CPU cycles count overrun by %ld (%.3fms) after callback '%s'\n",
+                (signed long)overrun,(double)overrun/CPU_CycleMax,CallBack_Description[callback]);
+#endif
+    return result;
+}
+
 static Bitu Normal_Loop(void) {
     bool saved_allow = dosbox_allow_nonrecursive_page_fault;
     Bits ret;
@@ -476,10 +510,7 @@ static Bitu Normal_Loop(void) {
                 /* now is the time to check for the NMI (Non-maskable interrupt) */
                 CPU_Check_NMI();
 
-                saved_allow = dosbox_allow_nonrecursive_page_fault;
-                dosbox_allow_nonrecursive_page_fault = true;
-                ret = (*cpudecoder)();
-                dosbox_allow_nonrecursive_page_fault = saved_allow;
+                ret = DOSBOX_DispatchDecoder();
 
                 if (GCC_UNLIKELY(ret<0))
                     return 1;
@@ -488,27 +519,7 @@ static Bitu Normal_Loop(void) {
                     if (GCC_UNLIKELY((unsigned int)ret >= CB_MAX))
                         return 0;
 
-                    extern unsigned int last_callback;
-                    unsigned int p_last_callback = last_callback;
-                    last_callback = (unsigned int)ret;
-
-                    dosbox_allow_nonrecursive_page_fault = false;
-                    Bitu blah = (*CallBack_Handlers[ret])();
-                    dosbox_allow_nonrecursive_page_fault = saved_allow;
-
-                    last_callback = p_last_callback;
-
-#ifdef DEBUG_CYCLE_OVERRUN_CALLBACK
-                    {
-                        extern char* CallBack_Description[CB_MAX];
-
-                        /* I/O delay can cause negative CPU_Cycles and PIC event / audio rendering issues */
-                        cpu_cycles_count_t overrun = -std::min(CPU_Cycles,(cpu_cycles_count_t)0);
-
-                        if (overrun > (CPU_CycleMax/100))
-                            LOG_MSG("Normal loop: CPU cycles count overrun by %ld (%.3fms) after callback '%s'\n",(signed long)overrun,(double)overrun / CPU_CycleMax,CallBack_Description[ret]);
-                    }
-#endif
+                    const Bitu blah = DOSBOX_DispatchCallback(ret);
 
                     if (GCC_UNLIKELY(blah > 0U))
                         return blah;
@@ -747,7 +758,10 @@ void DOSBOX_RunMachine(void){
     dosbox_agent::AGENT_BridgeAttachToCurrentThread();
 #endif
     extern unsigned int last_callback;
-    unsigned int p_last_callback = last_callback;
+    struct RestoreCallbackIdentity {
+        unsigned int identity = last_callback;
+        ~RestoreCallbackIdentity() { last_callback = identity; }
+    } restore_callback_identity;
     last_callback = 0;
 
 #ifdef DEBUG_RECURSION
@@ -764,7 +778,6 @@ void DOSBOX_RunMachine(void){
         LOG_MSG("RunMachine recursion leave error");
 #endif
 
-    last_callback = p_last_callback;
 }
 
 uint32_t turbolasttick = 0;

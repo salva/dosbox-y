@@ -4722,7 +4722,7 @@ int32_t DEBUG_Run(int32_t amount,bool quickexit) {
 	skipFirstInstruction = true;
 	CPU_CycleLeft += CPU_Cycles - amount;
 	CPU_Cycles = amount;
-	int32_t ret = (int32_t)(*cpudecoder)();
+	int32_t ret = (int32_t)DOSBOX_DispatchDecoder();
 	if (quickexit) SetCodeWinStart();
 	else {
 		// ensure all breakpoints are activated
@@ -5216,7 +5216,7 @@ uint32_t DEBUG_CheckKeys(void) {
 			if (GCC_UNLIKELY(ret >= (Bits)CB_MAX)) 
 				ret = 0;
 			else
-				ret = (Bits)(*CallBack_Handlers[ret])();
+				ret = (Bits)DOSBOX_DispatchCallback(ret);
 			if (ret) {
 				exitLoop=true;
 				CPU_Cycles=CPU_CycleLeft=0;

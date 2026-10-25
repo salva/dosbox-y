@@ -5,6 +5,17 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Shared native dispatch restoration
+
+`python3 tests/original-foundation/dispatch.py` compiles the actual shared
+`DOSBOX_DispatchDecoder`/`DOSBOX_DispatchCallback` function bodies with deterministic
+native doubles. Both normal-loop and debugger callers now use these same
+primitives. The fixture checks decoder and callback normal return, exceptions,
+callback identity/flag restoration, and invalid callback indices before effect.
+This preserves incoming page-fault policy and callback identity across unwind;
+it does not itself establish frontier/save admission, core/flags borrowing, or
+session disposal. Real caller/build/runtime checks remain separate.
+
 ## Native primitives and worker (not yet emulator-integrated)
 
 Run `python3 tests/original-foundation/native-primitives.py` with g++, pthread,

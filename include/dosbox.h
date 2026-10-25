@@ -209,6 +209,8 @@ const char*             MSG_Get(char const *);                 // Get messages f
 std::string             formatString(const char* format, ...); // Generates a formatted string using a format specifier and variable arguments.
 
 void					DOSBOX_RunMachine();
+Bits DOSBOX_DispatchDecoder();
+Bitu DOSBOX_DispatchCallback(Bits callback);
 void					DOSBOX_SetLoop(LoopHandler * handler);
 void					DOSBOX_SetNormalLoop();
 
