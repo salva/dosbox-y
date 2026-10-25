@@ -2732,9 +2732,13 @@ void POD_Save_DOS_Files( std::ostream& stream )
 			//**********************************************
 			//**********************************************
 
-			file_namelen = (uint8_t)( strlen( Files[lcv]->name ) + 1 );
-			file_name = (char *) alloca( file_namelen );
-			strcpy( file_name, Files[lcv]->name );
+			const size_t name_size = strlen(Files[lcv]->name) + 1;
+			if (name_size > UINT8_MAX) {
+				stream.setstate(std::ios::failbit);
+				return;
+			}
+			file_namelen = static_cast<uint8_t>(name_size);
+			file_name = Files[lcv]->name;
 
 			file_drive = Files[lcv]->GetDrive();
 			file_flags = Files[lcv]->flags;
@@ -3019,11 +3023,17 @@ void POD_Load_DOS_Files( std::istream& stream )
 			// - Drives->FileOpen vars (repeat copy)
 
 			READ_POD( &file_namelen, file_namelen );
-			file_name = (char *) alloca( file_namelen );
+			char file_name_storage[UINT8_MAX];
+			if (!stream || !file_namelen)
+				E_Exit("Invalid save-state DOS file name length");
+			file_name = file_name_storage;
 			READ_POD_SIZE( file_name, file_namelen );
 
 			READ_POD( &file_drive, file_drive );
 			READ_POD( &file_flags, file_flags );
+			if (!stream || file_name[file_namelen - 1] != '\0' ||
+			    memchr(file_name, '\0', file_namelen - 1))
+				E_Exit("Invalid save-state DOS file name");
 
 
 			// NOTE: Must open regardless to get 'new' DOS_File class

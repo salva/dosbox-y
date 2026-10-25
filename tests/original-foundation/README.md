@@ -462,3 +462,8 @@ publishes only after complete consumption; seek/close failure after publication 
 installation-fatal, including uncertain host position/close effects. This is not
 prepared native file admission: drive reconstruction, detached old handles,
 reopen/share modes, aliases and actual host-resource lifetime remain unfinished.
+`python3 tests/original-foundation/dos-file-names.py` checks the actual reopen-name
+capture/consumption seam: 254-character names fit the legacy byte length, longer
+names fail capture without overflow, and truncated/zero-length/nonterminated or
+embedded-NUL archived names are installation-fatal before FileOpen. Earlier drive
+and slot effects remain possible; this is not resource admission or rollback.
