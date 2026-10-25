@@ -7,6 +7,8 @@
 #include "ioapi.h"
 
 #include <assert.h>
+#include <algorithm>
+#include <climits>
 
 /* std::streambuf for writing to ZIP archive directly.
  * ZIP archive writer can only write one file at a time, do not
@@ -18,29 +20,33 @@ public:
 public:
 	zip_ostreambuf(zipFile &n_zf) : basic_streambuf(), zf(n_zf) { }
 	virtual ~zip_ostreambuf() { close(); }
+	zip_ostreambuf(const zip_ostreambuf &) = delete;
+	zip_ostreambuf &operator=(const zip_ostreambuf &) = delete;
 public:
 	virtual std::streamsize xsputn(const Base::char_type *s, std::streamsize count) override {
-		assert(zf != NULL);
-
-		const int err = zipWriteInFileInZip(zf, (void*)s, count);
-		if (err != ZIP_OK) {
-			zf_err = err;
-			return 0;
+		assert(zf != NULL && !closed);
+		std::streamsize done = 0;
+		while (done < count) {
+			const auto chunk = static_cast<unsigned>(std::min<std::streamsize>(count-done, INT_MAX));
+			const int err = zipWriteInFileInZip(zf, s+done, chunk);
+			if (err != ZIP_OK) { zf_err = err; break; }
+			done += chunk;
 		}
-
-		return count;
+		return done;
 	}
 public:
 	int close(void) {
-		int err;
-
-		if ((err=zipCloseFileInZip(zf)) != ZIP_OK) return err;
-		if (zf_err != ZIP_OK) return zf_err;
-		return ZIP_OK;
+		if (!closed) {
+			closed = true;
+			const int err = zipCloseFileInZip(zf);
+			if (err != ZIP_OK) zf_err = err;
+		}
+		return zf_err;
 	}
 private:
 	zipFile zf = NULL;
 	int zf_err = ZIP_OK;
+	bool closed = false;
 };
 
 class zip_istreambuf : public std::streambuf {
@@ -49,29 +55,34 @@ public:
 public:
 	zip_istreambuf(unzFile &n_zf) : basic_streambuf(), zf(n_zf) { }
 	virtual ~zip_istreambuf() { close(); }
+	zip_istreambuf(const zip_istreambuf &) = delete;
+	zip_istreambuf &operator=(const zip_istreambuf &) = delete;
 public:
 	virtual std::streamsize xsgetn(Base::char_type *s, std::streamsize count) override {
-		assert(zf != NULL);
-
-		const int err = unzReadCurrentFile(zf, (void*)s, count);
-		if (err < 0) {
-			zf_err = err;
-			return 0;
+		assert(zf != NULL && !closed);
+		std::streamsize done = 0;
+		while (done < count) {
+			const auto chunk = static_cast<unsigned>(std::min<std::streamsize>(count-done, INT_MAX));
+			const int got = unzReadCurrentFile(zf, s+done, chunk);
+			if (got < 0) { zf_err = got; break; }
+			if (!got) break;
+			done += got;
 		}
-
-		return std::streamsize(err);
+		return done;
 	}
 public:
 	int close(void) {
-		int err;
-
-		if ((err=unzCloseCurrentFile(zf)) != UNZ_OK) return err;
-		if (zf_err != UNZ_OK) return zf_err;
-		return UNZ_OK;
+		if (!closed) {
+			closed = true;
+			const int err = unzCloseCurrentFile(zf);
+			if (err != UNZ_OK) zf_err = err;
+		}
+		return zf_err;
 	}
 private:
 	unzFile zf = NULL;
 	int zf_err = UNZ_OK;
+	bool closed = false;
 };
 
 

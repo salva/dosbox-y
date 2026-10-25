@@ -397,3 +397,16 @@ pre-effect refusal. The existing archive layout is unchanged. Serialized pointer
 bytes remain in that legacy layout but grant no host-cache authority. This does
 not validate guest paging semantics, reconstruct a suspended native fault stack,
 qualify large-profile performance or supply unified save admission.
+
+## ZIP stream ownership
+
+`python3 tests/original-foundation/zip-stream.py` builds the bundled minizip C
+sources plus actual C++ streambuf header under ASan/UBSan, and checks a real
+100003-byte/two-member roundtrip, EOF and repeated explicit close followed by
+destruction. Streambuf close now consumes the member once and retains its error;
+a destructor cannot close a subsequent member or overwrite close uncertainty.
+Reads/writes are chunked to minizip's signed-result range, retaining partial
+counts and errors rather than narrowing `streamsize`. This does not establish
+atomic publication, fsync durability, complete archive preflight or resource
+preparation. Initial system `-lminizip` link failed because unavailable; the probe
+uses the actual bundled implementation instead.
