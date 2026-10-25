@@ -823,6 +823,8 @@ uint8_t POD_State_Find_DMA_Callback( Bitu addr )
 
 Bitu POD_State_Index_DMA_Callback( uint8_t index )
 {
+	if (index >= sizeof(dma_state_callback_table) / sizeof(dma_state_callback_table[0]))
+		E_Exit("Invalid save-state DMA callback");
 	return (Bitu) dma_state_callback_table[index];
 }
 
@@ -894,7 +896,7 @@ void DmaChannel::LoadState( std::istream& stream )
 
 	// - reloc func ptr
 	READ_POD( &dma_callback, dma_callback );
-
+	if (!stream) E_Exit("Short save-state DMA channel");
 
 	callback = (DMA_CallBack) POD_State_Index_DMA_Callback( dma_callback );
 }
