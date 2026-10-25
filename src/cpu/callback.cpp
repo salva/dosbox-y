@@ -22,6 +22,7 @@
 
 #include "callback.h"
 #include "machine_service.h"
+#include "native_frontier.h"
 #include "logging.h"
 #include "bios.h"
 #include "cpu.h"
@@ -110,6 +111,7 @@ void CALLBACK_DeAllocate(Bitu in) {
 
 
 void CALLBACK_Idle(void) {
+    NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 #if C_EMSCRIPTEN
 	void GFX_Events();
 	GFX_Events();
@@ -132,9 +134,12 @@ void CALLBACK_Idle(void) {
 		CPU_CycleLeft += CPU_Cycles;
 		CPU_Cycles = 0;
 	}
+    NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                     DOSBOX_MachineServiceOwner().token);
 }
 
 void CALLBACK_IdleNoInts(void) {
+    NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 #if C_EMSCRIPTEN
 	void GFX_Events();
 	GFX_Events();
@@ -157,6 +162,8 @@ void CALLBACK_IdleNoInts(void) {
 		CPU_CycleLeft += CPU_Cycles;
 		CPU_Cycles = 0;
 	}
+    NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                     DOSBOX_MachineServiceOwner().token);
 }
 
 static Bitu default_handler(void) {
@@ -171,6 +178,7 @@ static Bitu stop_handler(void) {
 Bitu FillFlags(void);
 
 void CALLBACK_RunRealFarInt(uint16_t seg,uint16_t off) {
+    NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 	FillFlags();
 
 	reg_sp-=6;
@@ -193,9 +201,12 @@ void CALLBACK_RunRealFarInt(uint16_t seg,uint16_t off) {
 	DOSBOX_RunMachine(MachineService::Kind::CallbackGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
+    NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                     DOSBOX_MachineServiceOwner().token);
 }
 
 void CALLBACK_RunRealFar(uint16_t seg,uint16_t off) {
+    NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 	reg_sp-=4;
 	if (cpu.pmode && !(reg_flags & FLAG_VM)) {
 		mem_writew(SegPhys(ss)+reg_sp+0,RealOff(CALLBACK_RealPointer(call_stop)));
@@ -214,9 +225,12 @@ void CALLBACK_RunRealFar(uint16_t seg,uint16_t off) {
 	DOSBOX_RunMachine(MachineService::Kind::CallbackGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
+    NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                     DOSBOX_MachineServiceOwner().token);
 }
 
 void CALLBACK_RunRealInt_retcsip(uint8_t intnum,Bitu &rcs,Bitu &rip) {
+    NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 	uint32_t oldeip=reg_eip;
 	uint16_t oldcs=SegValue(cs);
 	reg_eip=CB_SOFFSET+(CB_MAX*CB_SIZE)+(intnum*6U);
@@ -226,9 +240,14 @@ void CALLBACK_RunRealInt_retcsip(uint8_t intnum,Bitu &rcs,Bitu &rip) {
 	rip = reg_ip;
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
+    NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                     DOSBOX_MachineServiceOwner().token);
 }
 
 static void CALLBACK_RunRealIntOwned(uint8_t intnum,MachineService::Kind kind) {
+    // Natural shell EXEC is classified ancestry, not an ordinary callback suffix.
+    NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false,
+                                                  kind!=MachineService::Kind::ShellExecGuest);
 	uint32_t oldeip=reg_eip;
 	uint16_t oldcs=SegValue(cs);
 	reg_eip=CB_SOFFSET+(CB_MAX*CB_SIZE)+(intnum*6U);
@@ -236,6 +255,8 @@ static void CALLBACK_RunRealIntOwned(uint8_t intnum,MachineService::Kind kind) {
 	DOSBOX_RunMachine(kind);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
+    NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                     DOSBOX_MachineServiceOwner().token);
 }
 
 void CALLBACK_RunRealInt(uint8_t intnum) {

@@ -12,14 +12,16 @@ fixture = r'''
 #include <cassert>
 #include <stdexcept>
 #include "machine_service.h"
+#include "native_frontier.h"
+MachineService::Owner DOSBOX_MachineServiceOwner();
 using Bits=int; using Bitu=unsigned;
 constexpr unsigned CB_MAX=4;
 bool dosbox_allow_nonrecursive_page_fault=false;
 unsigned last_callback=9;
 bool fail=false;
-int decoder() {assert(dosbox_allow_nonrecursive_page_fault);if(fail)throw 1;return 2;}
+int decoder() {assert(dosbox_allow_nonrecursive_page_fault);NativeFrontier::frontiers().reach(NativeFrontier::Kind::PartialParent,1);if(fail)throw 1;return 2;}
 int (*cpudecoder)()=decoder;
-unsigned handler() {assert(!dosbox_allow_nonrecursive_page_fault);assert(last_callback==2);if(fail)throw 2;return 3;}
+unsigned handler() {assert(!dosbox_allow_nonrecursive_page_fault);assert(last_callback==2);NativeFrontier::frontiers().reach(NativeFrontier::Kind::PartialParent,1);if(fail)throw 2;return 3;}
 unsigned (*CallBack_Handlers[CB_MAX])()={nullptr,nullptr,handler,nullptr};
 [[noreturn]] void E_Exit(const char*) {throw std::runtime_error("invalid callback");}
 '''
@@ -34,7 +36,16 @@ void service(void*) {
  assert(DOSBOX_MachineServiceAdmission()==MachineService::Denial::Active);
  ++services;
 }
+unsigned frontier_calls=0;
+void frontier(void*,const NativeFrontier::Descriptor &d) {
+ assert(NativeFrontier::frontiers().ownsHold(d));
+ if(d.kind==NativeFrontier::Kind::PartialParent){assert(dosbox_allow_nonrecursive_page_fault);assert(d.decoder_entered);}
+ if(d.callback_entered)assert(!d.decoder_entered);
+ if(d.kind==NativeFrontier::Kind::NativeReturn && !d.callback_entered)assert(!d.decoder_entered);
+ ++frontier_calls;
+}
 int main() {
+ assert(NativeFrontier::frontiers().bind(frontier,nullptr));
  DOSBOX_SetMachineService(service,nullptr);
  DOSBOX_RequestMachineService();
  DOSBOX_RunMachine();assert(services==0); // Nonzero result never services.
@@ -72,6 +83,8 @@ int main() {
   assert(dosbox_allow_nonrecursive_page_fault==initial);
   try {DOSBOX_DispatchCallback(2);assert(false);}catch(int n){assert(n==2);}
   assert(last_callback==9 && dosbox_allow_nonrecursive_page_fault==initial);
+  NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,1);
+  assert(!NativeFrontier::frontiers().holding());
   for(int invalid:{-1,0,4}) {
    try {DOSBOX_DispatchCallback(invalid);assert(false);}catch(const std::runtime_error&){}
    assert(last_callback==9 && dosbox_allow_nonrecursive_page_fault==initial);

@@ -27,6 +27,18 @@ This does not yet register a frontend evaluator, bind native frontiers, settle
 execution on owner departure, or admit any save operation. Classification alone
 is neither execution nor save authority.
 
+Native frontier scopes now surround actual decoder/callback entry and callback
+wrapper setup/restoration. Normal loop predispatch/zero decoder/completed tick,
+nested entry and zero-handler return expose borrowed descriptors; nonzero
+callback tokens still reach their restoration caller first. Ordinary callbacks
+retain a restricting suffix through NativeReturn; natural shell EXEC uses its
+named ancestry rather than pretending to be an ordinary callback. No emulator
+frontend binds this hook yet, and these seams do not themselves admit saves.
+`callback-frontier.py` extracts the actual INT/ShellExec wrappers to check normal
+setup/restoration, restricting descriptors and exception scope expiry. Upstream
+register restoration on exceptional exit is not invented or claimed. The
+`dispatch.py` fixture checks actual entered scopes under normal and throw paths.
+
 ## Native primitives and worker (not yet emulator-integrated)
 
 Run `python3 tests/original-foundation/native-primitives.py` with g++, pthread,

@@ -65,6 +65,7 @@
 #include "ide.h"
 #include "callback.h"
 #include "machine_service.h"
+#include "native_frontier.h"
 #include "inout.h"
 #include "mixer.h"
 #include "timer.h"
@@ -434,6 +435,7 @@ extern bool DOSBox_Paused(), isDBCSCP(), InitCodePage();
 static Uint32 SDL_ticks_last = 0,SDL_ticks_next = 0;
 
 Bits DOSBOX_DispatchDecoder() {
+    NativeFrontier::Frontiers::Scope entered(NativeFrontier::frontiers(),true);
     struct Restore {
         bool allow = dosbox_allow_nonrecursive_page_fault;
         ~Restore() { dosbox_allow_nonrecursive_page_fault = allow; }
@@ -445,6 +447,9 @@ Bits DOSBOX_DispatchDecoder() {
 Bitu DOSBOX_DispatchCallback(Bits callback) {
     if (callback <= 0 || (unsigned int)callback >= CB_MAX)
         E_Exit("Invalid machine decoder callback");
+    Bitu result;
+    {
+    NativeFrontier::Frontiers::Scope entered(NativeFrontier::frontiers(),false);
     extern unsigned int last_callback;
     struct Restore {
         unsigned int identity = last_callback;
@@ -456,7 +461,7 @@ Bitu DOSBOX_DispatchCallback(Bits callback) {
     } restore;
     last_callback = (unsigned int)callback;
     dosbox_allow_nonrecursive_page_fault = false;
-    const Bitu result = (*CallBack_Handlers[callback])();
+    result = (*CallBack_Handlers[callback])();
 #ifdef DEBUG_CYCLE_OVERRUN_CALLBACK
     extern char* CallBack_Description[CB_MAX];
     const cpu_cycles_count_t overrun = -std::min(CPU_Cycles,(cpu_cycles_count_t)0);
@@ -464,6 +469,10 @@ Bitu DOSBOX_DispatchCallback(Bits callback) {
         LOG_MSG("Machine callback: CPU cycles count overrun by %ld (%.3fms) after callback '%s'\n",
                 (signed long)overrun,(double)overrun/CPU_CycleMax,CallBack_Description[callback]);
 #endif
+    }
+    // A nonzero token belongs to the caller's native restoration path.
+    if (!result) NativeFrontier::frontiers().reach(NativeFrontier::Kind::NativeReturn,
+                                                 DOSBOX_MachineServiceOwner().token);
     return result;
 }
 
@@ -507,11 +516,15 @@ static Bitu Normal_Loop(void) {
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
             dosbox_agent::AGENT_BridgePump();
 #endif
+            NativeFrontier::frontiers().reach(NativeFrontier::Kind::Predispatch,
+                                             DOSBOX_MachineServiceOwner().token);
             if (PIC_RunQueue()) {
                 /* now is the time to check for the NMI (Non-maskable interrupt) */
                 CPU_Check_NMI();
 
                 ret = DOSBOX_DispatchDecoder();
+                if (!ret) NativeFrontier::frontiers().reach(NativeFrontier::Kind::Decoder,
+                                                          DOSBOX_MachineServiceOwner().token);
 
                 if (GCC_UNLIKELY(ret<0))
                     return 1;
@@ -534,6 +547,8 @@ static Bitu Normal_Loop(void) {
                 if (DOSBox_Paused() == false && ticksRemain > 0) {
                     TIMER_AddTick();
                     ticksRemain--;
+                    NativeFrontier::frontiers().reach(NativeFrontier::Kind::PostTick,
+                                                     DOSBOX_MachineServiceOwner().token);
                 } else {
                     increaseticks();
                     return 0;
@@ -785,6 +800,9 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
         ~RestoreCallbackIdentity() { last_callback = identity; }
     } restore_callback_identity;
     last_callback = 0;
+    if (kind != MachineService::Kind::RootGuest)
+        NativeFrontier::frontiers().reach(NativeFrontier::Kind::NestedEntry,
+                                         machine_owner.token());
 
 #ifdef DEBUG_RECURSION
     if (runmachine_recursion++ != 0)
@@ -793,6 +811,8 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
 
     do {
         ret=(*loop)();
+        if (!ret) NativeFrontier::frontiers().reach(NativeFrontier::Kind::LoopStop,
+                                                  machine_owner.token());
         // Only a returned handler seam can service data-only requests.
         // Nonzero native return tokens belong to their restoration caller.
         if (!ret) machine_service.service(machine_service_slice,machine_service_context);
