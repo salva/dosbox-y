@@ -1000,19 +1000,9 @@ bool CBreakpoint::IsBreakpoint(uint16_t seg, uint32_t off)
 bool CBreakpoint::DeleteBreakpoint(uint16_t seg, uint32_t off)
 {
 	CBreakpoint* bp = FindPhysBreakpoint(seg, off, false);
-#if defined(C_DOSBOX_AGENT)
     return DeleteBreakpoint(bp);
-#else
-    if(bp) {
-        BPoints.remove(bp);
-        delete bp;
-        return true;
-    }
-    return false;
-#endif
 }
 
-#if defined(C_DOSBOX_AGENT)
 bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)
 {
 	if (breakpoint == nullptr)
@@ -1044,7 +1034,6 @@ uintptr_t CBreakpoint::ConsumeLastTriggered(void)
 	lastTriggered = 0;
 	return result;
 }
-#endif // C_DOSBOX_AGENT
 
 void CBreakpoint::ShowList(void)
 {

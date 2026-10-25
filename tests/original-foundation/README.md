@@ -58,7 +58,11 @@ constructor, delete-by-identity and retained-hit bodies under ASan/UBSan. Adapte
 handles are monotonic nonzero identities, never allocator addresses; stale handles
 cannot delete a replacement, and explicit deletion clears a retained hit. One-shot
 hit identity can survive native object retirement without dereferencing freed
-storage. This is an owner seam, not full attachment or RPC transport qualification.
+storage. The fixture also executes actual interrupt AH/AL matching and one-shot
+retirement, address/index/all explicit-deletion routes and receipt invalidation.
+All builds now share pointer deletion (including no-agent builds), so address
+removal deactivates patched instructions and clears retained identity before free.
+This is an owner seam, not full attachment or RPC transport qualification.
 
 ## Text observation dependency
 

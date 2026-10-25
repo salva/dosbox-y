@@ -19,6 +19,9 @@ source=r'''
 #include <stdexcept>
 #define C_HEAVY_DEBUG 1
 #define BKPNT_UNKNOWN 0
+#define BKPNT_INTERRUPT 1
+#define BPINT_ALL 0x100
+using PhysPt=uint32_t;
 void E_Exit(const char*) { throw std::runtime_error("fatal"); }
 class CBreakpoint {
 public:
@@ -30,15 +33,57 @@ public:
  uintptr_t GetId() const {return id;}
  void Activate(bool value) {active=value;}
  static bool DeleteBreakpoint(CBreakpoint*);
+ static bool DeleteBreakpoint(uint16_t,uint32_t);
+ static CBreakpoint* FindPhysBreakpoint(uint16_t,uint32_t,bool);
+ static bool CheckIntBreakpoint(uint32_t,uint8_t,uint16_t,uint16_t);
+ static bool DeleteByIndex(uint16_t);
+ static void DeleteAll();
+ int GetType() const {return type;}
+ bool IsActive() const {return active;}
+ uint8_t GetIntNr() const {return intNr;}
+ uint16_t GetValue() const {return ahValue;}
+ uint16_t GetOther() const {return alValue;}
+ bool GetOnce() const {return once;}
  static bool DeleteById(uintptr_t);
  static uintptr_t ConsumeLastTriggered();
 };
 uintptr_t CBreakpoint::next_id=1,CBreakpoint::lastTriggered=0;
 std::list<CBreakpoint*> CBreakpoint::BPoints;
 '''
-source+='\n'.join(body(x) for x in ['CBreakpoint::CBreakpoint(void)', 'bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)', 'bool CBreakpoint::DeleteById(uintptr_t id)', 'uintptr_t CBreakpoint::ConsumeLastTriggered(void)'])
+source+='\n'.join(body(x) for x in ['CBreakpoint::CBreakpoint(void)', 'bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)', 'bool CBreakpoint::DeleteById(uintptr_t id)', 'uintptr_t CBreakpoint::ConsumeLastTriggered(void)', 'bool CBreakpoint::CheckIntBreakpoint(PhysPt adr', 'bool CBreakpoint::DeleteByIndex(uint16_t index)', 'void CBreakpoint::DeleteAll()', 'bool CBreakpoint::DeleteBreakpoint(uint16_t seg, uint32_t off)'])
 source+=r'''
+CBreakpoint* CBreakpoint::FindPhysBreakpoint(uint16_t seg,uint32_t off,bool once) {
+ for(auto bp:BPoints)if(bp->segment==seg && bp->offset==int(off) && bp->once==once)return bp;
+ return nullptr;
+}
 int main() {
+ // Real interrupt matching and one-shot retirement preserve a value receipt,
+ // including wildcard AH/AL and misses; Activate is an inert owner double.
+ for(bool once:{false,true}) {
+  auto *bp=new CBreakpoint; auto id=bp->GetId();
+  bp->type=BKPNT_INTERRUPT;bp->intNr=0x21;bp->ahValue=0x4c;
+  bp->alValue=BPINT_ALL;bp->once=once;bp->Activate(true);
+  CBreakpoint::BPoints.push_back(bp);
+  assert(!CBreakpoint::CheckIntBreakpoint(0,0x20,0x4c,0));
+  assert(!CBreakpoint::CheckIntBreakpoint(0,0x21,0x3d,0));
+  assert(!CBreakpoint::ConsumeLastTriggered());
+  assert(CBreakpoint::CheckIntBreakpoint(0,0x21,0x4c,5));
+  assert(CBreakpoint::ConsumeLastTriggered()==id);
+  assert(!CBreakpoint::ConsumeLastTriggered());
+  assert(once? !CBreakpoint::DeleteById(id):CBreakpoint::DeleteById(id));
+ }
+ // All explicit removal routes invalidate a retained receipt.
+ auto *removed=new CBreakpoint;auto removed_id=removed->GetId();
+ removed->segment=12;removed->offset=34;
+ CBreakpoint::BPoints.push_back(removed);CBreakpoint::lastTriggered=removed_id;
+ assert(CBreakpoint::DeleteBreakpoint(12,34));
+ assert(!CBreakpoint::ConsumeLastTriggered());
+ removed=new CBreakpoint;CBreakpoint::BPoints.push_back(removed);
+ CBreakpoint::lastTriggered=removed->GetId();assert(CBreakpoint::DeleteByIndex(0));
+ assert(!CBreakpoint::ConsumeLastTriggered());
+ removed=new CBreakpoint;CBreakpoint::BPoints.push_back(removed);
+ CBreakpoint::lastTriggered=removed->GetId();CBreakpoint::DeleteAll();
+ assert(!CBreakpoint::ConsumeLastTriggered() && CBreakpoint::BPoints.empty());
  auto *first=new CBreakpoint; auto old=first->GetId();
  CBreakpoint::BPoints.push_back(first); CBreakpoint::lastTriggered=old;
  assert(CBreakpoint::DeleteById(old));
