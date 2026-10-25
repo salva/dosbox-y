@@ -3085,14 +3085,15 @@ bool LocalFile::Seek(uint32_t * pos,uint32_t type) {
 }
 
 bool LocalFile::Close() {
+    bool success = true;
     if (!newtime && fhandle && last_action == WRITE) UpdateLocalDateTime();
     if (newtime && fhandle) {
         // force STDIO to flush buffers on this file handle, or else fclose() will write buffered data
         // and cause mtime to reset back to current time.
-        fflush(fhandle);
+        if (fflush(fhandle) != 0) success = false;
 
         // backport from DOS_PackDate() and DOS_PackTime()
-        struct tm tim = { 0 };
+        struct tm tim = {};
         tim.tm_sec  = (time&0x1f)*2;
         tim.tm_min  = (time>>5)&0x3f;
         tim.tm_hour = (time>>11)&0x1f;
@@ -3117,6 +3118,7 @@ bool LocalFile::Close() {
 
         if (_futime(fileno(fhandle), &ftim)) {
             extern int errno; 
+            success = false;
             LOG_MSG("Set time failed (%s)", strerror(errno));
         }
 #elif defined(OS2)
@@ -3125,6 +3127,7 @@ bool LocalFile::Close() {
         ftsp[0].tv_usec = ftsp[1].tv_usec = 0;
         if (futimes(fileno(fhandle), ftsp)) {
             extern int errno;
+            success = false;
             LOG_MSG("Set time failed (%s)", strerror(errno));
         }
 #elif !defined(RISCOS) // Linux (TODO: What about Mac OS X/Darwin?)
@@ -3137,6 +3140,7 @@ bool LocalFile::Close() {
 
         if (futimens(fileno(fhandle), ftsp)) {
             extern int errno; 
+            success = false;
             LOG_MSG("Set time failed (%s)", strerror(errno));
         }
 #endif
@@ -3144,12 +3148,13 @@ bool LocalFile::Close() {
 
     // only close if one reference left
     if (refCtr==1) {
-        if(fhandle) fclose(fhandle); 
+        if (fhandle && fclose(fhandle) != 0) success = false;
+        // Even on error the descriptor's close effects are not replayable.
         fhandle = nullptr;
         open = false;
     }
 
-    return true;
+    return success;
 }
 
 uint16_t LocalFile::GetInformation(void) {

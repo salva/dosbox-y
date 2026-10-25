@@ -22,6 +22,12 @@ instead of unbounded strcpy; it does not qualify native drive construction.
 live named system object fails fatally rather than breaking out of the loader
 and returning apparent success with unread entries. Earlier owner effects can
 already exist; ordinary detached-file ownership remains unresolved.
+`local-file-close.py` extracts the actual native LocalFile close body and uses
+real FILE resources (`tmpfile`, Linux `/dev/full`, externally invalidated FD)
+to verify flush/close error truth, once-only close, and shared-reference retention.
+LocalFile now returns flush/time/close failures rather than unconditional success;
+a possibly completed close is never retried. This is not DOS ownership/admission
+qualification, and only the Linux timestamp branch is exercised here.
 
 ## Completed-render identity
 
