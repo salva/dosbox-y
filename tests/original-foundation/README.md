@@ -5,6 +5,17 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Consumed SDL acquisition flags
+
+`python3 tests/original-foundation/sdl-owner.py` compiles the actual original
+SDL save/load bodies under ASan/UBSan. Every truncation (including throwing
+streams), all four valid flag combinations, and all non-boolean bytes in either
+field are checked. Both flags publish only after the complete record validates;
+malformed bool representations never enter live bool objects. This remains
+host acquisition bookkeeping, not portable emulated input state. Native joins
+must not use these flags to replay host capture; archive-wide preflight and
+input/resource reconstruction remain outstanding.
+
 ## Consumed Sound Blaster bindings
 
 `python3 tests/original-foundation/sb-bindings.py` compiles the actual save/load

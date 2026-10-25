@@ -10898,7 +10898,22 @@ void POD_Save_Sdlmain( std::ostream& stream )
 
 void POD_Load_Sdlmain( std::istream& stream )
 {
-	// - pure data
-	READ_POD( &sdl.mouse.autolock, sdl.mouse.autolock );
-	READ_POD( &sdl.mouse.requestlock, sdl.mouse.requestlock );
+	// Read the whole owner before publishing either host acquisition flag.
+	// Invalid bool representations must not be installed into live objects.
+	unsigned char autolock[sizeof(bool)] = {};
+	unsigned char requestlock[sizeof(bool)] = {};
+	stream.read(reinterpret_cast<char*>(autolock), sizeof(autolock));
+	stream.read(reinterpret_cast<char*>(requestlock), sizeof(requestlock));
+	if (!stream) return;
+	const bool off = false, on = true;
+	auto decode = [&stream, &off, &on](const unsigned char *bytes, bool &value) {
+		if (memcmp(bytes, &off, sizeof(bool)) == 0) value = false;
+		else if (memcmp(bytes, &on, sizeof(bool)) == 0) value = true;
+		else { stream.setstate(std::ios::failbit); return false; }
+		return true;
+	};
+	bool new_autolock = false, new_requestlock = false;
+	if (!decode(autolock, new_autolock) || !decode(requestlock, new_requestlock)) return;
+	sdl.mouse.autolock = new_autolock;
+	sdl.mouse.requestlock = new_requestlock;
 }
