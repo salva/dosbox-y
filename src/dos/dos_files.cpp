@@ -925,11 +925,12 @@ bool DOS_CloseFile(uint16_t entry, bool fcb, uint8_t * refcnt) {
 		DOS_SetError(DOSERR_INVALID_HANDLE);
 		return false;
 	}
+    bool close_ok = true;
     if (Files[handle]->IsOpen()) {
         if (log_fileio) {
             LOG(LOG_FILES, LOG_NORMAL)("Closing file %s", Files[handle]->name);
         }
-        Files[handle]->Close();
+        close_ok = Files[handle]->Close();
 	}
 
 	DOS_PSP psp(dos.psp());
@@ -943,7 +944,10 @@ bool DOS_CloseFile(uint16_t entry, bool fcb, uint8_t * refcnt) {
 		}
 	}
 	if (refcnt!=NULL) *refcnt=static_cast<uint8_t>(refs+1);
-	return true;
+	// Close can already have released the native descriptor on failure. Retire
+	// the DOS handle/reference exactly once, but do not report successful I/O.
+	if (!close_ok) DOS_SetError(DOSERR_ACCESS_DENIED);
+	return close_ok;
 }
 
 bool DOS_FlushFile(uint16_t entry) {

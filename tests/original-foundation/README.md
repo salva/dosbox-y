@@ -32,7 +32,12 @@ Default LocalFile handles/actions are initialized; unavailable seek returns the
 existing sentinel and failed fstat does not consume uninitialized metadata.
 The same probe exercises actual seek/stat bodies, absent handles and invalidated
 FDs, preserving prior time/date on stat failure (packing is stubbed). Guest
-UpdateLocalDateTime callbacks and DOS_CloseFile result propagation remain open.
+UpdateLocalDateTime callbacks remain open. `dos-close-result.py` exercises the
+actual DOS_CloseFile wrapper with native-close stand-ins: failure reports access
+denied while retiring handle/reference once, preserving FCB and shared-reference
+behavior. This makes real LocalFile close failure visible to the DOS caller,
+without retrying an already closed native resource; other device Close bodies
+and guest-time callback safety are not qualified by this wrapper fixture.
 
 ## Completed-render identity
 
