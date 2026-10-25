@@ -25,6 +25,11 @@
 
 #define MEM_PAGESIZE        (4096U)
 
+// Emulator-thread debugger observation of installed RAM/ROM backing only.
+// No callout resolution, device callbacks, A20 aliasing or TLB mutation.
+// Unsupported spans leave output unchanged; at most 4096 bytes per call.
+bool MEM_InspectPhysicalMemory(uint32_t address, uint32_t length, uint8_t *out);
+
 /* HostPt and ConstHostPt is for holding linear addresses within this emulator i.e. a normal pointer.
  *
  * PhysPt is for 32-bit physical memory addresses within the emulation environment.

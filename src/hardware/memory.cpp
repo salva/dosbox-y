@@ -872,6 +872,21 @@ PageHandler * MEM_GetPageHandler(Bitu phys_page) {
 	return &illegal_page_handler;
 }
 
+bool MEM_InspectPhysicalMemory(uint32_t address,uint32_t length,uint8_t *out) {
+    if (!out || !MemBase || !length || length>4096 ||
+        uint64_t(address)+length>16u*1024u*1024u ||
+        uint64_t(address)+length>uint64_t(MEM_TotalPages())*MEM_PAGESIZE)
+        return false;
+    const Bitu first=address/MEM_PAGESIZE,last=(address+length-1)/MEM_PAGESIZE;
+    for (Bitu page=first;page<=last;++page) {
+        if (page>=memory.handler_pages) return false;
+        const auto handler=memory.phandlers[page];
+        if (handler!=&ram_page_handler && handler!=&rom_page_handler) return false;
+    }
+    memcpy(out,MemBase+address,length);
+    return true;
+}
+
 void MEM_SetPageHandler(Bitu phys_page,Bitu pages,PageHandler * handler) {
     for (;pages>0;pages--) {
         memory.phandlers[phys_page]=handler;

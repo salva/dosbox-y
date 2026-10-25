@@ -967,6 +967,40 @@ bool PAGING_MakePhysPage(PageNum &page) {
 	return true;
 }
 
+bool PAGING_InspectLinear(uint32_t address,uint32_t length,uint8_t *out) {
+    if (!out || !length || length>4096 ||
+        uint64_t(address)+length>uint64_t(UINT32_MAX)+1) return false;
+    uint8_t bytes[4096];
+    uint32_t copied=0;
+    while (copied<length) {
+        const uint32_t linear=address+copied;
+        PageNum page=PageNum(linear>>12);
+        if (paging.enabled) {
+            X86PageEntry directory;
+            uint8_t entry_bytes[4];
+            if (!MEM_InspectPhysicalMemory(GetPageDirectoryEntryAddr(linear),4,entry_bytes)) return false;
+            directory.load=uint32_t(entry_bytes[0]) | (uint32_t(entry_bytes[1])<<8) |
+                           (uint32_t(entry_bytes[2])<<16) | (uint32_t(entry_bytes[3])<<24);
+            if (!directory.dirblock.p) return false;
+            if (do_pse && directory.dirblock.ps) page=directory.dirblock4mb.getBase(page);
+            else {
+                if (!MEM_InspectPhysicalMemory(GetPageTableEntryAddr(linear,directory),4,entry_bytes)) return false;
+                const uint32_t entry=uint32_t(entry_bytes[0]) | (uint32_t(entry_bytes[1])<<8) |
+                                     (uint32_t(entry_bytes[2])<<16) | (uint32_t(entry_bytes[3])<<24);
+                if (!(entry&1)) return false;
+                page=PageNum(entry>>12);
+            }
+        } else if (page<LINK_START) page=paging.firstmb[page];
+        const uint64_t physical=(uint64_t(page)<<12)+(linear&0xfff);
+        const uint32_t count=std::min(length-copied,uint32_t(4096-(linear&0xfff)));
+        if (physical>UINT32_MAX ||
+            !MEM_InspectPhysicalMemory(uint32_t(physical),count,bytes+copied)) return false;
+        copied+=count;
+    }
+    memcpy(out,bytes,length);
+    return true;
+}
+
 static NewInitPageHandler init_page_handler;
 static ExceptionPageHandler exception_handler;
 static PageFoilHandler foiling_handler;

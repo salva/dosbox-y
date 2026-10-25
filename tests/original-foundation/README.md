@@ -45,6 +45,14 @@ pump services. Its binding does not grant input, execution or save authority.
 
 ## Native primitives and worker (not yet emulator-integrated)
 
+`python3 tests/original-foundation/memory-observation.py` compiles the actual
+physical/linear observation bodies with bounded owner doubles under ASan/UBSan.
+The shared APIs reject unsupported spans without exposing partial output and
+avoid faults, TLB fills, page-bit writes and device reads. Physical observation
+is installed low-16MiB RAM/ROM backing only, not an arbitrary bus read or A20
+translation. These APIs do not grant stopped/context authority and are not yet
+consumed by the production debugger; live paging/device qualification remains.
+
 `python3 tests/original-foundation/flags-observation.py` compiles the actual CPU
 lazy-flags owner against native headers. It compares observational flags with
 normal materialization across lazy operation types and representative operands,

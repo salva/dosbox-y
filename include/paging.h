@@ -200,6 +200,9 @@ void PAGING_UnlinkPages(PageNum lin_page,PageNum pages);
 /* This maps the page directly, only use when paging is disabled */
 void PAGING_MapPage(PageNum lin_page,PageNum phys_page);
 bool PAGING_MakePhysPage(PageNum &page);
+// Side-effect-free debugger translation: no faults, TLB fills or page-bit writes.
+// Installed RAM/ROM only, <=4096 bytes; refusal leaves output unchanged.
+bool PAGING_InspectLinear(uint32_t address,uint32_t length,uint8_t *out);
 
 void MEM_SetLFB(Bitu page, Bitu pages, PageHandler *handler, PageHandler *mmiohandler);
 void MEM_SetPageHandler(Bitu phys_page, Bitu pages, PageHandler * handler);
