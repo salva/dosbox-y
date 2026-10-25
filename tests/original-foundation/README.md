@@ -5,6 +5,18 @@ is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate producti
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
 complete debugger/save port.
 
+## Consumed GUS native DRAM
+
+`python3 tests/original-foundation/gus-dram.py` extracts the actual native
+GFGus descriptor fields and consumed descriptor span. It verifies every descriptor
+truncation and mismatched size/masks refuse descriptor replacement, while a valid
+saved descriptor cannot replace the retained native DRAM allocation with a saved
+host address. ASan/UBSan exercises the retained buffer after load. Geometry must
+match the destination's existing allocation; no allocation or device dispatch is
+performed here. Earlier sound fields can already have effects, and this does not
+validate all remaining descriptor values, preserve DRAM contents, synchronize
+output callbacks or qualify whole-owner/save-frontier installation.
+
 ## Consumed DOS drive descriptions
 
 `python3 tests/original-foundation/dos-drive-descriptions.py` exercises the actual

@@ -2868,7 +2868,18 @@ void POD_Load_GUS( std::istream& stream )
 	READ_POD( &vol16bit, vol16bit );
 	READ_POD( &pantable, pantable );
 
-	READ_POD( &myGUS, myGUS );
+	// Archived host addresses do not own native DRAM. Consume the descriptor
+	// separately and retain the live allocation and its geometry.
+	GFGus incoming = {};
+	READ_POD( &incoming, incoming );
+	if (!stream || incoming.memsize != myGUS.memsize ||
+	    incoming.gDramAddrMask != myGUS.gDramAddrMask ||
+	    incoming.gDramVoiceMask != myGUS.gDramVoiceMask) {
+		stream.setstate(std::istream::failbit);
+		return;
+	}
+	incoming.GUSRam = myGUS.GUSRam;
+	myGUS = incoming;
 
 	for( int lcv=0; lcv<32; lcv++ ) {
 		if( !guschan[lcv] ) continue;
