@@ -5067,7 +5067,11 @@ void setBytes(std::istream& stream) override
     // - reloc func ptr
     READ_POD( &decoder_idx, decoder_idx );
 
-
+    // Earlier CPU fields are already live. A truncated or unknown decoder
+    // identity cannot be a resumable refusal, nor may an arbitrary numeric
+    // range silently select a trap/HLT core.
+    if (!stream || !CPU_IndexDecoderType(decoder_idx))
+        E_Exit("Invalid CPU decoder identity during save-state installation");
 
     POD_Load_CPU_Flags(stream);
 	POD_Load_CPU_Paging(stream);

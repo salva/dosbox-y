@@ -367,3 +367,14 @@ queries retain selected semantics without importing save codec/whitelist logic.
 These queries are observational; they grant no input, state or execution
 permission. Frontend ownership, release/close, viewport lifetime and save-input
 joins remain to be connected and qualified. Raw input is not yet lease-gated.
+
+## Consumed CPU decoder identity
+
+`python3 tests/original-foundation/cpu-decoder.py` exercises the actual original
+CPU decoder map and consumed identity guard under ASan/UBSan across eight
+compile-time core combinations. All 65536 identities are checked per combination;
+short-stream status is fatal even for a known identity. Unknown IDs no longer
+silently choose a trap/HLT range or preserve an arbitrary core. This is an
+installation-time fatal boundary after CPU fields may already have changed,
+not pre-effect owner preparation, CPU semantic validation or fresh-process core
+reconstruction. The existing valid-ID transition logic remains unchanged.
