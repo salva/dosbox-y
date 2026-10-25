@@ -1228,6 +1228,14 @@ void POD_Save_CPU_Flags( std::ostream& stream )
 
 void POD_Load_CPU_Flags( std::istream& stream )
 {
-	// - pure data
-	READ_POD( &lflags, lflags );
+	// Publish only a fully consumed lazy operation. Earlier CPU fields are
+	// already installed: this is not whole-machine preflight or rollback.
+	LazyFlags pending = {};
+	READ_POD( &pending, pending );
+	if (!stream) return;
+	if (pending.type >= t_LASTFLAG || pending.oldcf > 1) {
+		stream.setstate(std::ios::failbit);
+		return;
+	}
+	lflags = pending;
 }

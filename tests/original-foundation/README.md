@@ -370,6 +370,15 @@ joins remain to be connected and qualified. Raw input is not yet lease-gated.
 
 ## Consumed CPU decoder identity
 
+The actual lazy-flags loader now buffers its complete native record and refuses
+unknown operation IDs or non-boolean saved carry before assignment. CPU installation
+checks failure before paging/decoder transitions; earlier CPU changes make this
+installation-fatal, not pre-effect refusal. `flags-observation.py` compiles the
+actual owner under ASan/UBSan: every truncated length preserves old flags,
+malformed operation/carry is refused, and valid operations roundtrip before
+observation-vs-materialization checks. The archive layout is unchanged; this is
+not complete CPU semantic or saved continuation validation.
+
 `python3 tests/original-foundation/cpu-decoder.py` exercises the actual original
 CPU decoder map and consumed identity guard under ASan/UBSan across eight
 compile-time core combinations. All 65536 identities are checked per combination;

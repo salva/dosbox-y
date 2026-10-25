@@ -5063,6 +5063,8 @@ void setBytes(std::istream& stream) override
         E_Exit("Invalid CPU decoder identity during save-state installation");
 
     POD_Load_CPU_Flags(stream);
+    if (!stream)
+        E_Exit("Invalid CPU lazy flags during save-state installation");
 	POD_Load_CPU_Paging(stream);
 
     //*******************************************
