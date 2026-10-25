@@ -12,6 +12,7 @@ w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'zip-stream';w.mkdir(exist_ok=True)
 #include <string>
 #include <cassert>
 #include <type_traits>
+#include <fstream>
 #include "zipcppstdbuf.h"
 static_assert(!std::is_copy_constructible<zip_ostreambuf>::value,"exclusive ZIP member");
 static_assert(!std::is_copy_constructible<zip_istreambuf>::value,"exclusive ZIP member");
@@ -31,6 +32,20 @@ int main(int argc,char **argv){
    s.read(&got[0],got.size());assert(s && got==expected);
    char c;s.read(&c,1);assert(s.eof());assert(b.close()==UNZ_OK);assert(b.close()==UNZ_OK);}
  }
+ assert(unzClose(u)==UNZ_OK);
+ // Stored member permits deterministic payload corruption without damaging
+ // the central directory: CRC failure must survive repeat close/destruction.
+ z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
+ assert(zipOpenNewFileInZip(z,"crc",nullptr,nullptr,0,nullptr,0,nullptr,0,0)==ZIP_OK);
+ const std::string marker="unique-payload-for-crc-check";
+ {zip_ostreambuf b(z);assert(b.sputn(marker.data(),marker.size())==std::streamsize(marker.size()));assert(b.close()==ZIP_OK);}
+ assert(zipClose(z,nullptr)==ZIP_OK);
+ {std::ifstream in(argv[1],std::ios::binary);std::string bytes((std::istreambuf_iterator<char>(in)),{});
+  const auto at=bytes.find(marker);assert(at!=std::string::npos);bytes[at]^=1;
+  in.close();std::ofstream out(argv[1],std::ios::binary|std::ios::trunc);out.write(bytes.data(),bytes.size());assert(out);}
+ u=unzOpen64(argv[1]);assert(u);assert(unzLocateFile(u,"crc",1)==UNZ_OK);assert(unzOpenCurrentFile(u)==UNZ_OK);
+ {zip_istreambuf b(u);std::string bytes(marker.size(),' ');assert(b.sgetn(&bytes[0],bytes.size())==std::streamsize(bytes.size()));
+  assert(b.close()==UNZ_CRCERROR);assert(b.close()==UNZ_CRCERROR);}
  assert(unzClose(u)==UNZ_OK);
 }
 ''')

@@ -412,4 +412,7 @@ preparation. Initial system `-lminizip` link failed because unavailable; the pro
 uses the actual bundled implementation instead. Formatted metadata insertion
 and `put` also exercise the actual single-character overflow path; without this
 streambuf override, numeric metadata/newlines can set badbit and silently stop
-writing even though ZIP member close succeeds.
+writing even though ZIP member close succeeds. The probe also corrupts an actual
+stored member's payload and verifies CRC failure remains observable on both first
+and repeated close; it does not claim the archive is valid because a stream read
+returned all bytes.
