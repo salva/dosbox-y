@@ -2784,7 +2784,7 @@ void *GUS_DMA_Callback_Func = (void*)((uintptr_t)GUS_DMA_Callback);
 
 void POD_Save_GUS( std::ostream& stream )
 {
-const char pod_name[32] = "GUS";
+const char pod_name[32] = "GUS2";
 
 	if( stream.fail() ) return;
 	if( !test ) return;
@@ -2815,6 +2815,14 @@ const char pod_name[32] = "GUS";
 
 	// - pure struct data
 	WRITE_POD( &myGUS, myGUS );
+	// DRAM is guest sound state, not the native address in the descriptor.
+	if (myGUS.memsize && !myGUS.GUSRam) {
+		stream.setstate(std::ostream::failbit);
+		return;
+	}
+	if (myGUS.memsize)
+		stream.write(reinterpret_cast<const char*>(myGUS.GUSRam), myGUS.memsize);
+	if (!stream) return;
 
 
 	// - pure data
@@ -2848,7 +2856,8 @@ void POD_Load_GUS( std::istream& stream )
 
 	// error checking
 	READ_POD( &pod_name, pod_name );
-	if( strcmp( pod_name, "GUS" ) ) {
+	const char expected[32] = "GUS2";
+	if (!stream || memcmp(pod_name, expected, sizeof(expected)) != 0) {
 		stream.clear( std::istream::failbit | std::istream::badbit );
 		return;
 	}
@@ -2879,6 +2888,13 @@ void POD_Load_GUS( std::istream& stream )
 		return;
 	}
 	incoming.GUSRam = myGUS.GUSRam;
+	if (incoming.memsize && !incoming.GUSRam) {
+		stream.setstate(std::istream::failbit);
+		return;
+	}
+	if (incoming.memsize)
+		stream.read(reinterpret_cast<char*>(incoming.GUSRam), incoming.memsize);
+	if (!stream) return;
 	myGUS = incoming;
 
 	for( int lcv=0; lcv<32; lcv++ ) {

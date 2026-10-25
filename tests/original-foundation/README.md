@@ -22,14 +22,18 @@ intentionally refused, not auto-replayed through a compatibility codec.
 ## Consumed GUS native DRAM
 
 `python3 tests/original-foundation/gus-dram.py` extracts the actual native
-GFGus descriptor fields and consumed descriptor span. It verifies every descriptor
-truncation and mismatched size/masks refuse descriptor replacement, while a valid
-saved descriptor cannot replace the retained native DRAM allocation with a saved
-host address. ASan/UBSan exercises the retained buffer after load. Geometry must
-match the destination's existing allocation; no allocation or device dispatch is
-performed here. Earlier sound fields can already have effects, and this does not
-validate all remaining descriptor values, preserve DRAM contents, synchronize
-output callbacks or qualify whole-owner/save-frontier installation.
+GFGus descriptor fields and consumed descriptor/DRAM spans. Revised `GUS2`
+framing now carries the actual guest DRAM contents, not merely its host address.
+Every descriptor/payload truncation and mismatched size/masks refuse descriptor
+replacement. The native allocation is retained, valid payload bytes are restored
+within its configured extent, and missing native storage refuses. The extracted
+capture span checks exact emitted bytes, missing storage and zero length under
+ASan/UBSan. Geometry must match the destination's existing allocation; no
+allocation or device dispatch is performed here. A partial payload read may
+already change native DRAM; this is not preflight/rollback. Earlier sound fields
+can already have effects. This does not validate all remaining descriptor values,
+synchronize output callbacks or qualify whole-owner/save-frontier installation.
+Old component framing is refused; no compatibility codec was added.
 
 ## Consumed DOS drive descriptions
 
