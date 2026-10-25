@@ -14,6 +14,10 @@ fixed strings are covered before their immediate string/native consumers. Image
 tags are decoded as bytes, not invalid C++ bool representations. Refusal is fatal:
 earlier owners/slots can already have effects. This is neither whole-archive
 preflight nor drive identity, resource preparation or safe install qualification.
+`dos-drive-capture.py` additionally exercises the shared fixed-buffer capture
+primitive: empty and maximum fitting names, overlong refusal without destination
+writes, and zeroed padding. Drive info, overlay and image names use that primitive
+instead of unbounded strcpy; it does not qualify native drive construction.
 
 ## Completed-render identity
 

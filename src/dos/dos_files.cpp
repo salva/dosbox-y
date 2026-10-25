@@ -2625,6 +2625,19 @@ struct Opts {
 Opts opts;
 char overlaydir[CROSS_LEN];
 void MSCDEX_SetCDInterface(int intNr, int forceCD);
+template <size_t N>
+static bool DOS_SaveStateCopyString(std::ostream &stream, char (&dest)[N],
+                                    const char *source)
+{
+    const size_t length = strlen(source);
+    if (length >= N) {
+        stream.setstate(std::ios::failbit);
+        return false;
+    }
+    std::fill(dest, dest + N, '\0');
+    memcpy(dest, source, length);
+    return true;
+}
 void POD_Save_DOS_Files( std::ostream& stream )
 {
     char dinfo[256] = {0};
@@ -2648,9 +2661,9 @@ void POD_Save_DOS_Files( std::ostream& stream )
 			WRITE_POD( &drive_valid, drive_valid );
 			if( drive_valid == 0xff ) continue;
 
-            strcpy(dinfo, Drives[lcv]->GetInfo());
+            if (!DOS_SaveStateCopyString(stream, dinfo, Drives[lcv]->GetInfo())) return;
             WRITE_POD( &dinfo, dinfo);
-            *overlaydir=0;
+            std::fill(overlaydir, overlaydir + sizeof(overlaydir), '\0');
             if (!strncmp(dinfo,"local directory ",16) || !strncmp(dinfo,"CDRom ",6) || !strncmp(dinfo,"PhysFS directory ",17) || !strncmp(dinfo,"PhysFS CDRom ",13) ) {
                 localDrive *ldp = dynamic_cast<localDrive*>(Drives[lcv]);
 #if !defined(OSFREE)
@@ -2666,7 +2679,7 @@ void POD_Save_DOS_Files( std::ostream& stream )
                 }
                 Overlay_Drive *odp = dynamic_cast<Overlay_Drive*>(Drives[lcv]);
                 if (odp) {
-                    strcpy(overlaydir,odp->getOverlaydir());
+                    if (!DOS_SaveStateCopyString(stream, overlaydir, odp->getOverlaydir())) return;
                     oalloc.bytes_sector=odp->allocation.bytes_sector;
                     oalloc.sectors_cluster=odp->allocation.sectors_cluster;
                     oalloc.total_clusters=odp->allocation.total_clusters;
@@ -2676,7 +2689,7 @@ void POD_Save_DOS_Files( std::ostream& stream )
 #if !defined(OSFREE)
                     physfsDrive *pdp = dynamic_cast<physfsDrive*>(Drives[lcv]);
                     if (pdp && pdp->getOverlaydir())
-                        strcpy(overlaydir,pdp->getOverlaydir());
+                        if (!DOS_SaveStateCopyString(stream, overlaydir, pdp->getOverlaydir())) return;
 #endif
                 }
             } else if (!strncmp(dinfo,"fatDrive ",9)) {
@@ -2760,7 +2773,7 @@ void POD_Save_DOS_Files( std::ostream& stream )
 			if(!Drives[lcv]) drive_valid = 0xff;
 			WRITE_POD( &drive_valid, drive_valid );
 			if( drive_valid == 0xff ) continue;
-            strcpy(dinfo, Drives[lcv]->GetInfo());
+            if (!DOS_SaveStateCopyString(stream, dinfo, Drives[lcv]->GetInfo())) return;
             WRITE_POD( &dinfo, dinfo);
         }
     }
@@ -2772,7 +2785,7 @@ void POD_Save_DOS_Files( std::ostream& stream )
         if (!valid) continue;
         char diskname[256];
         imageDiskElToritoFloppy *image = dynamic_cast<imageDiskElToritoFloppy *>(imageDiskList[d]);
-        strcpy(diskname, image!=NULL?"El Torito floppy drive":imageDiskList[d]->diskname.c_str());
+        if (!DOS_SaveStateCopyString(stream, diskname, image!=NULL?"El Torito floppy drive":imageDiskList[d]->diskname.c_str())) return;
         WRITE_POD( &diskname, diskname );
         if (image!=NULL) {
             opts.CDROM_drive=image->CDROM_drive;
