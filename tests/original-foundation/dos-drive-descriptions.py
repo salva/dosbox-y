@@ -27,7 +27,7 @@ code = r'''
 void E_Exit(const char*){throw 1;}
 void tag(std::istream &stream){ TAG }
 void image(std::istream &stream){ IMAGE }
-void desc(std::istream &stream){char dinfo[256],overlaydir[256];uint32_t lalloc,oalloc,opts; DESC }
+void desc(std::istream &stream){char dinfo[256],overlaydir[512];uint32_t lalloc,oalloc,opts; DESC }
 void small(std::istream &stream){char dinfo[256]; SHORT }
 void disk(std::istream &stream){char diskname[256];uint32_t opts; DISK }
 bool bad(void(*f)(std::istream&),const std::string &s){std::istringstream in(s);try{f(in);}catch(int){return true;}return false;}
@@ -35,11 +35,11 @@ int main(){
  for(unsigned n=0;n<256;++n){std::string s(1,char(n));assert(bad(tag,s)==(n!=0 && n!=255));assert(bad(image,s)==(n>1));}
  assert(bad(tag,""));assert(bad(image,""));
  struct Case{void(*f)(std::istream&);size_t size;};
- for(auto c:{Case{desc,524},Case{small,256},Case{disk,260}}){
+ for(auto c:{Case{desc,780},Case{small,256},Case{disk,260}}){
    std::string valid(c.size,'\0');assert(!bad(c.f,valid));
    for(size_t n=0;n<c.size;++n)assert(bad(c.f,valid.substr(0,n)));
    std::string invalid=valid;invalid.replace(0,256,256,'x');assert(bad(c.f,invalid));
-   if(c.f==desc){invalid=valid;invalid.replace(256,256,256,'x');assert(bad(c.f,invalid));}
+   if(c.f==desc){invalid=valid;invalid.replace(256,512,512,'x');assert(bad(c.f,invalid));}
  }
 }
 '''
