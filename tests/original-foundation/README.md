@@ -409,4 +409,7 @@ Reads/writes are chunked to minizip's signed-result range, retaining partial
 counts and errors rather than narrowing `streamsize`. This does not establish
 atomic publication, fsync durability, complete archive preflight or resource
 preparation. Initial system `-lminizip` link failed because unavailable; the probe
-uses the actual bundled implementation instead.
+uses the actual bundled implementation instead. Formatted metadata insertion
+and `put` also exercise the actual single-character overflow path; without this
+streambuf override, numeric metadata/newlines can set badbit and silently stop
+writing even though ZIP member close succeeds.

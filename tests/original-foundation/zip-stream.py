@@ -20,15 +20,15 @@ int main(int argc,char **argv){
  const std::string value(100003,'x');
  for(int i=0;i<2;++i){
   assert(zipOpenNewFileInZip(z,i?"second":"first",nullptr,nullptr,0,nullptr,0,nullptr,Z_DEFLATED,6)==ZIP_OK);
-  {zip_ostreambuf b(z);std::ostream s(&b);s.write(value.data(),value.size());assert(s);
+  {zip_ostreambuf b(z);std::ostream s(&b);s << "header:" << 42 << '\n';s.put('!');s.write(value.data(),value.size());assert(s);
    assert(b.close()==ZIP_OK);assert(b.close()==ZIP_OK);}
  }
  assert(zipClose(z,nullptr)==ZIP_OK);
  unzFile u=unzOpen64(argv[1]);assert(u);
  for(int i=0;i<2;++i){
   assert(unzLocateFile(u,i?"second":"first",1)==UNZ_OK);assert(unzOpenCurrentFile(u)==UNZ_OK);
-  {zip_istreambuf b(u);std::istream s(&b);std::string got(value.size(),' ');
-   s.read(&got[0],got.size());assert(s && got==value);
+  {zip_istreambuf b(u);std::istream s(&b);const std::string expected="header:42\n!"+value;std::string got(expected.size(),' ');
+   s.read(&got[0],got.size());assert(s && got==expected);
    char c;s.read(&c,1);assert(s.eof());assert(b.close()==UNZ_OK);assert(b.close()==UNZ_OK);}
  }
  assert(unzClose(u)==UNZ_OK);

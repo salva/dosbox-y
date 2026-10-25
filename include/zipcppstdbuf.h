@@ -23,6 +23,12 @@ public:
 	zip_ostreambuf(const zip_ostreambuf &) = delete;
 	zip_ostreambuf &operator=(const zip_ostreambuf &) = delete;
 public:
+	virtual Base::int_type overflow(Base::int_type ch = Base::traits_type::eof()) override {
+		if (Base::traits_type::eq_int_type(ch, Base::traits_type::eof()))
+			return Base::traits_type::not_eof(ch);
+		const auto byte = Base::traits_type::to_char_type(ch);
+		return xsputn(&byte, 1) == 1 ? ch : Base::traits_type::eof();
+	}
 	virtual std::streamsize xsputn(const Base::char_type *s, std::streamsize count) override {
 		assert(zf != NULL && !closed);
 		std::streamsize done = 0;
