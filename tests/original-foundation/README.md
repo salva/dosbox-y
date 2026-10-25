@@ -41,6 +41,10 @@ and guest-time callback safety are not qualified by this wrapper fixture.
 LocalFile close also propagates UpdateLocalDateTime's false return while still
 retiring its native handle. Its failure branch is exercised by a stub; no guest
 time callback or save-frontier claim follows from it.
+`local-file-time.py` extracts the actual timestamp body and simulates libc tm
+storage overwritten inside callbacks: date/time assembly uses an owned tm copy,
+and initial/final localtime or mktime failure preserves metadata. Callbacks and
+libc conversions are stand-ins; real guest callback safety remains unqualified.
 
 ## Completed-render identity
 

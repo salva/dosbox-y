@@ -3201,7 +3201,11 @@ bool LocalFile::UpdateDateTimeFromHost(void) {
 
 bool LocalFile::UpdateLocalDateTime(void) {
     time_t timet = ::time(NULL);
-    struct tm *tm = localtime(&timet);
+    const struct tm *host_tm = localtime(&timet);
+    if (!host_tm) return false;
+    // Guest callbacks can themselves use localtime's shared storage.
+    struct tm guest_tm = *host_tm;
+    struct tm *tm = &guest_tm;
     tm->tm_isdst = -1;
     uint16_t oldax=reg_ax, oldcx=reg_cx, olddx=reg_dx;
 
@@ -3226,7 +3230,10 @@ bool LocalFile::UpdateLocalDateTime(void) {
     timet = mktime(tm);
     if (timet == -1)
         return false;
-    tm = localtime(&timet);
+    const struct tm *normalized = localtime(&timet);
+    if (!normalized) return false;
+    tm = &guest_tm;
+    *tm = *normalized;
     time = ((unsigned int)tm->tm_hour << 11u) + ((unsigned int)tm->tm_min << 5u) + ((unsigned int)tm->tm_sec >> 1u);
     date = (((unsigned int)tm->tm_year - 80u) << 9u) + (((unsigned int)tm->tm_mon + 1u) << 5u) + (unsigned int)tm->tm_mday;
     newtime = true;
