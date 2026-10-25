@@ -309,6 +309,25 @@ ordinary CGA/EGA/MCGA/integrated cases. The shared resolver retains the upstream
 must pass actual address_line_total. This is an arithmetic
 regression, not a rendered-screen or whole owner reconstruction test.
 
+## Original POD owner publication
+
+`python3 tests/original-foundation/pod-owner.py` compiles the actual
+`SerializeGlobalPOD` body with ASan/UBSan. Every short prefix, prefailed stream,
+and exception-enabled short stream preserves both live fields; a complete
+payload installs both. The owning primitive now buffers its complete registered
+payload before assignment. The original sequential slot loader consumes stream
+failure as fatal installation failure, never a successful load or resumable
+pre-effect refusal (also exercised with a fatal stand-in). This retains native byte layout and registration
+order; it is not semantic validation, native-resource preparation, complete
+archive validation or multi-owner atomicity. Original slot loading still has
+unsafe sequential install/metadata/error behavior and is not qualified as the
+unified save join.
+
+The completed-frame probe also extracts actual EndUpdate view construction and
+checks source cache/palette pointers, dimensions, pitch, flags, tick and sequence,
+plus aborted/inactive refusal. It still uses fixture renderer globals, not a
+live output consumer or native framebuffer lifetime qualification.
+
 ## GUS/PIC and SB preservation seam
 
 ```

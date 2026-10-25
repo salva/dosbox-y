@@ -429,7 +429,20 @@ protected:
 
     void setBytes(std::istream& stream) override
     {
-        for (auto& x : podRef) { ReadGlobalPOD(stream, x); }
+        // Consume the whole owner before assigning any live field. This is
+        // not whole-archive validation or an atomic multi-owner installation.
+        std::vector<std::vector<char>> pending;
+        pending.reserve(podRef.size());
+        for (const auto& x : podRef) {
+            pending.emplace_back(x.size);
+            if (x.size && !stream.read(pending.back().data(), x.size))
+                return;
+        }
+        for (size_t i = 0; i < podRef.size(); ++i) {
+            if (podRef[i].size)
+                std::copy(pending[i].begin(), pending[i].end(),
+                          static_cast<char*>(podRef[i].address));
+        }
     }
 
 
@@ -445,11 +458,6 @@ private:
     static inline void WriteGlobalPOD(std::ostream& stream, const POD& data)
     {
         stream.write(static_cast<const char*>(data.address), data.size);
-    }
-
-    static inline void ReadGlobalPOD(std::istream& stream, POD& data)
-    {
-        stream.read(static_cast<char*>(data.address), data.size);
     }
 
     std::vector<POD> podRef;

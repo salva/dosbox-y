@@ -772,6 +772,10 @@ void SaveState::load(size_t slot) const { //throw (Error)
 		zip_istreambuf zis(zf); std::istream ss(&zis);
 
 		i->second.comp.setBytes(ss);
+		// A component may already have installed live state. A short stream
+		// is not a pre-effect refusal and this sequential loader cannot roll
+		// back; never resume the guest or report a successful load.
+		if (!ss) E_Exit("Save-state component %s failed during installation", i->first.c_str());
 
 		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
 	}
