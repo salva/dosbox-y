@@ -1209,6 +1209,16 @@ void DestroyConditionFlags(void) {
 
 #endif
 
+// Observe architectural flags without retiring the owner's deferred arithmetic.
+uint32_t CPU_InspectFlags() {
+    const auto saved_lazy = lflags;
+    const auto saved_flags = reg_flags;
+    const auto value = FillFlags();
+    lflags = saved_lazy;
+    reg_flags = saved_flags;
+    return uint32_t(value);
+}
+
 // save state support
 void POD_Save_CPU_Flags( std::ostream& stream )
 {

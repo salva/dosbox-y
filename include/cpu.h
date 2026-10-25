@@ -22,6 +22,9 @@
 
 #include "regs.h"
 
+// Emulator-thread observation without retiring deferred arithmetic flags.
+uint32_t CPU_InspectFlags();
+
 #define CPU_AUTODETERMINE_NONE		0x00
 #define CPU_AUTODETERMINE_CORE		0x01
 #define CPU_AUTODETERMINE_CYCLES	0x02

@@ -45,6 +45,14 @@ pump services. Its binding does not grant input, execution or save authority.
 
 ## Native primitives and worker (not yet emulator-integrated)
 
+`python3 tests/original-foundation/flags-observation.py` compiles the actual CPU
+lazy-flags owner against native headers. It compares observational flags with
+normal materialization across lazy operation types and representative operands,
+including repeat reads and preservation of deferred state. The existing RPC
+register adapter now consumes this owner operation instead of stale `reg_flags`.
+This does not establish register-context admission or integrated RPC lifetime
+correctness; those remain part of the frontend migration.
+
 Run `python3 tests/original-foundation/native-primitives.py` with g++, pthread,
 pkg-config and Lua 5.4. It compiles actual selected non-save owners and worker
 with `-Wall -Wextra -Werror`; outputs live only under

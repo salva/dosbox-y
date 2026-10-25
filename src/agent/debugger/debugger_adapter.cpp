@@ -368,7 +368,7 @@ bool DebuggerAdapter::GetRegisters(RegisterSnapshot* registers, std::string* err
     registers->gs = SegValue(gs);
     registers->ss = SegValue(ss);
     registers->instruction_pointer = reg_eip;
-    registers->flags = static_cast<std::uint32_t>(reg_flags);
+    registers->flags = CPU_InspectFlags();
     registers->cpu_mode = !cpu.pmode ? "real" : ((reg_flags & FLAG_VM) ? "v86" : "protected");
     return true;
 #else
