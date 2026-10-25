@@ -12,10 +12,8 @@ code=r'''
 #include <cassert>
 #include <cstring>
 uint16_t reg_ax=0,reg_cx=0,reg_dx=0;
-#define reg_ah (*reinterpret_cast<unsigned char*>(&reg_ax+0)+1)
 // Explicit byte proxies avoid dependence on the native register union.
 struct Byte {uint16_t &word;int shift;operator unsigned()const{return (word>>shift)&255;}Byte&operator=(unsigned x){word=(word&~(255<<shift))|(x<<shift);return *this;}};
-#undef reg_ah
 Byte reg_ah{reg_ax,8},reg_ch{reg_cx,8},reg_cl{reg_cx,0},reg_dh{reg_dx,8},reg_dl{reg_dx,0};
 int mode=0,calls=0;tm shared={};
 tm* test_localtime(const time_t*){if(mode==1 || (mode==2 && calls==2))return nullptr;if(calls==2)return &shared;shared={};shared.tm_year=100;shared.tm_mon=1;shared.tm_mday=1;return &shared;}
@@ -25,7 +23,7 @@ struct LocalFile{unsigned time=3,date=4;bool newtime=false;bool UpdateLocalDateT
 #define localtime test_localtime
 #define mktime test_mktime
 '''+s[a:b]+r'''
-int main(){for(mode=0;mode<4;++mode){calls=0;reg_ax=7;reg_cx=8;reg_dx=9;LocalFile f;bool ok=f.UpdateLocalDateTime();assert(ok==(mode==0));assert(calls==(mode==1?0:2));assert(reg_ax==7&&reg_cx==8&&reg_dx==9);if(!ok)assert(f.time==3&&f.date==4&&!f.newtime);}}
+int main(){for(mode=0;mode<4;++mode){calls=0;reg_ax=7;reg_cx=8;reg_dx=9;LocalFile f;bool ok=f.UpdateLocalDateTime();assert(ok==(mode==0));assert(calls==(mode==1?0:2));assert(reg_ax==7&&reg_cx==8&&reg_dx==9);if(ok)assert(f.time==((12u<<11)|(34u<<5)|28u)&&f.date==((46u<<9)|(10u<<5)|25u)&&f.newtime);else assert(f.time==3&&f.date==4&&!f.newtime);}}
 '''
 (w/'test.cpp').write_text(code)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(w/'test.cpp'),'-o',str(w/'test')],check=True)
