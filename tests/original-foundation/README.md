@@ -7,15 +7,17 @@ complete debugger/save port.
 
 ## Consumed Sound Blaster bindings
 
-`python3 tests/original-foundation/sb-bindings.py` compiles the actual load
-function against mixer/DMA doubles. All 256 relocation bytes and descriptor
-truncations verify that both cards retain native mixer bindings, card zero's
-DMA relocation is bounded, and the second card never consumes an archived host
-pointer. Full descriptor input is read before publishing card state. This fixes
-pointer ownership, not second-card saved DMA reconstruction: the old format has
-only one relocation and still serializes only the first mixer channel. Full sound
-state/format coverage, output synchronization and scalar semantic validation
-remain unfinished. These tests are not live sound or whole-save acceptance.
+`python3 tests/original-foundation/sb-bindings.py` compiles the actual save/load
+functions against mixer/DMA doubles. Both cards now have explicit presence,
+individual DMA relocation and mixer state in revised `SBlaster2` framing. The
+probe covers all four presence combinations, every truncation, all 256 DMA bytes,
+invalid presence/config mismatch and an unavailable native DMA channel. Native
+mixer bindings are retained and DMA is resolved without invoking callbacks; saved
+host pointers never become native bindings. Earlier cards can already be installed
+when a later card fails: not whole-owner preflight or rollback. Full sound
+state, output synchronization and scalar semantic validation remain unfinished.
+These tests are not live sound or whole-save acceptance. Old component framing is
+intentionally refused, not auto-replayed through a compatibility codec.
 
 ## Consumed GUS native DRAM
 

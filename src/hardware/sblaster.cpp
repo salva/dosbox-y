@@ -4814,110 +4814,68 @@ void *SB_DSP_E2_DMA_CallBack_Func = (void*)((uintptr_t)DSP_E2_DMA_CallBack);
 
 void POD_Save_Sblaster( std::ostream& stream )
 {
-	const size_t ci=0;
-	const char pod_name[32] = "SBlaster";
-
-	if( stream.fail() ) return;
-	if( !test ) return;
-	if( !sb[ci].chan ) return;
-
-
-	WRITE_POD( &pod_name, pod_name );
-
-
-	//*******************************************
-	//*******************************************
-	//*******************************************
-
-	uint8_t dma_idx;
-
-
-	dma_idx = 0xff;
-	for( int lcv=0; lcv<8; lcv++ ) {
-		if( sb[ci].dma.chan == GetDMAChannel(lcv) ) { dma_idx = lcv; break; }
+	const char pod_name[32] = "SBlaster2";
+	if (!stream) return;
+	WRITE_POD(&pod_name, pod_name);
+	for (size_t card = 0; card < MAX_CARDS; ++card) {
+		const uint8_t present = sb[card].chan ? 1 : 0;
+		WRITE_POD(&present, present);
+		if (!present) continue;
+		uint8_t dma_idx = 0xff;
+		for (uint8_t index = 0; sb[card].dma.chan && index < 8; ++index) {
+			if (sb[card].dma.chan == GetDMAChannel(index)) {
+				dma_idx = index;
+				break;
+			}
+		}
+		if (sb[card].dma.chan && dma_idx == 0xff) {
+			stream.setstate(std::ostream::failbit);
+			return;
+		}
+		WRITE_POD(&sb[card], sb[card]);
+		WRITE_POD(&dma_idx, dma_idx);
+		sb[card].chan->SaveState(stream);
+		if (!stream) return;
 	}
-
-	// *******************************************
-	// *******************************************
-	// *******************************************
-
-	// - near-pure data
-	WRITE_POD( &sb, sb );
-
-	// - reloc ptr
-	WRITE_POD( &dma_idx, dma_idx );
-
-	// *******************************************
-	// *******************************************
-	// *******************************************
-
-	sb[ci].chan->SaveState(stream);
 }
 
 
 void POD_Load_Sblaster( std::istream& stream )
 {
-	const size_t ci=0;
-	char pod_name[32] = {0};
-
-	if( stream.fail() ) return;
-	if( !test ) return;
-	if( !sb[ci].chan ) return;
-
-
-	// error checking
-	READ_POD( &pod_name, pod_name );
-	if( strcmp( pod_name, "SBlaster" ) ) {
-		stream.clear( std::istream::failbit | std::istream::badbit );
-		return;
-	}
-
-	//************************************************
-	//************************************************
-	//************************************************
-
-	uint8_t dma_idx = 0xff;
-	SB_INFO incoming[MAX_CARDS];
-
-
-	// Decode separately: archived pointers do not own native resources.
-
-
-	//*******************************************
-	//*******************************************
-	//*******************************************
-
-	// - near-pure data
-	READ_POD( &incoming, incoming );
-
-	// - reloc ptr
-	READ_POD( &dma_idx, dma_idx );
-	if (!stream || (dma_idx != 0xff && dma_idx >= 8)) {
+	const char expected[32] = "SBlaster2";
+	char pod_name[32] = {};
+	if (!stream) return;
+	READ_POD(&pod_name, pod_name);
+	if (!stream || memcmp(pod_name, expected, sizeof(expected)) != 0) {
 		stream.setstate(std::istream::failbit);
 		return;
 	}
-	// Only card zero has a DMA relocation in this format. Other cards must
-	// retain their live bindings rather than consume saved host pointers.
 	for (size_t card = 0; card < MAX_CARDS; ++card) {
-		incoming[card].chan = sb[card].chan;
-		incoming[card].dma.chan = sb[card].dma.chan;
+		uint8_t present = 0;
+		READ_POD(&present, present);
+		if (!stream || present > 1 || bool(present) != bool(sb[card].chan)) {
+			stream.setstate(std::istream::failbit);
+			return;
+		}
+		if (!present) continue;
+		SB_INFO incoming;
+		uint8_t dma_idx = 0xff;
+		READ_POD(&incoming, incoming);
+		READ_POD(&dma_idx, dma_idx);
+		if (!stream || (dma_idx != 0xff && dma_idx >= 8)) {
+			stream.setstate(std::istream::failbit);
+			return;
+		}
+		DmaChannel *dma = dma_idx == 0xff ? nullptr : GetDMAChannel(dma_idx);
+		if (dma_idx != 0xff && !dma) {
+			stream.setstate(std::istream::failbit);
+			return;
+		}
+		// Retain the native mixer and reconstruct DMA without dispatching it.
+		incoming.chan = sb[card].chan;
+		incoming.dma.chan = dma;
+		sb[card] = incoming;
+		sb[card].chan->LoadState(stream);
+		if (!stream) return;
 	}
-	for (size_t card = 0; card < MAX_CARDS; ++card)
-		sb[card] = incoming[card];
-
-	//*******************************************
-	//*******************************************
-	//*******************************************
-
-	sb[ci].dma.chan = NULL;
-	if( dma_idx != 0xff ) sb[ci].dma.chan = GetDMAChannel(dma_idx);
-
-	//*******************************************
-	//*******************************************
-	//*******************************************
-
-	// Native mixer bindings were retained before descriptor installation.
-
-
-	sb[ci].chan->LoadState(stream);
 }
