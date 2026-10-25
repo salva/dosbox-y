@@ -80,7 +80,7 @@ bool ResolveSegmentedByte(const MemoryAddress& address,
     }
 
     Descriptor descriptor;
-    if (!cpu.gdt.GetDescriptor(address.segment, descriptor) || descriptor.Type() == 0 || !descriptor.saved.seg.p) {
+    if (!cpu.gdt.InspectDescriptor(address.segment, descriptor) || descriptor.Type() == 0 || !descriptor.saved.seg.p) {
         SetAccessError(access_error, "invalid_selector", static_cast<std::uint32_t>(raw_offset));
         return false;
     }

@@ -12,9 +12,14 @@ GDT/LDT descriptor inspection body: complete inclusive descriptor limits, overfl
 explicit little-endian decode and unchanged output on refusal. It consumes the
 shared non-mutating linear observation primitive rather than `Descriptor::Load`
 (which changes mpl and uses ordinary guest memory reads). The fixture substitutes
-paging; `memory-observation.py` separately covers that primitive. This API is not
-yet consumed by the production RPC segmented resolver, whose effectful descriptor
-lookup remains outstanding alongside context/attachment admission.
+paging; `memory-observation.py` separately covers that primitive. The production
+RPC segmented resolver now consumes this API rather than the effectful lookup.
+`rpc-segment-observation.py` compiles both actual bodies together with CPU/paging
+doubles and checks real/v86 wrapping, protected-mode normal/expand-down limits,
+GDT/LDT routing, refusal and overflow. Its first run failed on an incorrect
+real-mode expected address (0x123c5 instead of wrapped 0x23c5); the corrected
+expectation preserves the existing 16-bit wrapping contract. Live RPC
+context/attachment admission and memory read/write migration remain outstanding.
 
 ## Shared native dispatch restoration
 
