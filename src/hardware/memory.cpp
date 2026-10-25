@@ -2846,8 +2846,12 @@ private:
 		uint8_t pagehandler_idx[0x40000] = {0};
 		unsigned int size_table;
 
-		// Assume 1GB maximum memory size
-		// FIXME: Memory size can be even larger! Up to 3.5GB on 64-bit builds!
+		// The legacy wire array has a fixed extent. Refuse an unrepresentable
+		// capture rather than walking past it; do not narrow runtime RAM support.
+		if (memory.pages > sizeof(pagehandler_idx) || memory.pages > MemSize / 4096) {
+			stream.setstate(std::ios::failbit);
+			return;
+		}
 		size_table = sizeof(Memory_PageHandler_table) / sizeof(void *);
 		for( unsigned int lcv=0; lcv<memory.pages; lcv++ ) {
 			pagehandler_idx[lcv] = 0xff;

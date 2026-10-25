@@ -434,7 +434,10 @@ This is truthful completion reporting, not preservation of an overwritten slot.
 `python3 tests/original-foundation/memory-loader.py` compiles the actual descriptor
 and loader with small real backing allocations under ASan/UBSan. It checks hostile
 allocation lengths, short descriptor/payload, retained native pointers, valid
-handler reconstruction and out-of-table IDs. Archived page/handler allocation
+handler reconstruction and out-of-table IDs, plus capture refusal before touching a fixed wire array or
+RAM outside its actual backing allocation. Large RAM remains a runtime capability;
+the legacy fixed-size memory representation cannot capture above its extent.
+Archived page/handler allocation
 extents must match current allocations before RAM transfer; raw archived pointers
 are never published. Short payload or invalid handler ID is installation-fatal,
 not rollback: earlier owners and RAM may already have changed. This is not full

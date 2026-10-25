@@ -11,6 +11,9 @@ struct=t[a:b]
 a=t.index('\tvoid setBytes(std::istream& stream) override',t.index('class SerializeMemory'))
 b=t.index('\n} dummy;',a)
 method=t[a:b].replace(' override','')
+a=t.index('\tvoid getBytes(std::ostream& stream) override',t.index('class SerializeMemory'))
+b=t.index('\tvoid setBytes(std::istream& stream)',a)
+save=t[a:b].replace(' override','')
 s=r'''
 #include <cstdint>
 #include <cstddef>
@@ -23,12 +26,14 @@ char bytes[8192];char *MemBase=bytes;size_t MemSize=sizeof(bytes);
 PageHandler handler;PageHandler *handlers[2];MemHandle handles[2];
 PageHandler *Memory_PageHandler_table[]={nullptr,&handler};
 bool dos_kernel_disabled=false;
-struct SerializeGlobalPOD {static void setBytes(std::istream&) {}};
+struct SerializeGlobalPOD {static void setBytes(std::istream&) {} static void getBytes(std::ostream&) {}};
 [[noreturn]] void E_Exit(const char*) {throw 7;}
 #define READ_POD(p,v) stream.read(reinterpret_cast<char*>(p),sizeof(v))
 #define READ_POD_SIZE(p,n) stream.read(reinterpret_cast<char*>(p),n)
+#define WRITE_POD(p,v) stream.write(reinterpret_cast<const char*>(p),sizeof(v))
+#define WRITE_POD_SIZE(p,n) stream.write(reinterpret_cast<const char*>(p),n)
 struct Loader {
-'''+method+r'''
+'''+save+method+r'''
 };
 std::string archive(MemoryBlock m,unsigned char id=1) {
  std::ostringstream out;out.write(reinterpret_cast<char*>(&m),sizeof(m));
@@ -39,6 +44,9 @@ int main(){
  memory.pages=memory.handler_pages=2;memory.phandlers=handlers;memory.mhandles=handles;
  memory.lfb.handler=memory.lfb_mmio.handler=&handler;
  Loader loader;MemoryBlock original=memory;
+ for(unsigned count:{3u,0x40001u}){memory.pages=count;std::ostringstream out;
+ loader.getBytes(out);assert(!out && out.str().empty());memory=original;}
+ std::ostringstream valid;loader.getBytes(valid);assert(valid && !valid.str().empty());
  auto hostile=original;hostile.pages=0xffffffff;
  for(auto h:{hostile}) {std::istringstream in(archive(h));bool fatal=false;
  try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal && memory.pages==2);}
