@@ -2907,6 +2907,7 @@ private:
 		READ_POD( &incoming, incoming );
 		if (!stream || incoming.pages != memory.pages ||
 		    incoming.handler_pages != memory.handler_pages ||
+		    incoming.reported_pages > incoming.pages ||
 		    incoming.pages > sizeof(pagehandler_idx) ||
 		    incoming.pages > MemSize / 4096)
 			E_Exit("Invalid save-state memory allocation extent");
@@ -2936,6 +2937,29 @@ private:
 		}
 		READ_POD( &pagehandler_idx, pagehandler_idx );
 		if (!stream) E_Exit("Short save-state memory payload");
+		if (!dos_kernel_disabled) {
+			// Allocation consumers follow positive links without bounds checks.
+			std::vector<uint8_t> visited(memory.pages, 0);
+			for (Bitu page = 0; page < memory.pages; ++page) {
+				const MemHandle next = memory.mhandles[page];
+				if (next < -1 || (next > 0 && Bitu(next) >= memory.pages))
+					E_Exit("Invalid save-state memory handle link");
+			}
+			for (Bitu page = 1; page < memory.pages; ++page) {
+				MemHandle link = static_cast<MemHandle>(page);
+				while (link > 0 && visited[link] == 0) {
+					visited[link] = 1;
+					link = memory.mhandles[link];
+				}
+				if (link > 0 && visited[link] == 1)
+					E_Exit("Cyclic save-state memory handles");
+				link = static_cast<MemHandle>(page);
+				while (link > 0 && visited[link] == 1) {
+					visited[link] = 2;
+					link = memory.mhandles[link];
+				}
+			}
+		}
 		const size_t handler_count = sizeof(Memory_PageHandler_table) / sizeof(Memory_PageHandler_table[0]);
 		for (Bitu page = 0; page < memory.pages; ++page)
 			if (pagehandler_idx[page] != 0xff && pagehandler_idx[page] >= handler_count)

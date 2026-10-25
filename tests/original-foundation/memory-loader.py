@@ -20,6 +20,7 @@ s=r'''
 #include <sstream>
 #include <cassert>
 #include <cstring>
+#include <vector>
 using Bitu=unsigned;using MemHandle=int;struct PageHandler {};
 '''+struct+r'''
 char bytes[8192];char *MemBase=bytes;size_t MemSize=sizeof(bytes);
@@ -48,7 +49,8 @@ int main(){
  loader.getBytes(out);assert(!out && out.str().empty());memory=original;}
  std::ostringstream valid;loader.getBytes(valid);assert(valid && !valid.str().empty());
  auto hostile=original;hostile.pages=0xffffffff;
- for(auto h:{hostile}) {std::istringstream in(archive(h));bool fatal=false;
+ auto reported=original;reported.reported_pages=original.pages+1;
+ for(auto h:{hostile,reported}) {std::istringstream in(archive(h));bool fatal=false;
  try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal && memory.pages==2);}
  auto encoded=original;encoded.phandlers=nullptr;encoded.mhandles=nullptr;
  encoded.lfb.handler=encoded.lfb_mmio.handler=nullptr;
@@ -60,6 +62,12 @@ int main(){
   std::istringstream in(archive(encoded).substr(0,n));bool fatal=false;
   try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);
  }
+ for(int next:{-2,1,2,2147483647}) {
+  handles[1]=next;std::istringstream in(archive(encoded));bool fatal=false;
+  try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);
+ }
+ handles[1]=-1;std::istringstream chain(archive(encoded));loader.setBytes(chain);assert(chain);
+ handles[1]=0;
  std::istringstream bad(archive(encoded,200));bool fatal=false;
  try{loader.setBytes(bad);}catch(int){fatal=true;}assert(fatal);
 }

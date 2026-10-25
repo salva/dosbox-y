@@ -438,10 +438,12 @@ handler reconstruction and out-of-table IDs, plus capture refusal before touchin
 RAM outside its actual backing allocation. Large RAM remains a runtime capability;
 the legacy fixed-size memory representation cannot capture above its extent.
 Archived page/handler allocation
-extents must match current allocations before RAM transfer; raw archived pointers
+extents must match current allocations before RAM transfer, and reported pages cannot exceed actual pages; raw archived pointers
 are never published. Short payload or invalid handler ID is installation-fatal,
-not rollback: earlier owners and RAM may already have changed. This is not full
-memory/A20/LFB/handle-chain semantic validation or unified pre-effect admission.
+not rollback: earlier owners and RAM may already have changed. Consumed handle links
+must be -1, zero or an in-range positive page, and cycles are fatal before continuation;
+these checks do not establish cross-owner XMS/EMS allocation identity. This is not full
+memory/A20/LFB semantic validation or unified pre-effect admission.
 
 `python3 tests/original-foundation/dma-callback.py` checks the actual DMA callback
 lookup for all byte IDs under ASan/UBSan, plus native channel-field serialization,
