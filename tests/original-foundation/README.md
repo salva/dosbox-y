@@ -1,5 +1,15 @@
 # Original foundation author probes
 
+## Shared callback-entry classification
+
+`python3 tests/original-foundation/dispatch.py` exercises the actual shared
+callback dispatcher with a live coordinator owner. Guest handlers expose a
+call-local CallbackEntry before entering their native callback scope; the
+debugger trampoline does not. Normal and throwing handlers preserve callback
+identity and page-fault policy. Invalid indices never enter a handler/frontier.
+The probe uses deterministic handlers, not a linked frontend/save qualification;
+these descriptors alone grant neither save admission nor resource readiness.
+
 These candidate probes are **not** foundation acceptance. The pristine baseline
 is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate production
 now begins shared VGA arithmetic and original PIC/GUS callback seams, not the

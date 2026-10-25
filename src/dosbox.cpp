@@ -452,6 +452,16 @@ Bits DOSBOX_DispatchDecoder() {
 Bitu DOSBOX_DispatchCallback(Bits callback) {
     if (callback <= 0 || (unsigned int)callback >= CB_MAX)
         E_Exit("Invalid machine decoder callback");
+    // The debugger trampoline must consume its debug event before exposing
+    // the restored return seam. It is not a guest callback-entry boundary.
+#if C_DEBUG
+    const bool debugger_callback = DEBUG_IsNativeDebuggerCallback(callback);
+#else
+    const bool debugger_callback = false;
+#endif
+    if (!debugger_callback)
+        NativeFrontier::frontiers().reach(NativeFrontier::Kind::CallbackEntry,
+                                         DOSBOX_MachineServiceOwner().token);
     Bitu result;
     {
     NativeFrontier::Frontiers::Scope entered(NativeFrontier::frontiers(),false);

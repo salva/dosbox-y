@@ -31,6 +31,7 @@ void DEBUG_RefreshPage(char scroll);
 Bitu DEBUG_EnableDebugger(void);
 
 #if C_DEBUG
+bool DEBUG_IsNativeDebuggerCallback(Bits callback);
 bool DEBUG_AgentStep(bool over, bool* continued);
 bool DEBUG_AgentResumeAfterTerminate(void);
 bool DEBUG_AgentCanStartTarget(void);

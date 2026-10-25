@@ -17,6 +17,9 @@ fixture = r'''
 MachineService::Owner DOSBOX_MachineServiceOwner();
 using Bits=int; using Bitu=unsigned;
 constexpr unsigned CB_MAX=4;
+bool debugger_callback=false;
+bool DEBUG_IsNativeDebuggerCallback(Bits callback){return debugger_callback && callback==2;}
+unsigned entries=0;
 bool dosbox_allow_nonrecursive_page_fault=false;
 unsigned last_callback=9;
 bool fail=false;
@@ -40,6 +43,7 @@ void service(void*) {
 unsigned frontier_calls=0;
 void frontier(void*,const NativeFrontier::Descriptor &d) {
  assert(NativeFrontier::frontiers().ownsHold(d));
+ if(d.kind==NativeFrontier::Kind::CallbackEntry){assert(!d.callback_entered && !d.decoder_entered);assert(last_callback==9);++entries;}
  if(d.kind==NativeFrontier::Kind::PartialParent){assert(dosbox_allow_nonrecursive_page_fault);assert(d.decoder_entered);}
  if(d.callback_entered)assert(!d.decoder_entered);
  if(d.kind==NativeFrontier::Kind::NativeReturn && !d.callback_entered)assert(!d.decoder_entered);
@@ -80,6 +84,7 @@ int main() {
  loop_throw=true;
  try {DOSBOX_RunMachine();assert(false);}catch(int n){assert(n==3);}
  assert(last_callback==9);
+ MachineService::Coordinator::Scope dispatch_root(machine_service,MachineService::Kind::RootGuest);
  for(bool initial:{false,true}) {
   incoming_allow=initial;
   dosbox_allow_nonrecursive_page_fault=initial;
@@ -99,11 +104,25 @@ int main() {
    assert(last_callback==9 && dosbox_allow_nonrecursive_page_fault==initial);
   }
  }
+ assert(entries==4); // Normal and throwing guest callbacks expose entry.
+ debugger_callback=true;fail=false;
+ assert(DOSBOX_DispatchCallback(2)==3);
+ fail=true;
+ try{DOSBOX_DispatchCallback(2);assert(false);}catch(int n){assert(n==2);}
+ assert(entries==4); // Debugger trampoline never exposes guest entry.
+ assert(last_callback==9 && dosbox_allow_nonrecursive_page_fault==incoming_allow);
  assert(slice_before==4 && slice_after==4);
  assert(NativeExecution::slice_observer().unbind(slice,nullptr));
 }
 '''
 (work / 'dispatch.cpp').write_text(fixture)
-subprocess.run(['g++','-std=c++14','-Wall','-Wextra','-Werror','-I',str(root / 'include'),str(work / 'dispatch.cpp'),'-o',str(work / 'dispatch')],check=True)
+subprocess.run(['g++','-DC_DEBUG=1','-std=c++14','-Wall','-Wextra','-Werror','-I',str(root / 'include'),str(work / 'dispatch.cpp'),'-o',str(work / 'dispatch')],check=True)
 subprocess.run([str(work / 'dispatch')],check=True)
+# Compile the same dispatcher with debug disabled; every valid callback is a
+# guest entry in that configuration, with no debugger symbol dependency.
+no_debug = fixture.replace('assert(entries==4); // Debugger trampoline never exposes guest entry.',
+                           'assert(entries==6); // No debugger trampoline in this build.')
+(work / 'dispatch-no-debug.cpp').write_text(no_debug)
+subprocess.run(['g++','-DC_DEBUG=0','-std=c++14','-Wall','-Wextra','-Werror','-I',str(root / 'include'),str(work / 'dispatch-no-debug.cpp'),'-o',str(work / 'dispatch-no-debug')],check=True)
+subprocess.run([str(work / 'dispatch-no-debug')],check=True)
 print('shared actual decoder/callback normal-return, throw and invalid-index restoration PASS')

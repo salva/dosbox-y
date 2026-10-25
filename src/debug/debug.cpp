@@ -6215,6 +6215,10 @@ void DEBUG_ShutDown(Section * /*sec*/) {
 
 Bitu debugCallback;
 
+bool DEBUG_IsNativeDebuggerCallback(Bits callback) {
+    return callback > 0 && (Bitu)callback == debugCallback;
+}
+
 void DEBUG_ReinitCallback(void) {
     /* this is REQUIRED after loading a custom BIOS */
 	debugCallback=CALLBACK_Allocate();
