@@ -504,7 +504,9 @@ void SaveState::save(size_t slot) { //throw (Error)
 		 *             data (the ZIP support code did though). */
 		emulatorversion << std::endl << "No compression";
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		if (!emulatorversion) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 	{
 		zip_fileinfo zi; zipSetCurrentTime(zi);
@@ -513,7 +515,9 @@ void SaveState::save(size_t slot) { //throw (Error)
 
 		programname << RunningProgram;
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		if (!programname) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 	{
 		zip_fileinfo zi; zipSetCurrentTime(zi);
@@ -522,7 +526,9 @@ void SaveState::save(size_t slot) { //throw (Error)
 
 		memorysize << std::to_string( MEM_TotalPages());
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		if (!memorysize) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 	{
 		zip_fileinfo zi; zipSetCurrentTime(zi);
@@ -531,7 +537,9 @@ void SaveState::save(size_t slot) { //throw (Error)
 
 		machinetype << getType();
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		if (!machinetype) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 	{
 		zip_fileinfo zi; zipSetCurrentTime(zi);
@@ -540,7 +548,9 @@ void SaveState::save(size_t slot) { //throw (Error)
 
 		timestamp << getTime(true);
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		if (!timestamp) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 	{
 		zip_fileinfo zi; zipSetCurrentTime(zi);
@@ -549,7 +559,9 @@ void SaveState::save(size_t slot) { //throw (Error)
 
 		saveremark << std::string(save_remark);
 
-		if ((errclose=zos.close()) != ZIP_OK) { save_err = true; goto done; }
+		if (!saveremark) save_err = true;
+		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
+		if (save_err) goto done;
 	}
 	for (CompEntry::iterator i = components.begin(); i != components.end(); ++i) {
 		zip_fileinfo zi; zipSetCurrentTime(zi);

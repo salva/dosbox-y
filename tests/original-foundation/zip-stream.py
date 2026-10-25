@@ -69,6 +69,29 @@ b=loader.index('\n\t}',a)
 seam=loader[a:b].replace('i->second.comp','i->comp')
 source=w/'test.cpp'
 source.write_text(source.read_text().replace('OWNER_SAVE_SEAM',seam))
+# Compile each actual metadata completion branch with a deliberately failed
+# stream as well: member close cannot hide a formatting/write failure.
+checks=[]
+for name in ('emulatorversion','programname','memorysize','machinetype','timestamp','saveremark'):
+    start=loader.index('\t\tif (!'+name+')')
+    end=loader.index('\n\t}',start)
+    checks.append('''
+ z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
+ assert(zipOpenNewFileInZip(z,"metadata",nullptr,nullptr,0,nullptr,0,nullptr,0,0)==ZIP_OK);
+ {zip_ostreambuf zos(z);std::ostream NAME(&zos);bool save_err=false;int errclose=ZIP_OK;
+  NAME.setstate(std::ios::failbit);
+  auto finish=[&](){
+SEAM
+   return;
+   done: return;
+  };
+  finish();assert(save_err);assert(zos.close()==ZIP_OK);
+ }
+ assert(zipClose(z,nullptr)==ZIP_OK);
+'''.replace('NAME',name).replace('SEAM',loader[start:end]))
+text=source.read_text()
+end=text.rfind('\n}')
+source.write_text(text[:end]+''.join(checks)+text[end:])
 objects=[]
 for name in ('zip','unzip','ioapi'):
  obj=w/(name+'.o');objects.append(str(obj))
