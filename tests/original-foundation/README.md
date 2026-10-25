@@ -20,6 +20,11 @@ GDT/LDT routing, refusal and overflow. Its first run failed on an incorrect
 real-mode expected address (0x123c5 instead of wrapped 0x23c5); the corrected
 expectation preserves the existing 16-bit wrapping contract. Live RPC
 context/attachment admission and memory read/write migration remain outstanding.
+`rpc-read-publication.py` checks publish-last in the actual RPC ReadMemory body:
+translation/read refusal at every position leaves the caller's prior result
+unchanged, while a full read replaces it. This is output publication correctness,
+not proof of side-effect-free guest reads; ordinary read handlers, write probing
+and native session authority remain to be migrated/qualified.
 
 ## Shared native dispatch restoration
 

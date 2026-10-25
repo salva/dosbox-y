@@ -405,16 +405,19 @@ bool DebuggerAdapter::ReadMemory(const MemoryAddress& address,
 #if C_DEBUG
     if (access_error != NULL)
         *access_error = MemoryAccessError();
-    data->clear();
-    data->reserve(length);
+    // Publish only a complete observation. A later translation/read refusal
+    // must not replace the caller's prior result with an address prefix.
+    std::vector<std::uint8_t> observed;
+    observed.reserve(length);
     for (std::size_t index = 0; index < length; ++index) {
         std::uint32_t resolved = 0;
         std::uint8_t value = 0;
         if (!ResolveMemoryByte(address, index, &resolved, access_error) ||
             !ReadResolvedByte(address, resolved, &value, access_error))
             return false;
-        data->push_back(value);
+        observed.push_back(value);
     }
+    data->swap(observed);
     return true;
 #else
     (void)address;
