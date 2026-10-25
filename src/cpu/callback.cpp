@@ -21,6 +21,7 @@
 #include <cstdint>
 
 #include "callback.h"
+#include "machine_service.h"
 #include "logging.h"
 #include "bios.h"
 #include "cpu.h"
@@ -123,7 +124,7 @@ void CALLBACK_Idle(void) {
 	reg_eip=CB_SOFFSET+call_idle*CB_SIZE;
 	CPU_CycleLeft += CPU_Cycles - 1; /* Ahem: This makes the CPU execute instructions to handle IRQs and then come back. Nothing more. */
 	CPU_Cycles = 1;
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::IdleGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 	SETFLAGBIT(IF,oldIF);
@@ -148,7 +149,7 @@ void CALLBACK_IdleNoInts(void) {
 	reg_eip=CB_SOFFSET+call_idle*CB_SIZE;
 	CPU_CycleLeft += CPU_Cycles - 1; /* Ahem: This makes the CPU execute instructions to handle IRQs and then come back. Nothing more. */
 	CPU_Cycles = 1;
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::IdleGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 //	SETFLAGBIT(IF,oldIF);
@@ -189,7 +190,7 @@ void CALLBACK_RunRealFarInt(uint16_t seg,uint16_t off) {
 	uint16_t oldcs=SegValue(cs);
 	reg_eip=off;
 	SegSet16(cs,seg);
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::CallbackGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 }
@@ -210,7 +211,7 @@ void CALLBACK_RunRealFar(uint16_t seg,uint16_t off) {
 	uint16_t oldcs=SegValue(cs);
 	reg_eip=off;
 	SegSet16(cs,seg);
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::CallbackGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 }
@@ -220,21 +221,30 @@ void CALLBACK_RunRealInt_retcsip(uint8_t intnum,Bitu &rcs,Bitu &rip) {
 	uint16_t oldcs=SegValue(cs);
 	reg_eip=CB_SOFFSET+(CB_MAX*CB_SIZE)+(intnum*6U);
 	SegSet16(cs,CB_SEG);
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::CallbackGuest);
 	rcs = SegValue(cs);
 	rip = reg_ip;
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 }
 
-void CALLBACK_RunRealInt(uint8_t intnum) {
+static void CALLBACK_RunRealIntOwned(uint8_t intnum,MachineService::Kind kind) {
 	uint32_t oldeip=reg_eip;
 	uint16_t oldcs=SegValue(cs);
 	reg_eip=CB_SOFFSET+(CB_MAX*CB_SIZE)+(intnum*6U);
 	SegSet16(cs,CB_SEG);
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(kind);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
+}
+
+void CALLBACK_RunRealInt(uint8_t intnum) {
+    CALLBACK_RunRealIntOwned(intnum,MachineService::Kind::CallbackGuest);
+}
+
+void CALLBACK_RunShellExec() {
+    assert(reg_ax==0x4b00);
+    CALLBACK_RunRealIntOwned(0x21,MachineService::Kind::ShellExecGuest);
 }
 
 namespace {

@@ -16,6 +16,17 @@ This preserves incoming page-fault policy and callback identity across unwind;
 it does not itself establish frontier/save admission, core/flags borrowing, or
 session disposal. Real caller/build/runtime checks remain separate.
 
+The machine-service coordinator is now linked at `DOSBOX_RunMachine`: requests
+remain data-only until a zero handler return, with no service on native return
+or exception. Root, natural shell EXEC, callback/idle, fault and disk invocations
+have explicit kinds; unclassified calls still deny service. Shell EXEC uses a
+named wrapper rather than inferring authority from INT21 or register values.
+`dispatch.py` also exercises the actual coordinator wrappers, zero/nonzero seam,
+request retention under a callback ancestor and expiry on invocation return.
+This does not yet register a frontend evaluator, bind native frontiers, settle
+execution on owner departure, or admit any save operation. Classification alone
+is neither execution nor save authority.
+
 ## Native primitives and worker (not yet emulator-integrated)
 
 Run `python3 tests/original-foundation/native-primitives.py` with g++, pthread,

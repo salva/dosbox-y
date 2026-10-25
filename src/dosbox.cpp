@@ -64,6 +64,7 @@
 #include "cpu.h"
 #include "ide.h"
 #include "callback.h"
+#include "machine_service.h"
 #include "inout.h"
 #include "mixer.h"
 #include "timer.h"
@@ -752,7 +753,28 @@ void DOSBOX_SetNormalLoop() {
 volatile int runmachine_recursion = 0;
 #endif
 
-void DOSBOX_RunMachine(void){
+static MachineService::Coordinator machine_service;
+static void (*machine_service_slice)(void *) = nullptr;
+static void *machine_service_context = nullptr;
+
+void DOSBOX_SetMachineService(void (*slice)(void *),void *context) {
+    assert(!machine_service.active());
+    machine_service_slice = slice;
+    machine_service_context = context;
+}
+void DOSBOX_RequestMachineService() { machine_service.request(); }
+bool DOSBOX_EnqueueMachineService(uint64_t token) {
+    return machine_service.requestForCurrent(token,machine_service_slice != nullptr);
+}
+MachineService::Owner DOSBOX_MachineServiceOwner() { return machine_service.current(); }
+MachineService::Denial DOSBOX_MachineServiceAdmission() { return machine_service.admission(); }
+MachineService::Denial DOSBOX_MachineContextAdmission() { return machine_service.contextAdmission(); }
+MachineService::Denial DOSBOX_MachineFrontierAdmission() { return machine_service.frontierAdmission(); }
+MachineService::Relation DOSBOX_MachineServiceRelation(uint64_t token) { return machine_service.relation(token); }
+
+void DOSBOX_RunMachine(void) { DOSBOX_RunMachine(MachineService::Kind::Unclassified); }
+void DOSBOX_RunMachine(MachineService::Kind kind){
+    MachineService::Coordinator::Scope machine_owner(machine_service,kind);
     Bitu ret;
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
     dosbox_agent::AGENT_BridgeAttachToCurrentThread();
@@ -771,6 +793,9 @@ void DOSBOX_RunMachine(void){
 
     do {
         ret=(*loop)();
+        // Only a returned handler seam can service data-only requests.
+        // Nonzero native return tokens belong to their restoration caller.
+        if (!ret) machine_service.service(machine_service_slice,machine_service_context);
     } while (!ret);
 
 #ifdef DEBUG_RECURSION

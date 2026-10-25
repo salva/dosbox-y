@@ -19,6 +19,7 @@
 #include <assert.h>
 
 #include "dosbox.h"
+#include "machine_service.h"
 #include "callback.h"
 #include "bios.h"
 #include "regs.h"
@@ -41,7 +42,7 @@ static void imageDiskCallINT13(void) {
 	uint32_t oldeip=reg_eip;
 	SegSet16(cs,rv>>16);
 	reg_eip=(rv&0xFFFF)+4+5;
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::DiskGuest);
 	reg_eip=oldeip;
 	SegSet16(cs,oldcs);
 	SETFLAGBIT(IF,oldIF);

@@ -63,6 +63,7 @@ void CALLBACK_Idle(void);
 
 
 void CALLBACK_RunRealInt(uint8_t intnum);
+void CALLBACK_RunShellExec();
 void CALLBACK_RunRealFar(uint16_t seg,uint16_t off);
 void CALLBACK_RunRealFarInt(uint16_t seg,uint16_t off);
 

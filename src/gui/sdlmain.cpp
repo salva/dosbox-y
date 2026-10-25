@@ -141,6 +141,7 @@ char* revert_escape_newlines(const char* aMessage);
 #include "setup.h"
 #include "bios.h"
 #include "callback.h"
+#include "machine_service.h"
 #include "support.h"
 #include "debug.h"
 #include "ide.h"
@@ -10305,7 +10306,7 @@ fresh_boot:
 #if C_DEBUG
             if (control->opt_break_start) DEBUG_EnableDebugger();
 #endif
-            DOSBOX_RunMachine();
+            DOSBOX_RunMachine(MachineService::Kind::RootGuest);
         } catch (int x) {
             if (x == 2) { /* booting a guest OS. "boot" has already done the work to load the image and setup CPU registers */
                 LOG(LOG_MISC,LOG_DEBUG)("Emulation threw a signal to boot guest OS");

@@ -11,6 +11,7 @@ bodies = source[source.index('Bits DOSBOX_DispatchDecoder()'):source.index('stat
 fixture = r'''
 #include <cassert>
 #include <stdexcept>
+#include "machine_service.h"
 using Bits=int; using Bitu=unsigned;
 constexpr unsigned CB_MAX=4;
 bool dosbox_allow_nonrecursive_page_fault=false;
@@ -23,11 +24,39 @@ unsigned (*CallBack_Handlers[CB_MAX])()={nullptr,nullptr,handler,nullptr};
 [[noreturn]] void E_Exit(const char*) {throw std::runtime_error("invalid callback");}
 '''
 fixture += bodies
-machine = source[source.index('void DOSBOX_RunMachine(void)'):source.index('uint32_t turbolasttick')]
-fixture += '\nBitu loop_return=1; bool loop_throw=false;\nBitu machine_loop(){assert(last_callback==0);if(loop_throw)throw 3;return loop_return;}\nBitu (*loop)()=machine_loop;\n'
+machine = source[source.index('static MachineService::Coordinator machine_service;'):source.index('uint32_t turbolasttick')]
+fixture += '\nBitu loop_return=1; bool loop_throw=false;\nBitu machine_loop(){assert(last_callback==0);if(loop_throw)throw 3;if(!loop_return){loop_return=1;return 0;}return loop_return;}\nBitu (*loop)()=machine_loop;\n'
 fixture += machine
 fixture += r'''
+unsigned services=0;
+void service(void*) {
+ assert(DOSBOX_MachineServiceOwner().kind==MachineService::Kind::RootGuest);
+ assert(DOSBOX_MachineServiceAdmission()==MachineService::Denial::Active);
+ ++services;
+}
 int main() {
+ DOSBOX_SetMachineService(service,nullptr);
+ DOSBOX_RequestMachineService();
+ DOSBOX_RunMachine();assert(services==0); // Nonzero result never services.
+ {
+  MachineService::Coordinator::Scope root(machine_service,MachineService::Kind::RootGuest);
+  assert(DOSBOX_EnqueueMachineService(root.token()));
+  assert(machine_service.service(machine_service_slice,machine_service_context));
+  assert(services==1 && !machine_service.pending());
+  {
+   MachineService::Coordinator::Scope nested(machine_service,MachineService::Kind::CallbackGuest);
+   assert(!DOSBOX_EnqueueMachineService(nested.token()));
+   DOSBOX_RequestMachineService();
+   assert(!machine_service.service(machine_service_slice,machine_service_context));
+  }
+  assert(machine_service.service(machine_service_slice,machine_service_context));
+  assert(services==2);
+ }
+ assert(DOSBOX_MachineServiceOwner().token==0);
+ DOSBOX_RequestMachineService();loop_return=0;
+ DOSBOX_RunMachine(MachineService::Kind::RootGuest);
+ assert(services==3 && !machine_service.pending());
+ DOSBOX_SetMachineService(nullptr,nullptr);
  DOSBOX_RunMachine();assert(last_callback==9);
  loop_throw=true;
  try {DOSBOX_RunMachine();assert(false);}catch(int n){assert(n==3);}
@@ -51,6 +80,6 @@ int main() {
 }
 '''
 (work / 'dispatch.cpp').write_text(fixture)
-subprocess.run(['g++','-std=c++14','-Wall','-Wextra','-Werror',str(work / 'dispatch.cpp'),'-o',str(work / 'dispatch')],check=True)
+subprocess.run(['g++','-std=c++14','-Wall','-Wextra','-Werror','-I',str(root / 'include'),str(work / 'dispatch.cpp'),'-o',str(work / 'dispatch')],check=True)
 subprocess.run([str(work / 'dispatch')],check=True)
 print('shared actual decoder/callback normal-return, throw and invalid-index restoration PASS')

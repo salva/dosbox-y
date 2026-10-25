@@ -1706,7 +1706,7 @@ continue_1:
 		SegSet16(es,SegValue(ss));
 		reg_bx=reg_sp;
 		SETFLAGBIT(IF,false);
-		CALLBACK_RunRealInt(0x21);
+		CALLBACK_RunShellExec();
 		/* Restore CS:IP and the stack */
 		reg_sp+=0x200;
 #if 0

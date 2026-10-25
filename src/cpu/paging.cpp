@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "paging.h"
+#include "machine_service.h"
 #include "lazyflags.h"
 #include "cpu.h"
 #include "logging.h"
@@ -278,7 +279,7 @@ void PAGING_PageFault(PhysPt lin_addr,Bitu page_addr,Bitu faultcode) {
 #if C_DEBUG
 //	DEBUG_EnableDebugger();
 #endif
-	DOSBOX_RunMachine();
+	DOSBOX_RunMachine(MachineService::Kind::FaultGuest);
 	pf_queue.used--;
 	LOG(LOG_PAGING,LOG_NORMAL)("Left PageFault for %lx queue %d",(unsigned long)lin_addr,(int)pf_queue.used);
 	memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
@@ -318,7 +319,7 @@ static void PAGING_NewPageFault(PhysPt lin_addr, Bitu page_addr, bool prepare_on
 		entry->mpl=cpu.mpl;
 		cpu.mpl=3;
 		CPU_Exception(EXCEPTION_PF,faultcode);
-		DOSBOX_RunMachine();
+		DOSBOX_RunMachine(MachineService::Kind::FaultGuest);
 		pf_queue.used--;
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
 		cpudecoder=old_cpudecoder;

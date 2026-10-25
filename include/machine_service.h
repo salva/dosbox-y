@@ -121,6 +121,7 @@ public:
 }
 // Emulator-thread only. Registration is debugger-owned, requests data-only.
 void DOSBOX_SetMachineService(void (*slice)(void *),void *context);
+void DOSBOX_RunMachine(MachineService::Kind kind);
 void DOSBOX_RequestMachineService();
 bool DOSBOX_EnqueueMachineService(uint64_t token);
 MachineService::Owner DOSBOX_MachineServiceOwner();
