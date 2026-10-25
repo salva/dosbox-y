@@ -49,6 +49,22 @@ not establish that all internal state or file cursors were restored correctly.
 FluidSynth missing SoundFont diagnostics remain; MIDI is unqualified. Initial
 F12+q close attempts timed out; WM_DELETE_WINDOW is the tested close approach.
 
+## Corrected pristine baseline
+
+Detached source130de209/tree6639975e876405ede1eee60dfb79fe5c7d23d63a was verified against all7829 tracked Git blobs with zero mismatches (`work:///cards/card-n-c-a/pristine-source-verification.json`). Additional generated autotools files are not claimed tracked upstream. Fresh `pristine-final-build` configure completed before make, using separate bare metadata pinned130de209 (configure reports130de20), flags `--enable-debug=heavy --enable-sdl2 --disable-opengl --disable-avcodec`. Build `proc-60ecbc06b09e` exit0; warnings remain. SHA256 identities:
+
+- binary `aa145d4df9bd04e44f0fcd7413d13c2be1fe222bf393e4766bf7d981e18fd495`
+- config.h `b737cfd5f99b83b337403aae3f1609e655abb3fcdb310d248860e60ea1eb016e`
+- config.status `c2c04867b6e08ec80032a2d86a88268071d32cc525b332ec12927277c9cd9204`
+- fixture `ae107bfe1dc63f7d0fc2bbbc7933100e5de574cd4fd50fabc52fa2cbc12a25ec`
+
+Use `pristine-final-build/src/dosbox-x` instead of the older example binary above. Corrected runtime receipts supersede older build evidence without erasing its metadata/overlap limitations:
+
+- `work:///cards/card-n-c-a/pristine-final-slots-32/receipt.json`,32MiB/6000, same/fresh counters25258/5461 and BIOS ticks161/36 (`proc-3bbbd36ad405` exit0).
+- `work:///cards/card-n-c-a/pristine-final-slots-48/receipt.json`,48MiB/9000, counters36864/8192 and ticks157/36 (`proc-4c1949ec591e` exit0).
+
+Each records exact per-run config hashes, two normal exits, input/load acknowledgements and five CRC-valid ZIP observations. All semantic and resource qualifications above still apply; this is not fresh STOPPED debugger restoration.
+
 ## VGA 3270 stride regression
 
 ```sh
