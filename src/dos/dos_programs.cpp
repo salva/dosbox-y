@@ -5708,6 +5708,9 @@ imageDiskMemory* CreateRamDrive(Bitu sizes[], const int reserved_cylinders, cons
 
 bool AttachToBiosByIndex(imageDisk* image, const unsigned char bios_drive_index) {
     if (bios_drive_index >= MAX_DISK_IMAGES) return false;
+    // Retain the incoming native resource before retiring the occupied slot.
+    // The caller may be reattaching that very image with no other reference.
+    image->Addref();
     if (imageDiskList[bios_drive_index] != NULL) {
         /* Notify IDE ATA emulation if a drive is already there */
         if (bios_drive_index >= 2) IDE_Hard_Disk_Detach(bios_drive_index);
@@ -5715,7 +5718,6 @@ bool AttachToBiosByIndex(imageDisk* image, const unsigned char bios_drive_index)
     }
     imageDiskList[bios_drive_index] = image;
     imageDiskChange[bios_drive_index] = true;
-    image->Addref();
 
     // let FDC know if we mounted a floppy
     if (bios_drive_index <= 1) {
