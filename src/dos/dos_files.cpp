@@ -3039,8 +3039,10 @@ void POD_Load_DOS_Files( std::istream& stream )
                         DriveManager::InitializeDrive(lcv);
                         DOS_EnableDriveMenu('A'+lcv);
                         mem_writeb(Real2Phys(dos.tables.mediaid) + lcv*dos.tables.dpb_size, opts.mediaid);
-                    } else if ((!opts.mounttype || opts.mounttype==3) && *(dinfo+9))
-                        LOG_MSG("Error: Cannot restore drive from image file %s\n", dinfo+9);
+                    } else {
+                        delete newDrive;
+                        E_Exit("Cannot restore save-state DOS FAT drive: native reconstruction failed");
+                    }
 #endif
                 }
             }
