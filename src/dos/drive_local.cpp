@@ -1661,6 +1661,14 @@ bool localDrive::FileOpen(DOS_File * * file,const char * name,uint32_t flags) {
             return false;
         }
         hand = fdopen(fd, (flags&0xf)==OPEN_WRITE?_HT("wb"):type);
+        // fdopen takes ownership only on success. Do not strand a descriptor
+        // or its share lock when native file reconstruction cannot wrap it.
+        if (!hand) {
+            const int saved_errno = errno;
+            close(fd);
+            errno = saved_errno;
+            return false;
+        }
 #endif
     } else {
 #ifdef host_cnv_use_wchar
