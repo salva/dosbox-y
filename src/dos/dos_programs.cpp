@@ -10094,6 +10094,13 @@ int flagged_restore(char* zip)
 		if (zf != NULL) {
 			while (i < MAX_FLAGS) {
 				if (g_flagged_files[i] != NULL) {
+					// Verify the complete saved payload before creating/truncating
+					// its guest destination; directory metadata is not integrity.
+					if (zip_verify_member(zf, g_flagged_files[i], 2 /* case insensitive */) != UNZ_OK) {
+						ret = -1;
+						i++;
+						continue;
+					}
 					if (DOS_FindDevice(("\""+std::string(g_flagged_files[i])+"\"").c_str()) != DOS_DEVICES) {
 						LOG_MSG(MSG_Get("SHELL_CMD_FILE_NOT_FOUND"),g_flagged_files[i]);
 						ret = -1;

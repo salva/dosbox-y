@@ -12,8 +12,8 @@
 
 // Transport integrity only: drain a required member before owner installation.
 // CRC is checked by minizip only after the complete member has been read.
-inline int zip_verify_member(unzFile archive, const char *name) {
-	int result = unzLocateFile(archive, name, 1 /* case sensitive */);
+inline int zip_verify_member(unzFile archive, const char *name, int case_sensitivity = 1) {
+	int result = unzLocateFile(archive, name, case_sensitivity);
 	if (result != UNZ_OK) return result;
 	result = unzOpenCurrentFile(archive);
 	if (result != UNZ_OK) return result;

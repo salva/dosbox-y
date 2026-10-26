@@ -84,6 +84,19 @@ LOADER_INTEGRITY_SEAM
   in.close();std::ofstream out(argv[1],std::ios::binary|std::ios::trunc);out.write(bytes.data(),bytes.size());assert(out);}
  u=unzOpen64(argv[1]);assert(u);
  assert(zip_verify_member(u,"crc")==UNZ_CRCERROR);
+ // The actual flagged restore integrity branch must skip destination effects.
+ {unzFile zf=u;int i=0,ret=0;const char *g_flagged_files[]={"crc","absent"};
+  bool created=false;
+  auto restore=[&](){
+   while (i<2) {
+FLAGGED_INTEGRITY_SEAM
+    created=true;
+    ++i;
+   }
+  };
+  restore();
+  assert(ret==-1 && !created);
+ }
  assert(unzClose(u)==UNZ_OK);
  u=unzOpen64(argv[1]);assert(u);assert(unzLocateFile(u,"crc",1)==UNZ_OK);assert(unzOpenCurrentFile(u)==UNZ_OK);
  {zip_istreambuf b(u);std::string bytes(marker.size(),' ');assert(b.sgetn(&bytes[0],bytes.size())==std::streamsize(bytes.size()));
@@ -110,6 +123,10 @@ a=loader.index('\t\ti->second.comp.getBytes(ss);')
 b=loader.index('\n\t}',a)
 seam=loader[a:b].replace('i->second.comp','i->comp')
 source=w/'test.cpp'
+flagged=(root/'src/dos/dos_programs.cpp').read_text()
+a=flagged.index('\t\t\t\t\tif (zip_verify_member(zf, g_flagged_files[i],')
+b=flagged.index('\n\t\t\t\t\tif (DOS_FindDevice',a)
+source.write_text(source.read_text().replace('FLAGGED_INTEGRITY_SEAM',flagged[a:b]))
 source.write_text(source.read_text().replace('OWNER_SAVE_SEAM',seam))
 a=loader.index('\t// Integrity only;')
 b=loader.index('\n\t{',loader.index('\n\t}',a)+3)
