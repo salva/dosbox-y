@@ -9960,18 +9960,30 @@ void START_ProgramStart(Program **make)
 
 #define MAX_FLAGS 512
 char *g_flagged_files[MAX_FLAGS]; //global array to hold flagged files
+// Host paths are not fixed-size DOS names. Never alias the state archive when
+// the caller supplies a path without the conventional .sav suffix.
+static std::string flagged_sidecar_path(const char *archive)
+{
+    std::string path(archive);
+    const auto separator = path.find_last_of("/\\");
+    const auto extension = path.find_last_of('.');
+    if (extension != std::string::npos &&
+        (separator == std::string::npos || extension > separator) &&
+        path.compare(extension, std::string::npos, ".sav") == 0)
+        path.replace(extension, std::string::npos, ".dat");
+    else
+        path += ".dat";
+    return path;
+}
 int flagged_backup(char *zip)
 {
 	unsigned char buffer[4096];
-	char zipfile[CROSS_LEN];
+	const std::string zipfile = flagged_sidecar_path(zip);
 	int ret = 0;
 	int i;
 
 	bool compresssaveparts = static_cast<Section_prop *>(control->GetSection("dosbox"))->Get_bool("compresssaveparts");
 
-	strcpy(zipfile, zip);
-	if (strstr(zipfile, ".sav"))
-		strcpy(strstr(zipfile, ".sav"), ".dat");
 
 	i=0;
 	while (i < MAX_FLAGS && g_flagged_files[i] == NULL) i++;
@@ -9985,8 +9997,8 @@ int flagged_backup(char *zip)
 #else
 			fill_fopen64_filefunc(&ffunc);
 #endif
-			remove(zipfile);
-			zf = zipOpen2_64(zipfile,APPEND_STATUS_CREATE,&global_comment,&ffunc);
+			remove(zipfile.c_str());
+			zf = zipOpen2_64(zipfile.c_str(),APPEND_STATUS_CREATE,&global_comment,&ffunc);
 		}
 		if (zf != NULL) {
 			while (i < MAX_FLAGS) {
@@ -10028,13 +10040,10 @@ int flagged_restore(char* zip)
 {
 	unsigned char buffer[4096];
 	unz_file_info64 file_info;
-	char zipfile[MAX_FLAGS];
+	const std::string zipfile = flagged_sidecar_path(zip);
 	int ret = 0;
 	int i;
 
-	strcpy(zipfile, zip);
-	if (strstr(zipfile, ".sav"))
-		strcpy(strstr(zipfile, ".sav"), ".dat");
 	i=0;
 	while (i < MAX_FLAGS && g_flagged_files[i] == NULL) i++;
 	if (i < MAX_FLAGS) {
@@ -10046,13 +10055,14 @@ int flagged_restore(char* zip)
 #else
 			fill_fopen64_filefunc(&ffunc);
 #endif
-			zf = unzOpen2_64(zipfile,&ffunc);
+			zf = unzOpen2_64(zipfile.c_str(),&ffunc);
 		}
 		if (zf != NULL) {
 			while (i < MAX_FLAGS) {
 				if (g_flagged_files[i] != NULL) {
 					if (DOS_FindDevice(("\""+std::string(g_flagged_files[i])+"\"").c_str()) != DOS_DEVICES) {
 						LOG_MSG(MSG_Get("SHELL_CMD_FILE_NOT_FOUND"),g_flagged_files[i]);
+						i++;
 						continue;
 					}
 
