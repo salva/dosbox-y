@@ -2584,6 +2584,10 @@ void DOS_File::LoadState( std::istream& stream, bool pop )
 		E_Exit("Invalid save-state DOS file metadata");
 	// Discarded entries must not change the dummy/native file object.
 	if (pop) return;
+	// FileOpen already selected the native access/share mode from the outer
+	// record. Duplicate metadata cannot grant different access to that resource.
+	if (saved_flags != flags)
+		E_Exit("Save-state DOS file access mode mismatch");
 	flags = saved_flags;
 	open = saved_open != 0;
 	attr = saved_attr;
