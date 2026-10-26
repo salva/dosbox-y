@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 root = Path(__file__).resolve().parents[2]
 s = (root/'src/dos/dos_files.cpp').read_text()
-a = s.index('        if (imageDiskList[d])\n            ;')
+a = s.index('        if (reuse_image)\n            ;')
 b = s.index('        if (i==MAX_DISK_IMAGES-1)', a)
 w = Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'bios-restore-errors'
 w.mkdir(exist_ok=True)
@@ -33,16 +33,18 @@ struct fatDrive {
  ~fatDrive(){delete loadedDisk;}
 };
 imageDisk* imageDiskList[6]={};
+imageDisk* retained=nullptr;
 void E_Exit(const char* text){throw std::runtime_error(text);}
 bool AttachToBiosByIndex(imageDisk* p,unsigned d){
- assert(d==4);if(mode==3)return false;++attached;imageDiskList[d]=p;return true;
+  assert(d==4);assert(imageDiskList[d]==retained);
+ if(mode==3)return false;++attached;imageDiskList[d]=p;return true;
 }
 bool AttachToBiosAndIdeByIndex(imageDisk* p,unsigned d,unsigned char,bool){
  return AttachToBiosByIndex(p,d);
 }
 struct Options {unsigned mounttype=0,CDROM_drive=0,cdrom_sector_offset=0,floppy_emu_type=0;
  unsigned bytesector=0,cylsector=0,headscyl=0,cylinders=0;}opts;
-void restore(){int d=4;Bitu sizes[4]={};int ide_index=-1;bool ide_slave=false;
+void restore(){int d=4;const bool reuse_image=false;Bitu sizes[4]={};int ide_index=-1;bool ide_slave=false;
  char diskname[]="image";
  BRANCH
 }
@@ -54,8 +56,10 @@ int main(){
   if(type==1 && failure!=3)continue;
   if(type==3 && failure==2)continue;
   opts.mounttype=type;mode=failure;bool fatal=false;int before=attached;
+  retained=new imageDisk;imageDiskList[4]=retained;
   try{restore();}catch(const std::runtime_error&){fatal=true;}
-  assert(fatal && attached==before && !imageDiskList[4]);
+  assert(fatal && attached==before && imageDiskList[4]==retained);
+  delete retained;retained=nullptr;imageDiskList[4]=nullptr;
  }
  for(unsigned type:{1u,2u,3u}){
   opts.mounttype=type;mode=0;int before=attached;restore();

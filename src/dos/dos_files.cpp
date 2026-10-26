@@ -3199,13 +3199,12 @@ void POD_Load_DOS_Files( std::istream& stream )
         ide_slave = false;
         ide_index = -1;
         IDE_Auto(ide_index,ide_slave);
-        if( imageDiskList[d] && ((opts.mounttype==1 && dynamic_cast<imageDiskElToritoFloppy *>(imageDiskList[d])==NULL) || (opts.mounttype!=1 && strcasecmp(imageDiskList[d]->diskname.c_str(), diskname )))) {
-            if (d > 1) IDE_Hard_Disk_Detach(d);
-            imageDiskList[d]->Release();
-            imageDiskList[d] = NULL;
-            imageDiskChange[d] = true;
-        }
-        if (imageDiskList[d])
+        // Keep the occupied native slot alive while constructing its replacement.
+        // Attachment retains the new image before retiring the old slot.
+        const bool reuse_image = imageDiskList[d] &&
+            !((opts.mounttype==1 && dynamic_cast<imageDiskElToritoFloppy *>(imageDiskList[d])==NULL) ||
+              (opts.mounttype!=1 && strcasecmp(imageDiskList[d]->diskname.c_str(), diskname)));
+        if (reuse_image)
             ;
         else if (opts.mounttype==1) {
             imageDisk * image = new imageDiskElToritoFloppy((unsigned char)opts.CDROM_drive, opts.cdrom_sector_offset, opts.floppy_emu_type);
