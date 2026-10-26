@@ -3209,32 +3209,41 @@ void POD_Load_DOS_Files( std::istream& stream )
             ;
         else if (opts.mounttype==1) {
             imageDisk * image = new imageDiskElToritoFloppy((unsigned char)opts.CDROM_drive, opts.cdrom_sector_offset, opts.floppy_emu_type);
-            if (image) AttachToBiosByIndex(image, d);
-            else LOG_MSG("Warning: Cannot restore drive number from El Torito floppy image.\n");
+            if (!image || !AttachToBiosByIndex(image, d)) {
+                delete image;
+                E_Exit("Cannot restore save-state BIOS El Torito image");
+            }
         } else if (opts.mounttype==2) {
 #if !defined(OSFREE)
             imageDiskMemory* image = CreateRamDrive(sizes, 0, d < 2 && sizes[0] == 0, NULL);
-            if (image != NULL && image->Format() == 0x00) AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave);
+            if (!image || image->Format() != 0x00 ||
+                !AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave)) {
+                delete image;
+                E_Exit("Cannot restore save-state BIOS RAM image");
+            }
+#else
+            E_Exit("Cannot restore save-state BIOS RAM image in this build");
 #endif
         } else if (opts.mounttype==3 && *diskname) {
             imageDisk* image = NULL;
-            if (imageDiskVHD::Open(diskname, false, &image)==imageDiskVHD::OPEN_SUCCESS)
-                AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave);
-            else
-                LOG_MSG("Warning: Cannot restore drive number from image file %s\n", diskname);
-            image = NULL;
+            if (imageDiskVHD::Open(diskname, false, &image)!=imageDiskVHD::OPEN_SUCCESS ||
+                !image || !AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave)) {
+                delete image;
+                E_Exit("Cannot restore save-state BIOS VHD image");
+            }
         } else if (!opts.mounttype && *diskname) {
 #if !defined(OSFREE)
             std::vector<std::string> options;
             fatDrive* newDrive = new fatDrive(diskname, opts.bytesector, opts.cylsector, opts.headscyl, opts.cylinders, options);
-            if (newDrive->created_successfully) {
-                imageDisk* image = newDrive->loadedDisk;
-                AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave);
-            } else
-                LOG_MSG("Warning: Cannot restore drive number from image file %s\n", diskname);
-            if (newDrive) delete newDrive;
+            const bool attached = newDrive && newDrive->created_successfully &&
+                newDrive->loadedDisk && AttachToBiosAndIdeByIndex(newDrive->loadedDisk, d,
+                                                               (unsigned char)ide_index, ide_slave);
+            delete newDrive;
+            if (!attached) E_Exit("Cannot restore save-state BIOS disk image");
+#else
+            E_Exit("Cannot restore save-state BIOS disk image in this build");
 #endif
-        }
+        } else E_Exit("Invalid save-state BIOS image reconstruction type");
         if (i==MAX_DISK_IMAGES-1)
             for (auto &it : clist) {
                 ide_slave = false;
