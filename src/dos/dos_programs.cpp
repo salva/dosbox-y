@@ -9976,6 +9976,21 @@ static std::string flagged_sidecar_path(const char *archive)
         path += ".dat";
     return path;
 }
+// Validate the packed DOS timestamp before creating/truncating a destination.
+static bool flagged_timestamp_valid(uint32_t stamp)
+{
+    const unsigned second = (stamp & 31) * 2;
+    const unsigned minute = (stamp >> 5) & 63;
+    const unsigned hour = (stamp >> 11) & 31;
+    const unsigned day = (stamp >> 16) & 31;
+    const unsigned month = (stamp >> 21) & 15;
+    const unsigned year = (stamp >> 25) + 1980;
+    if (second > 59 || minute > 59 || hour > 23 || month < 1 || month > 12)
+        return false;
+    static const unsigned days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    return day >= 1 && day <= days[month - 1] + (month == 2 && leap ? 1 : 0);
+}
 int flagged_backup(char *zip)
 {
     StateFileIO::Scope transfer;
@@ -10087,7 +10102,8 @@ int flagged_restore(char* zip)
 					}
 
 					if (unzLocateFile(zf,g_flagged_files[i],2/*case insensitive*/) == UNZ_OK &&
-						unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0) == UNZ_OK) {
+						unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0) == UNZ_OK &&
+                        flagged_timestamp_valid(file_info.dosDate)) {
 						if (unzOpenCurrentFile(zf) == UNZ_OK) {
 							zip_istreambuf zis(zf);
 
@@ -10096,10 +10112,9 @@ int flagged_restore(char* zip)
                                 // Restore the archived DOS timestamp before writing/closing.
                                 // LocalFile otherwise queries INT 21h on close, which
                                 // executes guest code inside the stopped restore.
-                                const auto &stamp = file_info.tmu_date;
                                 if (!DOS_SetFileDate(handle,
-                                        DOS_PackTime(stamp.tm_hour, stamp.tm_min, stamp.tm_sec),
-                                        DOS_PackDate(stamp.tm_year, stamp.tm_mon + 1, stamp.tm_mday)))
+                                        uint16_t(file_info.dosDate),
+                                        uint16_t(file_info.dosDate >> 16)))
                                     ret = -1;
 								do {
 									uint16_t n = zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer));
