@@ -9958,6 +9958,7 @@ void START_ProgramStart(Program **make)
 }
 #endif
 
+#include "state_file_io.h"
 #define MAX_FLAGS 512
 char *g_flagged_files[MAX_FLAGS]; //global array to hold flagged files
 // Host paths are not fixed-size DOS names. Never alias the state archive when
@@ -9977,6 +9978,7 @@ static std::string flagged_sidecar_path(const char *archive)
 }
 int flagged_backup(char *zip)
 {
+    StateFileIO::Scope transfer;
 	unsigned char buffer[4096];
 	const std::string zipfile = flagged_sidecar_path(zip);
 	int ret = 0;
@@ -10000,36 +10002,51 @@ int flagged_backup(char *zip)
 			remove(zipfile.c_str());
 			zf = zipOpen2_64(zipfile.c_str(),APPEND_STATUS_CREATE,&global_comment,&ffunc);
 		}
+		if (zf == NULL) return -1;
 		if (zf != NULL) {
 			while (i < MAX_FLAGS) {
 				if (g_flagged_files[i] != NULL) {
 					uint16_t handle = 0;
 					if (DOS_FindDevice(("\""+std::string(g_flagged_files[i])+"\"").c_str()) != DOS_DEVICES || !DOS_OpenFile(("\""+std::string(g_flagged_files[i])+"\"").c_str(),0,&handle)) {
 						LOG_MSG(MSG_Get("SHELL_CMD_FILE_NOT_FOUND"),g_flagged_files[i]);
+						ret = -1;
 						i++;
 						continue;
 					}
 
 					zip_fileinfo zi; zipSetCurrentTime(zi);
+                    uint16_t file_time = 0, file_date = 0;
+                    if (!DOS_GetFileDate(handle, &file_time, &file_date)) {
+                        ret = -1;
+                        if (!DOS_CloseFile(handle)) ret = -1;
+                        i++;
+                        continue;
+                    }
+                    zi.tmz_date.tm_sec = (file_time & 31) * 2;
+                    zi.tmz_date.tm_min = (file_time >> 5) & 63;
+                    zi.tmz_date.tm_hour = file_time >> 11;
+                    zi.tmz_date.tm_mday = file_date & 31;
+                    zi.tmz_date.tm_mon = ((file_date >> 5) & 15) - 1;
+                    zi.tmz_date.tm_year = (file_date >> 9) + 1980;
 					if (zipOutOpenFile(zf,g_flagged_files[i],zi,compresssaveparts) == ZIP_OK) {
 						zip_ostreambuf zos(zf);
 
 						do {
 							uint16_t n = sizeof(buffer);
-							DOS_ReadFile(handle,buffer,&n);
+							if (!DOS_ReadFile(handle,buffer,&n)) { ret = -1; break; }
 							if (n == 0) break;
-							if (zos.xsputn((zip_ostreambuf::char_type*)buffer,n) < n) break;
+							if (zos.xsputn((zip_ostreambuf::char_type*)buffer,n) < n) { ret = -1; break; }
 						} while(1);
 
-						zos.close();
-					}
+						if (zos.close() != ZIP_OK) ret = -1;
+					} else ret = -1;
 
-					DOS_CloseFile(handle);
+					if (!DOS_CloseFile(handle)) ret = -1;
 				}
 
 				i++;
 			}
-			zipClose(zf,NULL);
+			if (zipClose(zf,NULL) != ZIP_OK) ret = -1;
 		}
 	}
 
@@ -10038,6 +10055,7 @@ int flagged_backup(char *zip)
 
 int flagged_restore(char* zip)
 {
+    StateFileIO::Scope transfer;
 	unsigned char buffer[4096];
 	unz_file_info64 file_info;
 	const std::string zipfile = flagged_sidecar_path(zip);
@@ -10057,11 +10075,13 @@ int flagged_restore(char* zip)
 #endif
 			zf = unzOpen2_64(zipfile.c_str(),&ffunc);
 		}
+		if (zf == NULL) return -1;
 		if (zf != NULL) {
 			while (i < MAX_FLAGS) {
 				if (g_flagged_files[i] != NULL) {
 					if (DOS_FindDevice(("\""+std::string(g_flagged_files[i])+"\"").c_str()) != DOS_DEVICES) {
 						LOG_MSG(MSG_Get("SHELL_CMD_FILE_NOT_FOUND"),g_flagged_files[i]);
+						ret = -1;
 						i++;
 						continue;
 					}
@@ -10073,23 +10093,31 @@ int flagged_restore(char* zip)
 
 							uint16_t handle=0;
 							if (DOS_CreateFile(("\""+std::string(g_flagged_files[i])+"\"").c_str(),0,&handle)) {
+                                // Restore the archived DOS timestamp before writing/closing.
+                                // LocalFile otherwise queries INT 21h on close, which
+                                // executes guest code inside the stopped restore.
+                                const auto &stamp = file_info.tmu_date;
+                                if (!DOS_SetFileDate(handle,
+                                        DOS_PackTime(stamp.tm_hour, stamp.tm_min, stamp.tm_sec),
+                                        DOS_PackDate(stamp.tm_year, stamp.tm_mon + 1, stamp.tm_mday)))
+                                    ret = -1;
 								do {
 									uint16_t n = zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer));
 									if (n == 0) break;
-									DOS_WriteFile(handle,(uint8_t*)buffer,&n);
-									if (n == 0) break;
+									const uint16_t wanted = n;
+									if (!DOS_WriteFile(handle,(uint8_t*)buffer,&n) || n != wanted) { ret = -1; break; }
 								} while (1);
-								DOS_CloseFile(handle);
-							}
+								if (!DOS_CloseFile(handle)) ret = -1;
+							} else ret = -1;
 
-							zis.close();
-						}
-					}
+							if (zis.close() != ZIP_OK) ret = -1;
+						} else ret = -1;
+					} else ret = -1;
 				}
 
 				i++;
 			}
-			unzClose(zf);
+			if (unzClose(zf) != UNZ_OK) ret = -1;
 		}
 	}
 

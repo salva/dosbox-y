@@ -8,8 +8,16 @@ work = Path(os.environ['SAIVAGE_CARD_WORK_ROOT']) / 'flagged-path-regression'
 work.mkdir(exist_ok=True)
 source = (root / 'src/dos/dos_programs.cpp').read_text()
 body = source[source.index('static std::string flagged_sidecar_path('):source.index('int flagged_backup(')]
-fixture = '#include <string>\n#include <cassert>\n' + body + r'''
+fixture = '#include <string>\n#include <cassert>\n#include "state_file_io.h"\n' + body + r'''
 int main() {
+ assert(!StateFileIO::active());
+ {
+  StateFileIO::Scope outer;
+  assert(StateFileIO::active());
+  try { StateFileIO::Scope inner; throw 1; } catch (int) {}
+  assert(StateFileIO::active());
+ }
+ assert(!StateFileIO::active());
  assert(flagged_sidecar_path("/tmp/first.sav") == "/tmp/first.dat");
  assert(flagged_sidecar_path("/tmp/first") == "/tmp/first.dat");
  assert(flagged_sidecar_path("/tmp/first.SAV") == "/tmp/first.SAV.dat");
@@ -20,6 +28,6 @@ int main() {
 }
 '''
 (work / 'probe.cpp').write_text(fixture)
-subprocess.run(['c++', '-std=c++11', '-Wall', '-Wextra', '-Werror', str(work/'probe.cpp'), '-o', str(work/'probe')], check=True)
+subprocess.run(['c++', '-std=c++11', '-Wall', '-Wextra', '-Werror', '-I', str(root/'include'), str(work/'probe.cpp'), '-o', str(work/'probe')], check=True)
 subprocess.run([str(work/'probe')], check=True)
 print('flagged sidecar host-path separation PASS')

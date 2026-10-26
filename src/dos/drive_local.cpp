@@ -42,6 +42,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
+#include "state_file_io.h"
 #include "dosbox.h"
 #include "dos_inc.h"
 #include "drives.h"
@@ -2866,7 +2867,9 @@ bool LocalFile::Read(uint8_t * data,uint16_t * size) {
 	/* Fake harddrive motion. Inspector Gadget with soundblaster compatible */
 	/* Same for Igor */
 	/* hardrive motion => unmask irq 2. Only do it when it's masked as unmasking is realitively heavy to emulate */
-    if (!IS_PC98_ARCH) {
+	/* State archive reads are host transfers, not guest disk accesses: do not
+     * charge I/O cycles or change the guest PIC mask while saving/restoring. */
+    if (!IS_PC98_ARCH && !StateFileIO::active()) {
         uint8_t mask = IO_Read(0x21);
         if(mask & 0x4 ) IO_Write(0x21,mask&0xfb);
     }
