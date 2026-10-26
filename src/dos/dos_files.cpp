@@ -2878,7 +2878,7 @@ void POD_Load_DOS_Files( std::istream& stream )
             if (!stream || (drive_valid != 0 && drive_valid != 0xff))
                 E_Exit("Invalid save-state DOS drive slot tag");
 			if( drive_valid == 0xff ) {
-                if (Drives[lcv] && lcv<DOS_DRIVES-1) unmount(lcv);
+                if (Drives[lcv] && lcv != ZDRIVE_NUM) unmount(lcv);
                 continue;
             }
 
