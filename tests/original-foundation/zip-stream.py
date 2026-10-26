@@ -39,6 +39,8 @@ int main(int argc,char **argv){
  u=unzOpen64(argv[1]);assert(u);
  assert(zip_verify_member(u,"first")==UNZ_OK);
  assert(zip_verify_member(u,"second")==UNZ_OK);
+ assert(zip_verify_member(u,"SECOND",2)==UNZ_OK);
+ assert(zip_verify_member(u,"SECOND")!=UNZ_OK);
  assert(zip_verify_member(u,"absent")!=UNZ_OK);
  assert(unzClose(u)==UNZ_OK);
  // Actual loader admission loop must finish before any component install.
@@ -85,7 +87,7 @@ LOADER_INTEGRITY_SEAM
  u=unzOpen64(argv[1]);assert(u);
  assert(zip_verify_member(u,"crc")==UNZ_CRCERROR);
  // The actual flagged restore integrity branch must skip destination effects.
- {unzFile zf=u;int i=0,ret=0;const char *g_flagged_files[]={"crc","absent"};
+ {unzFile zf=u;int i=0,ret=0;const char *g_flagged_files[]={"CRC","absent"};
   bool created=false;
   auto restore=[&](){
    while (i<2) {
