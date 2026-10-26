@@ -19,7 +19,7 @@ code=r'''
 void E_Exit(const char*) {throw 1;}
 struct DOS_File {
  uint32_t flags=9;bool open=true;uint16_t attr=1,time=2,date=3;
- long refCtr=4;uint8_t hdrive=5;int seeks=0,closes=0;bool ok=true;
+ long refCtr=4;uint8_t hdrive=3;int seeks=0,closes=0;bool ok=true;
  bool Seek(uint32_t*,int){++seeks;return ok;}
  long close_refs=-1;bool Close(){++closes;close_refs=refCtr;return ok;}
  void LoadState(std::istream&,bool);
@@ -42,6 +42,10 @@ int main(){auto bytes=archive();
  DOS_File f;f.flags=12;std::istringstream s(archive(opened));bool fatal=false;
  try{f.LoadState(s,pop);}catch(int){fatal=true;}
  assert(fatal==!pop && f.flags==12 && f.refCtr==4 && !f.seeks && !f.closes);}
+ for(bool pop:{false,true})for(uint8_t opened:{uint8_t(0),uint8_t(1)}){
+ DOS_File f;f.hdrive=5;std::istringstream s(archive(opened));bool fatal=false;
+ try{f.LoadState(s,pop);}catch(int){fatal=true;}
+ assert(fatal==!pop && f.hdrive==5 && f.refCtr==4 && !f.seeks && !f.closes);}
  for(bool pop:{false,true})for(long refs:{-1L,0L}){DOS_File f;std::istringstream s(archive(1,refs));bool fatal=false;
  try{f.LoadState(s,pop);}catch(int){fatal=true;}assert(fatal && f.flags==9 && f.refCtr==4 && !f.seeks && !f.closes);}
  for(long refs:{0L,1L,2L}){DOS_File f;std::istringstream s(archive(0,refs));f.LoadState(s,false);assert(f.refCtr==refs && f.closes==1 && f.close_refs==1 && !f.seeks);}

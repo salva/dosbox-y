@@ -15,7 +15,7 @@ code = r'''
 #include <initializer_list>
 constexpr unsigned DOS_DRIVES = 2;
 void E_Exit(const char*) { throw 1; }
-struct File { int loads=0; void LoadState(int&, bool pop) { assert(!pop); ++loads; } };
+struct File { int loads=0; unsigned drive=255; void SetDrive(unsigned value){drive=value;} void LoadState(int&, bool pop) { assert(!pop && drive==0); ++loads; } };
 struct Drive {
  int calls=0; bool result=true; File *prepared=nullptr;
  bool FileOpen(File **out, const char*, uint8_t) { ++calls; *out=prepared; return result; }

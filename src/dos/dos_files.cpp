@@ -2588,6 +2588,8 @@ void DOS_File::LoadState( std::istream& stream, bool pop )
 	// record. Duplicate metadata cannot grant different access to that resource.
 	if (saved_flags != flags)
 		E_Exit("Save-state DOS file access mode mismatch");
+	if (saved_drive != hdrive)
+		E_Exit("Save-state DOS file drive identity mismatch");
 	flags = saved_flags;
 	open = saved_open != 0;
 	attr = saved_attr;
@@ -3086,6 +3088,7 @@ void POD_Load_DOS_Files( std::istream& stream )
 				E_Exit("Cannot restore save-state DOS file: drive unavailable");
 			if (!Drives[file_drive]->FileOpen(&Files[lcv], file_name, file_flags) || !Files[lcv])
 				E_Exit("Cannot restore save-state DOS file: native open failed");
+			Files[lcv]->SetDrive(file_drive);
 			Files[lcv]->LoadState(stream, false);
 		}
 	} else {
