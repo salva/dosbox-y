@@ -319,8 +319,6 @@ Int13Status imageDiskMemory::Write_AbsoluteSector(uint32_t sectnum, const void *
 			LOG_MSG("Could not allocate memory in Write_AbsoluteSector for sector %lu.\n", (unsigned long)sectnum);
 			return Int13Status::ControllerFailure;
 		}
-		//save the memory chunk address within the memory map
-		ChunkMap[chunknum] = datalocation;
 		//initialize the memory chunk to all zeros (since we are only writing to a single sector within this chunk)
 		memset((void*)datalocation, 0, chunk_size);
 		//if there is an underlying image, read from the underlying image to fill the chunk
@@ -332,10 +330,17 @@ Int13Status imageDiskMemory::Write_AbsoluteSector(uint32_t sectnum, const void *
 			//copy the sectors
 			uint8_t* target = datalocation;
 			for (uint32_t i = 0; i < sectorsToCopy; i++) {
-				this->underlyingImage->Read_AbsoluteSector(i + chunkFirstSector, target);
-				datalocation += this->sector_size;
+				const auto status = this->underlyingImage->Read_AbsoluteSector(i + chunkFirstSector, target);
+				if (status != Int13Status::NoError) {
+					free(datalocation);
+					return status;
+				}
+				target += this->sector_size;
 			}
 		}
+		// Publish only the complete chunk. A failed backing read leaves no
+		// partly copied data for a subsequent read or write to consume.
+		ChunkMap[chunknum] = datalocation;
 	}
 
 	//update the address to the specific sector within the chunk
