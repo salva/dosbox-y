@@ -18,7 +18,8 @@ code=r'''
 using Bits=long;
 #define READ_POD(p,v) stream.read(reinterpret_cast<char*>(p),sizeof(v))
 void E_Exit(const char*){throw 1;}
-struct File{Bits refCtr=7;};
+struct File{virtual ~File()=default; Bits refCtr=7;};
+struct DOS_Device:File{};
 void load(std::istream&stream,File**Files){for(unsigned lcv=0;lcv<1;++lcv){
 SEAM
 (void)file_name;(void)file_namelen;(void)file_drive;(void)file_flags;
@@ -34,12 +35,15 @@ int main(){
  try{drive(in);}catch(int){fatal=true;}assert(fatal==(n>=26));assert(ZDRIVE_NUM==(n<26?n:25));}
  {ZDRIVE_NUM=25;std::istringstream in;bool fatal=false;try{drive(in);}catch(int){fatal=true;}assert(fatal && ZDRIVE_NUM==25);}
 for(unsigned tag=0;tag<256;++tag){
- File f;File *files[]={&f};std::string data(1,char(tag));Bits refs=12;
+ DOS_Device f;File *files[]={&f};std::string data(1,char(tag));Bits refs=12;
  data.append(reinterpret_cast<char*>(&refs),sizeof(refs));std::istringstream in(data);bool fatal=false;
  try{load(in,files);}catch(int){fatal=true;}
  assert(fatal==(tag!=0 && tag!=0xfe && tag!=0xff));assert(f.refCtr==(tag==0xfe?12:7));
  }
- for(size_t n=0;n<1+sizeof(Bits);++n){File f;File *files[]={&f};std::string data(1,char(0xfe));Bits refs=12;
+ {File f;File *files[]={&f};std::string data(1,char(0xfe));Bits refs=12;
+ data.append(reinterpret_cast<char*>(&refs),sizeof(refs));std::istringstream in(data);bool fatal=false;
+ try{load(in,files);}catch(int){fatal=true;}assert(fatal && f.refCtr==7);}
+ for(size_t n=0;n<1+sizeof(Bits);++n){DOS_Device f;File *files[]={&f};std::string data(1,char(0xfe));Bits refs=12;
  data.append(reinterpret_cast<char*>(&refs),sizeof(refs));std::istringstream in(data.substr(0,n));bool fatal=false;
  try{load(in,files);}catch(int){fatal=true;}assert(fatal && f.refCtr==7);}
  {File *files[]={nullptr};std::istringstream in(std::string(1,char(0xfe)));bool fatal=false;

@@ -3032,10 +3032,11 @@ void POD_Load_DOS_Files( std::istream& stream )
 			READ_POD( &file_valid, file_valid );
 			if (!stream || (file_valid != 0 && file_valid != 0xfe && file_valid != 0xff))
 				E_Exit("Invalid save-state DOS file slot tag");
-			// A system slot must already have a native object. Device identity
-			// reconciliation belongs to resource admission, not this byte transfer.
+			// The system-slot branch reuses a native DOS device; a host file
+			// at the same index is not that resource. The legacy record carries
+			// no device name, so exact device identity still needs owner admission.
 			if( file_valid == 0xfe ) {
-				if (!Files[lcv])
+				if (!dynamic_cast<DOS_Device *>(Files[lcv]))
 					E_Exit("Save-state DOS system file identity mismatch");
 				Bits refs = 0;
 				READ_POD( &refs, refs );
