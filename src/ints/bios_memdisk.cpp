@@ -155,8 +155,6 @@ imageDiskMemory::imageDiskMemory(imageDisk* underlyingImage) : imageDisk(ID_MEMO
 void imageDiskMemory::init(diskGeo diskParams, bool isHardDrive, imageDisk* underlyingImage) {
 	//initialize internal variables in case we fail out
 	this->total_sectors = 0;
-	this->underlyingImage = underlyingImage;
-	if (underlyingImage) underlyingImage->Addref();
 
 	//calculate the total number of sectors on the drive, and check for overflows
 	uint64_t absoluteSectors = (uint64_t)diskParams.cylcount * (uint64_t)diskParams.headscyl;
@@ -200,6 +198,10 @@ void imageDiskMemory::init(diskGeo diskParams, bool isHardDrive, imageDisk* unde
 	}
 	//clear memory map
 	memset((void*)ChunkMap, 0, total_chunks * sizeof(uint8_t*));
+	// Failed initialization has no backing reference for the inactive
+	// destructor to retire. Acquire it only after the native map exists.
+	this->underlyingImage = underlyingImage;
+	if (underlyingImage) underlyingImage->Addref();
 
 	//set internal variables
 	this->diskname = "RAM drive";
