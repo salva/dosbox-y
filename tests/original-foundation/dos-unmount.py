@@ -11,6 +11,8 @@ c = s.index('            if (!Drives[lcv])\n                E_Exit("Cannot resto
 d = s.index('            Drives[lcv]->LoadState(stream);', c) + len('            Drives[lcv]->LoadState(stream);')
 e = s.index('                if (Drives[lcv] && lcv != ZDRIVE_NUM) unmount(lcv);', b)
 f = s.index('\n', e)
+g = s.index('        if (ZDRIVE_CUR != ZDRIVE_NUM) {', b)
+h = s.index('\n\t\t// 1. Do drives first', g)
 w = Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'dos-unmount'
 w.mkdir(exist_ok=True)
 code = r'''
@@ -31,6 +33,7 @@ void mem_writeb(int,int){++writes;}
 BODY
 void consume(int lcv){int stream=0;CONSUME}
 void absent(int lcv,int ZDRIVE_NUM){ABSENT}
+void relocate(int ZDRIVE_CUR,int ZDRIVE_NUM){RELOCATE}
 int main(){
  bool fatal=false;try{consume(2);}catch(const std::runtime_error&){fatal=true;}
  assert(fatal);
@@ -60,8 +63,16 @@ int main(){
  assert(!Drives[DOS_DRIVES-1] && menus==4 && detaches==2);
  Drives[2]=&ordinary;absent(2,DOS_DRIVES-1);
  assert(!Drives[2] && menus==5);
+ // Destination retirement must precede system-drive relocation.
+ Drives[3]=&cd;Drives[25]=&ordinary;result=1;
+ bool refused=false;try{relocate(25,3);}catch(const std::runtime_error&){refused=true;}
+ assert(refused && Drives[3]==&cd && Drives[25]==&ordinary && menus==5);
+ result=0;relocate(25,3);
+ assert(Drives[3]==&ordinary && !Drives[25] && menus==6 && detaches==3);
+ int before=calls;relocate(3,3);assert(calls==before && Drives[3]==&ordinary);
+ relocate(3,4);assert(!Drives[3] && Drives[4]==&ordinary && calls==before);
 }
-'''.replace('BODY',s[a:b]).replace('CONSUME',s[c:d]).replace('ABSENT',s[e:f])
+'''.replace('BODY',s[a:b]).replace('CONSUME',s[c:d]).replace('ABSENT',s[e:f]).replace('RELOCATE',s[g:h])
 (w/'test.cpp').write_text(code)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(w/'test.cpp'),'-o',str(w/'test')],check=True)
 subprocess.run([str(w/'test')],check=True)

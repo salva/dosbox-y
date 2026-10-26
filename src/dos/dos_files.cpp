@@ -2863,6 +2863,8 @@ void POD_Load_DOS_Files( std::istream& stream )
     ZDRIVE_NUM = saved_zdrive;
 	if (!dos_kernel_disabled) {
         if (ZDRIVE_CUR != ZDRIVE_NUM) {
+            // Do not overwrite a live native owner when relocating Z.
+            if (Drives[ZDRIVE_NUM]) unmount(ZDRIVE_NUM);
             Drives[ZDRIVE_NUM] = Drives[ZDRIVE_CUR];
             Drives[ZDRIVE_CUR] = nullptr;
         }
