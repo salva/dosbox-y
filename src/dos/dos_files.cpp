@@ -2919,7 +2919,15 @@ void POD_Load_DOS_Files( std::istream& stream )
 #if !defined(OSFREE)
                         if (strlen(overlaydir)) {
                             uint8_t error = 0;
-                            Drives[lcv]=new Overlay_Drive(dynamic_cast<localDrive*>(Drives[lcv])->getBasedir(),overlaydir,oalloc.bytes_sector,oalloc.sectors_cluster,oalloc.total_clusters,oalloc.free_clusters,oalloc.mediaid,error,options);
+                            // Retain the base until its native replacement succeeds.
+                            DOS_Drive *base = Drives[lcv];
+                            DOS_Drive *overlay = new Overlay_Drive(dynamic_cast<localDrive*>(base)->getBasedir(),overlaydir,oalloc.bytes_sector,oalloc.sectors_cluster,oalloc.total_clusters,oalloc.free_clusters,oalloc.mediaid,error,options);
+                            if (error) {
+                                delete overlay;
+                                E_Exit("Cannot restore save-state DOS overlay: native reconstruction failed");
+                            }
+                            delete base;
+                            Drives[lcv] = overlay;
                         }
 #endif
                     } else
