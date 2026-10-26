@@ -3006,11 +3006,9 @@ void POD_Load_DOS_Files( std::istream& stream )
 			if( Drives[lcv] ) Drives[lcv]->LoadState(stream);
 		}
 
-		//Alien Carnage - game creates and unlinks temp files
-		//Here are two situations
-		//1. Game already unlinked temp file, but information about file is still in Files[] and we saved it. In this case we must only pop old data from stream by loading. This is fixed.
-		//2. Game still did not unlink file, We saved this information. Then was game restarted and temp files were removed. Then we try load save state, but we don't have temp file. This is not fixed
-		DOS_File *dummy = NULL;
+		// Required saved handles must be reconstructed. A missing drive or failed
+		// native open is not a successful restore with a discarded file record:
+		// earlier owners may already be installed, so failure disposes the session.
 
 		for( unsigned int lcv=0; lcv<DOS_FILES; lcv++ ) {
 			uint8_t file_valid = 0;
@@ -3073,30 +3071,11 @@ void POD_Load_DOS_Files( std::istream& stream )
 
 
 			// NOTE: Must open regardless to get 'new' DOS_File class
-			if (file_drive >= DOS_DRIVES || Drives[file_drive] == nullptr) {
-				LOG_MSG("WARNING: Save-state restore skipped file handle %u for drive %u ('%s'): drive entry missing during DOS file restore",
-					(unsigned int)lcv,
-					(unsigned int)file_drive,
-					file_name);
-				Files[lcv] = nullptr;
-			}
-			else {
-				Drives[file_drive]->FileOpen( &Files[lcv], file_name, file_flags );
-			}
-
-			if( Files[lcv] ) {
-				Files[lcv]->LoadState(stream, false);
-			} else {
-				//Alien carnage ->pop data for invalid file from stream
-				if (dummy == NULL) {
-					dummy = new LocalFile();
-				}
-				dummy->LoadState(stream, true);
-			};
-		}
-
-		if (dummy != NULL) {
-			delete dummy;
+			if (file_drive >= DOS_DRIVES || Drives[file_drive] == nullptr)
+				E_Exit("Cannot restore save-state DOS file: drive unavailable");
+			if (!Drives[file_drive]->FileOpen(&Files[lcv], file_name, file_flags) || !Files[lcv])
+				E_Exit("Cannot restore save-state DOS file: native open failed");
+			Files[lcv]->LoadState(stream, false);
 		}
 	} else {
         for( int i=2; i<DOS_DRIVES+2; i++ ) {
