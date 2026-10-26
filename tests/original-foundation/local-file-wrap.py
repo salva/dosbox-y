@@ -52,4 +52,13 @@ int main() {
 (w/'test.cpp').write_text(code)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(w/'test.cpp'),'-o',str(w/'test')],check=True)
 subprocess.run([str(w/'test')],check=True)
-print('Actual POSIX native reopen wrapping block real descriptor ownership ASan/UBSan PASS')
+# Windows CRT owns the OS handle after _open_osfhandle; _wfdopen failure
+# must release that CRT descriptor, not CloseHandle the transferred handle.
+wa = s.index('        hand = _wfdopen(nHandle, (flags&0xf)==OPEN_WRITE?')
+wb = s.index('\n#else', wa)
+windows = s[wa:wb].replace('_wfdopen', 'wrap').replace('_close', 'close').replace('nHandle', 'fd')
+windows_code = code.replace(s[a:b], windows)
+(w/'windows-ownership.cpp').write_text(windows_code)
+subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(w/'windows-ownership.cpp'),'-o',str(w/'windows-ownership')],check=True)
+subprocess.run([str(w/'windows-ownership')],check=True)
+print('Actual POSIX and Windows CRT wrapping blocks descriptor ownership ASan/UBSan PASS; Windows native build unqualified')

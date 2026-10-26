@@ -1651,6 +1651,12 @@ bool localDrive::FileOpen(DOS_File * * file,const char * name,uint32_t flags) {
         int nHandle = _open_osfhandle((intptr_t)handle, _O_RDONLY);
         if (nHandle == -1) {CloseHandle(handle);return false;}
         hand = _wfdopen(nHandle, (flags&0xf)==OPEN_WRITE?_HT("wb"):type);
+        if (!hand) {
+            const int saved_errno = errno;
+            _close(nHandle);
+            errno = saved_errno;
+            return false;
+        }
 #else
         uint16_t unix_mode = (flags&0xf)==OPEN_READ||(flags&0xf)==OPEN_READ_NO_MOD?O_RDONLY:((flags&0xf)==OPEN_WRITE?O_WRONLY:O_RDWR);
         int fd = open(host_name, unix_mode);
