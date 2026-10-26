@@ -3203,6 +3203,11 @@ bool LocalFile::UpdateDateTimeFromHost(void) {
 }
 
 bool LocalFile::UpdateLocalDateTime(void) {
+    // A transfer may flush another live handle as well as its own destination.
+    // Never enter guest INT 21h from either path during stopped state I/O.
+    // Earlier file effects may already exist, so this is fatal, not refusal.
+    if (StateFileIO::active())
+        E_Exit("State file transfer requires guest timestamp callback; dispose session");
     time_t timet = ::time(NULL);
     const struct tm *host_tm = localtime(&timet);
     if (!host_tm) return false;
