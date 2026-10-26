@@ -751,16 +751,15 @@ void SaveState::load(size_t slot) const { //throw (Error)
 			buffer[length]='\0';
 			{
 				char tmp[32];
-				int saved_mb = length ? (atoi(buffer)*4096/1024/1024) : 0;
 				int current_mb = (int)MEM_TotalPages()*4096/1024/1024;
-				snprintf(tmp,sizeof(tmp),"%d MB",saved_mb);
-				loadstate_detail_saved = tmp;
+				// Mismatch text is not an admitted page count. Do not parse and
+				// multiply untrusted input just to format a refusal diagnostic.
+				loadstate_detail_saved = length ? std::string(buffer) + " pages" : "(none)";
 				snprintf(tmp,sizeof(tmp),"%d MB",current_mb);
 				loadstate_detail_current = tmp;
 			}
 			if(!force_load_state&&!loadstateconfirm(2)) {
-				int size=atoi(buffer)*4096/1024/1024;
-				LOG_MSG("Aborted. Check your memory size: %d MB", size);
+				LOG_MSG("Aborted. Check your memory size: %s pages", buffer);
 				load_err=true;
 				goto done;
 			}
