@@ -21,7 +21,7 @@ struct DOS_File {
  uint32_t flags=9;bool open=true;uint16_t attr=1,time=2,date=3;
  long refCtr=4;uint8_t hdrive=5;int seeks=0,closes=0;bool ok=true;
  bool Seek(uint32_t*,int){++seeks;return ok;}
- bool Close(){++closes;return ok;}
+ long close_refs=-1;bool Close(){++closes;close_refs=refCtr;return ok;}
  void LoadState(std::istream&,bool);
 };
 template<class T>void put(std::ostream&s,T v){s.write(reinterpret_cast<char*>(&v),sizeof(v));}
@@ -40,7 +40,9 @@ int main(){auto bytes=archive();
  try{f.LoadState(s,false);}catch(int){fatal=true;}assert(fatal && f.flags==12 && f.seeks==1);}
  for(bool pop:{false,true})for(long refs:{-1L,0L}){DOS_File f;std::istringstream s(archive(1,refs));bool fatal=false;
  try{f.LoadState(s,pop);}catch(int){fatal=true;}assert(fatal && f.flags==9 && f.refCtr==4 && !f.seeks && !f.closes);}
- {DOS_File f;std::istringstream s(archive(0,0));f.LoadState(s,false);assert(f.refCtr==0 && f.closes==1 && !f.seeks);}
+ for(long refs:{0L,1L,2L}){DOS_File f;std::istringstream s(archive(0,refs));f.LoadState(s,false);assert(f.refCtr==refs && f.closes==1 && f.close_refs==1 && !f.seeks);}
+ {DOS_File f;f.ok=false;std::istringstream s(archive(0,2));bool fatal=false;
+ try{f.LoadState(s,false);}catch(int){fatal=true;}assert(fatal && f.closes==1 && f.close_refs==1 && f.refCtr==2);}
  {DOS_File f;std::ostringstream out;put(out,uint32_t(0xffffffff));std::istringstream s(out.str());bool fatal=false;
  try{f.LoadState(s,false);}catch(int){fatal=true;}assert(fatal && !f.seeks);}
 }

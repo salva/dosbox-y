@@ -2597,8 +2597,13 @@ void DOS_File::LoadState( std::istream& stream, bool pop )
 		const uint32_t expected = seek_pos;
 		if (!Seek(&seek_pos, DOS_SEEK_SET) || seek_pos != expected)
 			E_Exit("Cannot restore save-state DOS file position");
-	} else if (!Close()) {
-		E_Exit("Cannot close save-state DOS file");
+	} else {
+		// Release the newly reopened resource regardless of archived logical
+		// references: LocalFile closes its FILE only at the last reference.
+		refCtr = 1;
+		const bool closed = Close();
+		refCtr = saved_refs;
+		if (!closed) E_Exit("Cannot close save-state DOS file");
 	}
 }
 
