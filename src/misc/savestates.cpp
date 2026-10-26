@@ -31,6 +31,7 @@
 #include "zip.h"
 #include "unzip.h"
 #include "ioapi.h"
+#include "state_archive_output.h"
 #include "vs/zlib/contrib/minizip/zip.c"
 #include "vs/zlib/contrib/minizip/unzip.c"
 #include "vs/zlib/contrib/minizip/ioapi.c"
@@ -479,17 +480,13 @@ void SaveState::save(size_t slot) { //throw (Error)
 	std::string save=use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav";
     LOG_MSG("Saving state to slot: %d (%s)", (int)slot + 1, save.c_str());
 
-	zipFile zf;
+    StateArchiveOutput output(save);
+	zipFile zf = nullptr;
 	{
 		const char *global_comment = "DOSBox-X save state";
 		zlib_filefunc64_def ffunc;
-#ifdef USEWIN32IOAPI
-		fill_win32_filefunc64A(&ffunc);
-#else
-		fill_fopen64_filefunc(&ffunc);
-#endif
-		remove(save.c_str());
-		zf = zipOpen2_64(save.c_str(),APPEND_STATUS_CREATE,&global_comment,&ffunc);
+        if (output.prepare(ffunc))
+		    zf = zipOpen2_64(save.c_str(),APPEND_STATUS_CREATE,&global_comment,&ffunc);
 	}
 	if (zf == NULL) { save_err = true; goto done; }
 
@@ -583,7 +580,11 @@ done:
 		if (errclose != ZIP_OK) save_err = true;
 	}
 
-	if (!save_err && !dos_kernel_disabled) flagged_backup((char *)save.c_str());
+	if (!save_err && !dos_kernel_disabled && flagged_backup((char *)save.c_str()) != 0)
+        save_err = true;
+    // A failed serializer/ZIP close/sidecar must not replace the prior state.
+    // Sidecar publication is separate; failure here can leave a newer sidecar.
+    if (!save_err && !output.publish()) save_err = true;
 
 	if (save_err)
 		notifyError(MSG_Get("SAVE_FAILED"));

@@ -156,6 +156,7 @@ extern bool int13_enable_48bitLBA;
 #include "zip.h"
 #include "unzip.h"
 #include "ioapi.h"
+#include "misc/state_archive_output.h"
 #include "zipcppstdbuf.h"
 
 #if defined(WIN32)
@@ -10007,16 +10008,12 @@ int flagged_backup(char *zip)
 	i=0;
 	while (i < MAX_FLAGS && g_flagged_files[i] == NULL) i++;
 	if (i < MAX_FLAGS) {
+		StateArchiveOutput output(zipfile);
 		zipFile zf;
 		{
 			const char *global_comment = "DOSBox-X flagged file save state";
 			zlib_filefunc64_def ffunc;
-#ifdef USEWIN32IOAPI
-			fill_win32_filefunc64A(&ffunc);
-#else
-			fill_fopen64_filefunc(&ffunc);
-#endif
-			remove(zipfile.c_str());
+            if (!output.prepare(ffunc)) return -1;
 			zf = zipOpen2_64(zipfile.c_str(),APPEND_STATUS_CREATE,&global_comment,&ffunc);
 		}
 		if (zf == NULL) return -1;
@@ -10064,6 +10061,7 @@ int flagged_backup(char *zip)
 				i++;
 			}
 			if (zipClose(zf,NULL) != ZIP_OK) ret = -1;
+            if (ret == 0 && !output.publish()) ret = -1;
 		}
 	}
 
