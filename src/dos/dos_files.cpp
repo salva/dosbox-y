@@ -2837,7 +2837,7 @@ imageDiskMemory* CreateRamDrive(Bitu sizes[], const int reserved_cylinders, cons
 #endif
 
 void unmount(int lcv) {
-    if (lcv < 0 || lcv >= DOS_DRIVES-1)
+    if (lcv < 0 || lcv >= DOS_DRIVES)
         E_Exit("Cannot restore save-state DOS drive: invalid unmount slot");
     if (!Drives[lcv]) return;
     const isoDrive* cdrom = dynamic_cast<isoDrive*>(Drives[lcv]);

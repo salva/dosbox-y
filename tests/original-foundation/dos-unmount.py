@@ -27,7 +27,7 @@ void mem_writeb(int,int){++writes;}
 BODY
 int main(){
  Drive ordinary;isoDrive cd;
- for(int slot:{-1,DOS_DRIVES-1,DOS_DRIVES}){
+ for(int slot:{-1,DOS_DRIVES}){
   bool fatal=false;try{unmount(slot);}catch(const std::runtime_error&){fatal=true;}
   assert(fatal && calls==0);
  }
@@ -43,6 +43,8 @@ int main(){
  assert(!Drives[2] && detaches==1 && menus==1 && writes==1);
  Drives[2]=&ordinary;unmount(2);
  assert(!Drives[2] && detaches==1 && menus==2 && writes==2);
+ Drives[DOS_DRIVES-1]=&ordinary;unmount(DOS_DRIVES-1);
+ assert(!Drives[DOS_DRIVES-1] && menus==3 && writes==3);
 }
 '''.replace('BODY',s[a:b])
 (w/'test.cpp').write_text(code)
