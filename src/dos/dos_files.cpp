@@ -2956,6 +2956,13 @@ void POD_Load_DOS_Files( std::istream& stream )
                         Drives[lcv] = new cdromDrive('A'+lcv,dinfo+6,lalloc.bytes_sector,lalloc.sectors_cluster,lalloc.total_clusters,lalloc.free_clusters,lalloc.mediaid,error,options);
 #endif
                     }
+                    // Match ordinary MOUNT: error 5 is limited CD support,
+                    // all other constructor errors are failed native owners.
+                    if (error && error != 5) {
+                        delete Drives[lcv];
+                        Drives[lcv] = nullptr;
+                        E_Exit("Cannot restore save-state DOS CD drive: native reconstruction failed");
+                    }
                     if (Drives[lcv]) {
                         DOS_EnableDriveMenu('A'+lcv);
                         mem_writeb(Real2Phys(dos.tables.mediaid)+lcv*dos.tables.dpb_size,lalloc.mediaid);
@@ -2969,6 +2976,11 @@ void POD_Load_DOS_Files( std::istream& stream )
                     if (found!=std::string::npos)
                         str=str.substr(0,found);
                     Drives[lcv]=new physfsDrive('A'+lcv,(":"+str+"\\").c_str(),lalloc.bytes_sector,lalloc.sectors_cluster,lalloc.total_clusters,lalloc.free_clusters,lalloc.mediaid,error,options);
+                    if (error) {
+                        delete Drives[lcv];
+                        Drives[lcv] = nullptr;
+                        E_Exit("Cannot restore save-state DOS PhysFS drive: native reconstruction failed");
+                    }
                     if (Drives[lcv]) {
                         if (strlen(overlaydir)) dynamic_cast<physfsDrive*>(Drives[lcv])->setOverlaydir(overlaydir);
                         DOS_EnableDriveMenu('A'+lcv);
