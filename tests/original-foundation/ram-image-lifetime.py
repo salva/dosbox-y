@@ -22,7 +22,7 @@ code = r'''
 #include <cstring>
 #define LOG_MSG(...) ((void)0)
 struct diskGeo {
- uint32_t cylcount=2,headscyl=2,secttrack=2,bytespersect=512;
+ uint16_t cylcount=2,headscyl=2,secttrack=2,bytespersect=512;
 };
 struct imageDisk {
  int refs=1;
@@ -50,7 +50,8 @@ int main(){
  {imageDiskMemory image;diskGeo g;g.cylcount=0;image.init(g,true,&backing);
   assert(!image.active && backing.refs==1);}
  assert(backing.refs==1);
- {imageDiskMemory image;diskGeo g;g.cylcount=0xffffffff;g.headscyl=0xffffffff;
+ {imageDiskMemory image;diskGeo g;g.cylcount=65535;g.headscyl=65535;
+  g.secttrack=65535;
   image.init(g,true,&backing);assert(!image.active && backing.refs==1);}
  assert(backing.refs==1);
  fail_map=true;
