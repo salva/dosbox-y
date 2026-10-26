@@ -2837,14 +2837,17 @@ imageDiskMemory* CreateRamDrive(Bitu sizes[], const int reserved_cylinders, cons
 #endif
 
 void unmount(int lcv) {
-    if (!Drives[lcv] || lcv>=DOS_DRIVES-1) return;
+    if (lcv < 0 || lcv >= DOS_DRIVES-1)
+        E_Exit("Cannot restore save-state DOS drive: invalid unmount slot");
+    if (!Drives[lcv]) return;
     const isoDrive* cdrom = dynamic_cast<isoDrive*>(Drives[lcv]);
     if (DriveManager::UnmountDrive(lcv) == 0) {
         if (cdrom) IDE_CDROM_Detach(lcv);
         Drives[lcv]=nullptr;
         DOS_EnableDriveMenu('A'+lcv);
         mem_writeb(Real2Phys(dos.tables.mediaid)+lcv*dos.tables.dpb_size,0);
-    }
+    } else
+        E_Exit("Cannot restore save-state DOS drive: native unmount failed");
 }
 
 void POD_Load_DOS_Files( std::istream& stream )
