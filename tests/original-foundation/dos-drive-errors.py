@@ -18,6 +18,9 @@ kernel_failure = s[kernel_start + len('                } else {'):kernel_end].sp
 fat_end = s.index('            if (!Drives[lcv])', iso_end)
 fat_start = s.rindex('                    } else {', iso_end, fat_end)
 fat_failure = s[fat_start + len('                    } else {'):fat_end].split('                    }', 1)[0]
+ram_start = s.index('                        } else {', s.index('newDrive = new fatDrive(image, options);', iso_end))
+ram_end = s.index('                    } else if (opts.mounttype==3', ram_start)
+ram_failure = s[ram_start + len('                        } else {'):ram_end].rsplit('}', 1)[0]
 w = Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'dos-drive-errors'
 w.mkdir(exist_ok=True)
 code = r'''
@@ -31,6 +34,7 @@ void cd(int error){int lcv=0;CD}
 void physfs(int error){int lcv=0;PHYSFS}
 void iso_failure(Drive *newDrive){ISO_FAILURE}
 void kernel_failure(Drive *newDrive){KERNEL_FAILURE}
+void ram_failure(Drive *image){RAM_FAILURE}
 void fat_failure(Drive *newDrive){FAT_FAILURE}
 int main(){
  {int before=retired;bool fatal=false;
@@ -39,6 +43,11 @@ int main(){
   before=retired;fatal=false;
   try{kernel_failure(new Drive);}catch(const std::runtime_error&){fatal=true;}
   assert(fatal && retired==before+1);
+  for (Drive *candidate : {new Drive, static_cast<Drive *>(nullptr)}) {
+   before=retired;
+   ram_failure(candidate);
+   assert(retired==before+(candidate?1:0));
+  }
   for (Drive *candidate : {new Drive, static_cast<Drive *>(nullptr)}) {
    before=retired;fatal=false;
    try{fat_failure(candidate);}catch(const std::runtime_error&){fatal=true;}
@@ -58,7 +67,7 @@ int main(){
   else {assert(Drives[0] && retired==before);delete Drives[0];}
  }
 }
-'''.replace('CD',s[a:b]).replace('PHYSFS',s[c:d]).replace('ISO_FAILURE', iso_failure).replace('KERNEL_FAILURE', kernel_failure).replace('FAT_FAILURE', fat_failure)
+'''.replace('CD',s[a:b]).replace('PHYSFS',s[c:d]).replace('ISO_FAILURE', iso_failure).replace('KERNEL_FAILURE', kernel_failure).replace('FAT_FAILURE', fat_failure).replace('RAM_FAILURE', ram_failure)
 (w/'test.cpp').write_text(code)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(w/'test.cpp'),'-o',str(w/'test')],check=True)
 subprocess.run([str(w/'test')],check=True)

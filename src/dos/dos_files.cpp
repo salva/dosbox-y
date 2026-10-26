@@ -3025,6 +3025,9 @@ void POD_Load_DOS_Files( std::istream& stream )
                             image->Addref();
                             newDrive = new fatDrive(image, options);
                             image->Release();
+                        } else {
+                            // Failed formatting never transfers this unreferenced image.
+                            delete image;
                         }
                     } else if (opts.mounttype==3 && *(dinfo+9)) {
                         imageDisk* vhdImage = NULL;
