@@ -2830,8 +2830,8 @@ void POD_Save_DOS_Files( std::ostream& stream )
 
 void DOS_EnableDriveMenu(char drv);
 void IDE_Auto(signed char &index,bool &slave);
-bool AttachToBiosByLetter(imageDisk* image, const char drive);
-bool AttachToBiosAndIdeByLetter(imageDisk* image, const char drive, const unsigned char ide_index, const bool ide_slave);
+bool AttachToBiosByIndex(imageDisk* image, const unsigned char bios_drive_index);
+bool AttachToBiosAndIdeByIndex(imageDisk* image, const unsigned char bios_drive_index, const unsigned char ide_index, const bool ide_slave);
 #if !defined(OSFREE)
 imageDiskMemory* CreateRamDrive(Bitu sizes[], const int reserved_cylinders, const bool forceFloppy, Program* obj);
 #endif
@@ -3209,17 +3209,17 @@ void POD_Load_DOS_Files( std::istream& stream )
             ;
         else if (opts.mounttype==1) {
             imageDisk * image = new imageDiskElToritoFloppy((unsigned char)opts.CDROM_drive, opts.cdrom_sector_offset, opts.floppy_emu_type);
-            if (image) AttachToBiosByLetter(image, 'A'+d);
+            if (image) AttachToBiosByIndex(image, d);
             else LOG_MSG("Warning: Cannot restore drive number from El Torito floppy image.\n");
         } else if (opts.mounttype==2) {
 #if !defined(OSFREE)
             imageDiskMemory* image = CreateRamDrive(sizes, 0, d < 2 && sizes[0] == 0, NULL);
-            if (image != NULL && image->Format() == 0x00) AttachToBiosAndIdeByLetter(image, d, (unsigned char)ide_index, ide_slave);
+            if (image != NULL && image->Format() == 0x00) AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave);
 #endif
         } else if (opts.mounttype==3 && *diskname) {
             imageDisk* image = NULL;
             if (imageDiskVHD::Open(diskname, false, &image)==imageDiskVHD::OPEN_SUCCESS)
-                AttachToBiosAndIdeByLetter(image, 'A'+d, (unsigned char)ide_index, ide_slave);
+                AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave);
             else
                 LOG_MSG("Warning: Cannot restore drive number from image file %s\n", diskname);
             image = NULL;
@@ -3229,7 +3229,7 @@ void POD_Load_DOS_Files( std::istream& stream )
             fatDrive* newDrive = new fatDrive(diskname, opts.bytesector, opts.cylsector, opts.headscyl, opts.cylinders, options);
             if (newDrive->created_successfully) {
                 imageDisk* image = newDrive->loadedDisk;
-                AttachToBiosAndIdeByLetter(image, 'A'+d, (unsigned char)ide_index, ide_slave);
+                AttachToBiosAndIdeByIndex(image, d, (unsigned char)ide_index, ide_slave);
             } else
                 LOG_MSG("Warning: Cannot restore drive number from image file %s\n", diskname);
             if (newDrive) delete newDrive;

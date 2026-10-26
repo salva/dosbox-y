@@ -6,7 +6,7 @@ import subprocess
 root = Path(__file__).resolve().parents[2]
 s = (root / 'src/dos/dos_programs.cpp').read_text()
 a = s.index('bool AttachToBiosByIndex(')
-b = s.index('bool AttachToBiosAndIdeByIndex(', a)
+b = s.index('bool AttachToBiosByLetter(', a)
 w = Path(os.environ['SAIVAGE_CARD_WORK_ROOT']) / 'bios-image-attachment'
 w.mkdir(exist_ok=True)
 code = r'''
@@ -25,6 +25,8 @@ void IDE_Hard_Disk_Detach(unsigned){++detached;}
 void FDC_AssignINT13Disk(unsigned){++fdc;}
 void incrementFDD(){++fdd;}
 void updateFloppyDPT(){++dpt;}
+void IDE_Hard_Disk_Attach(signed char, bool, unsigned){}
+void updateDPT(){}
 PRIMITIVE
 int main(){
  auto incoming=new imageDisk;
@@ -43,6 +45,13 @@ int main(){
  imageDiskList[2]->Release();imageDiskList[2]=nullptr;
  imageDiskList[0]->Release();imageDiskList[0]=nullptr;
  assert(retired==2);
+ // Restore a later saved BIOS slot even when an earlier slot is free.
+ auto saved=new imageDisk;
+ assert(AttachToBiosAndIdeByIndex(saved,4,1,false));
+ assert(imageDiskList[2]==nullptr && imageDiskList[4]==saved);
+ assert(saved->refs==1);
+ imageDiskList[4]->Release();imageDiskList[4]=nullptr;
+ assert(retired==3);
 }
 '''.replace('PRIMITIVE',s[a:b])
 (w/'test.cpp').write_text(code)
