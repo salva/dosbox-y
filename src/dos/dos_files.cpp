@@ -2578,7 +2578,9 @@ void DOS_File::LoadState( std::istream& stream, bool pop )
 	READ_POD( &saved_drive, saved_drive );
 	READ_POD( &seek_pos, seek_pos );
 	if (!stream) E_Exit("Truncated save-state DOS file metadata");
-	if (saved_open > 1 || saved_refs < 0)
+	// Native close consumes this count to decide whether to release the host
+	// handle. An open file without an owning reference cannot be installed.
+	if (saved_open > 1 || saved_refs < 0 || (saved_open && !saved_refs))
 		E_Exit("Invalid save-state DOS file metadata");
 	// Discarded entries must not change the dummy/native file object.
 	if (pop) return;
