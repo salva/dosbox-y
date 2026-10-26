@@ -148,6 +148,20 @@ int main(){
  try {std::stringstream input(corrupt);SerializeGlobalPOD::component->setBytes(input);}
  catch(const std::runtime_error&) {rejected=true;}
  assert(rejected);
+ // Range-valid cycles, overlapping heads, and omitted entries must also fail.
+ const size_t entry_bytes=sizeof(double)+sizeof(Bitu)+2*sizeof(uint16_t);
+ const size_t heads=first_link+sizeof(uint16_t)+(PIC_QUEUESIZE-1)*entry_bytes;
+ for(unsigned mode=0;mode<3;++mode) {
+  std::string broken=saved;
+  uint16_t link=mode==0?1:mode==1?0:0xffff;
+  const size_t offset=mode==0?first_link+entry_bytes:
+                      mode==1?heads:first_link+entry_bytes;
+  broken.replace(offset,sizeof(link),reinterpret_cast<const char*>(&link),sizeof(link));
+  rejected=false;
+  try {std::stringstream input(broken);SerializeGlobalPOD::component->setBytes(input);}
+  catch(const std::runtime_error&) {rejected=true;}
+  assert(rejected);
+ }
  rejected=false;
  try {std::stringstream input(saved.substr(0,first_link));SerializeGlobalPOD::component->setBytes(input);}
  catch(const std::runtime_error&) {rejected=true;}

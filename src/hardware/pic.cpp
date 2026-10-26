@@ -1443,6 +1443,22 @@ private:
 				if( next_idx != 0xffff )
 					pic_queue.next_entry = &pic_queue.entries[next_idx];
 
+        // The two native chains partition the fixed queue. Range-valid links
+        // alone still permit cycles, shared entries and lost capacity. Validate
+        // the consumed topology before any event service can traverse it.
+        bool visited[PIC_QUEUESIZE] = {};
+        unsigned visited_count = 0;
+        for (auto head : {pic_queue.free_entry, pic_queue.next_entry}) {
+            for (auto entry = head; entry; entry = entry->next) {
+                const auto index = entry - pic_queue.entries;
+                if (visited[index]) E_Exit("Invalid saved PIC queue topology");
+                visited[index] = true;
+                ++visited_count;
+            }
+        }
+        if (visited_count != PIC_QUEUESIZE)
+            E_Exit("Incomplete saved PIC queue topology");
+
 
 				// - data
         stream.read(reinterpret_cast<char*>(&InEventService), sizeof(InEventService) );
