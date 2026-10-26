@@ -3002,6 +3002,9 @@ void POD_Load_DOS_Files( std::istream& stream )
                         DOS_EnableDriveMenu('A'+lcv);
                         mem_writeb(Real2Phys(dos.tables.mediaid) + lcv*dos.tables.dpb_size, mediaid);
                         clist.push_back(lcv);
+                    } else {
+                        delete newDrive;
+                        E_Exit("Cannot restore save-state DOS ISO drive: native reconstruction failed");
                     }
                 } else if (!strncmp(dinfo,"fatDrive ",9)) {
 #if !defined(OSFREE)
