@@ -7,13 +7,15 @@ root = Path(__file__).resolve().parents[2]
 s = (root/'src/dos/dos_files.cpp').read_text()
 a = s.index('void unmount(int lcv) {')
 b = s.index('\nvoid POD_Load_DOS_Files', a)
+c = s.index('            if (!Drives[lcv])\n                E_Exit("Cannot restore save-state DOS drive: native reconstruction failed");', b)
+d = s.index('            Drives[lcv]->LoadState(stream);', c) + len('            Drives[lcv]->LoadState(stream);')
 w = Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'dos-unmount'
 w.mkdir(exist_ok=True)
 code = r'''
 #include <cassert>
 #include <stdexcept>
 constexpr int DOS_DRIVES=26;
-struct Drive {virtual ~Drive(){};};
+struct Drive {virtual ~Drive(){};int loads=0;void LoadState(int){++loads;}};
 struct isoDrive:Drive{};
 Drive *Drives[DOS_DRIVES]={};
 int result=0,calls=0,detaches=0,menus=0,writes=0;
@@ -25,8 +27,12 @@ struct {struct {int mediaid=0,dpb_size=1;} tables;} dos;
 int Real2Phys(int n){return n;}
 void mem_writeb(int,int){++writes;}
 BODY
+void consume(int lcv){int stream=0;CONSUME}
 int main(){
+ bool fatal=false;try{consume(2);}catch(const std::runtime_error&){fatal=true;}
+ assert(fatal);
  Drive ordinary;isoDrive cd;
+ Drives[2]=&ordinary;consume(2);assert(ordinary.loads==1);Drives[2]=nullptr;
  for(int slot:{-1,DOS_DRIVES}){
   bool fatal=false;try{unmount(slot);}catch(const std::runtime_error&){fatal=true;}
   assert(fatal && calls==0);
@@ -46,7 +52,7 @@ int main(){
  Drives[DOS_DRIVES-1]=&ordinary;unmount(DOS_DRIVES-1);
  assert(!Drives[DOS_DRIVES-1] && menus==3 && writes==3);
 }
-'''.replace('BODY',s[a:b])
+'''.replace('BODY',s[a:b]).replace('CONSUME',s[c:d])
 (w/'test.cpp').write_text(code)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(w/'test.cpp'),'-o',str(w/'test')],check=True)
 subprocess.run([str(w/'test')],check=True)
