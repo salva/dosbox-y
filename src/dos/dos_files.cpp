@@ -3202,11 +3202,20 @@ void POD_Load_DOS_Files( std::istream& stream )
         // Keep the occupied native slot alive while constructing its replacement.
         // Attachment retains the new image before retiring the old slot.
         const auto *torito = dynamic_cast<imageDiskElToritoFloppy *>(imageDiskList[d]);
+        const auto *ram = dynamic_cast<imageDiskMemory *>(imageDiskList[d]);
+        const auto *vhd = dynamic_cast<imageDiskVHD *>(imageDiskList[d]);
         const bool reuse_image = imageDiskList[d] &&
             (opts.mounttype==1 ?
                 torito && torito->CDROM_drive==opts.CDROM_drive &&
                 torito->cdrom_sector_offset==opts.cdrom_sector_offset &&
                 torito->floppy_type==opts.floppy_emu_type :
+                (opts.mounttype==2 ? ram!=nullptr :
+                 opts.mounttype==3 ? vhd!=nullptr :
+                 opts.mounttype==0 && !torito && !ram && !vhd &&
+                    imageDiskList[d]->sector_size==opts.bytesector &&
+                    imageDiskList[d]->sectors==opts.cylsector &&
+                    imageDiskList[d]->heads==opts.headscyl &&
+                    imageDiskList[d]->cylinders==opts.cylinders) &&
                 !strcasecmp(imageDiskList[d]->diskname.c_str(), diskname));
         if (reuse_image)
             ;
