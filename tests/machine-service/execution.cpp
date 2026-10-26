@@ -54,4 +54,23 @@ int main() {
     assert(slot.release(agent,result->operation));
     assert(slot.checkpointChanged(end));
     assert(!slot.checkpointChanged(end));
+    context=slot.context(9);request.expected=context;
+    assert(slot.enqueue(request,context,true)==Admission::Accepted);
+    assert(!slot.checkpointChanged(context)); // Never retire in-flight work.
+    assert(slot.activate(9,active));
+    assert(!slot.checkpointChanged(context));
+    slot.settle(0,false);result=slot.result(agent);
+    assert(result);
+    const auto replaced_operation=result->operation;
+    const auto replaced_context=result->end;
+    assert(slot.checkpointChanged(replaced_context));
+    assert(!slot.result(agent));
+    assert(!slot.release(agent,replaced_operation));
+    assert(slot.state()==State::Empty && slot.admits(agent));
+    context=slot.context(9);
+    assert(context.checkpoint!=replaced_context.checkpoint);
+    request.expected=replaced_context;
+    assert(slot.enqueue(request,context,true)==Admission::StaleContext);
+    request.expected=context;
+    assert(slot.enqueue(request,context,true)==Admission::Accepted);
 }

@@ -122,6 +122,10 @@ public:
         if (state_==State::Pending || state_==State::Active ||
             expected.invocation!=invocation_ || expected.checkpoint!=checkpoint_ ||
             !expected.invocation || checkpoint_==UINT64_MAX) return false;
+        // A restored checkpoint replaces the state described by any retained
+        // terminal result. Retire it rather than exposing pre-restore evidence
+        // or leaving the only execution slot occupied by that old result.
+        state_=State::Empty;request_={};result_={};stop_={};
         ++checkpoint_;return true;
     }
     Admission enqueue(Request request, Context current, bool safe) {
