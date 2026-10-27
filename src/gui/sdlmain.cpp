@@ -150,6 +150,18 @@ char* revert_escape_newlines(const char* aMessage);
 #include "ptrop.h"
 #include "mapper.h"
 #include "sdlmain.h"
+#include "native_profile.h"
+void GFX_DispatchMappedMouseMotion(int32_t host_x,int32_t host_y,
+                                   int32_t relative_x,int32_t relative_y);
+#if defined(C_SDL2) && !defined(WIN32)
+#include "../hardware/live_tasks.h"
+#include "live_control.h"
+#include <chrono>
+#include <memory>
+#endif
+#if C_DEBUG
+#include "native_control_owner.h"
+#endif
 #include "zipfile.h"
 #include "glidedef.h"
 #include "bios_disk.h"
@@ -4776,6 +4788,266 @@ void UpdateUserCursorScreenDimensions(void) {
 	}
 }
 
+// Shared accepted-motion primitive. Caller owns profile/eligibility validation.
+// Native callers must not route through host menu/focus/selection handling.
+NativeInput::Profile GFX_NativeInputProfile() {
+    NativeInput::Profile profile;
+#if defined(C_SDL2)
+    profile.windowed=sdl.window && !sdl.desktop.fullscreen;
+#endif
+    profile.machine_id=static_cast<uint32_t>(machine);
+    profile.keyboard_tuple=KEYBOARD_NativeInputTuple();
+    Mouse_NativeProfileTuple(profile);
+#if defined(C_SDL2)
+    // Mouse events use logical coordinates; clip uses output pixels. Admit
+    // only validated surface pixels with unit scale; other backends fail closed.
+    if(sdl.window && sdl.desktop.type==SCREEN_SURFACE && sdl.surface) {
+        int logical_w=0,logical_h=0;
+        SDL_GetWindowSize(sdl.window,&logical_w,&logical_h);
+        profile.drawable_width=sdl.surface->w;profile.drawable_height=sdl.surface->h;
+        profile.pixel_geometry=logical_w==profile.drawable_width && logical_h==profile.drawable_height;
+    }
+#endif
+    profile.lock=sdl.mouse.locked;profile.emulation=static_cast<int32_t>(sdl.mouse.emulation);
+    profile.xsensitivity=sdl.mouse.xsensitivity;profile.ysensitivity=sdl.mouse.ysensitivity;
+    profile.notify=mouse_notify_mode;profile.user_emulation=static_cast<int32_t>(user_cursor_emulation);
+    profile.route_geometry=!user_cursor_locked && user_cursor_emulation==MOUSE_EMULATION_NEVER;
+    profile.ibm_vga=machine==MCH_VGA && !IS_PC98_ARCH;
+    profile.unlocked_never=!sdl.mouse.locked && sdl.mouse.emulation==MOUSE_EMULATION_NEVER;
+    profile.keyboard=KEYBOARD_NativeInputProfile();
+    profile.mouse=Mouse_NativeInputProfile();
+    profile.sensitivity=sdl.mouse.xsensitivity==100 && sdl.mouse.ysensitivity==100;
+    profile.notify_off=mouse_notify_mode==0;
+    profile.viewport={sdl.clip.x,sdl.clip.y,static_cast<uint32_t>(sdl.clip.w),static_cast<uint32_t>(sdl.clip.h)};
+    UpdateUserCursorScreenDimensions();
+    profile.user_width=user_cursor_sw;profile.user_height=user_cursor_sh;
+    return profile;
+}
+
+#if defined(C_SDL2) && !defined(WIN32)
+namespace {
+std::unique_ptr<NativeInput::Tasks> lua_tasks;
+NativeInput::ProfileClock native_profile_clock;
+NativeInput::Cursor native_cursor;
+uint64_t native_cursor_generation=0,native_cursor_epoch=0;
+LiveGeometry live_geometry;
+uint64_t native_host(void *) {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+void native_check() {
+    auto p=GFX_NativeInputProfile();
+    if(!native_profile_clock.observe(p) || !p.supported()) throw 1;
+    if(native_profile_clock.generation()!=native_cursor_generation) {
+        native_cursor.invalidate();native_cursor_generation=native_profile_clock.generation();
+        // Context refresh at pump invalidates queue first; change within dispatch
+        // fails conservatively instead of dispatching on a changed route.
+        throw 1;
+    }
+}
+bool native_profile_matches(uint64_t expected,void *) {
+    auto p=GFX_NativeInputProfile();
+    if(!native_profile_clock.observe(p))return false;
+    if(native_profile_clock.generation()!=native_cursor_generation) {
+        native_cursor.invalidate();native_cursor_generation=native_profile_clock.generation();
+    }
+    return p.supported() && native_profile_clock.generation()==expected;
+}
+static uint64_t native_dispatch_sequence=0;
+void native_key(KBD_KEYS key,bool down,void *) {
+    native_check();
+    KEYBOARD_AddKey(key,down);++native_dispatch_sequence;
+}
+void native_button(unsigned button,bool down,void *) {
+    native_check();
+    if(down)Mouse_ButtonPressed(static_cast<uint8_t>(button));
+    else Mouse_ButtonReleased(static_cast<uint8_t>(button));
+    ++native_dispatch_sequence;
+}
+void native_submitted_motion(const char *id,void *) {Mouse_SubmittedMotion(id);}
+bool native_motion(uint32_t x,uint32_t y,void *) {
+    native_check();auto p=GFX_NativeInputProfile();NativeInput::Point point;
+    if(!native_cursor.map(x,y,p.viewport.x,p.viewport.y,p.viewport.width,p.viewport.height,point))return false;
+    GFX_DispatchMappedMouseMotion(point.x,point.y,point.dx,point.dy);
+    native_cursor.dispatched(point,p.viewport.x,p.viewport.y);++native_dispatch_sequence;
+    live_geometry.requested_x=x;live_geometry.requested_y=y;live_geometry.host=point;
+    live_geometry.motion=true;live_geometry.dispatch_tick=PIC_Ticks;return true;
+}
+NativeInput::EndpointContext native_context() {
+    auto p=GFX_NativeInputProfile();bool valid=native_profile_clock.observe(p);
+    if(native_cursor_generation!=native_profile_clock.generation()) {
+        native_cursor.invalidate();native_cursor_generation=native_profile_clock.generation();
+    }
+    NativeInput::EndpointContext c;c.host=native_host(nullptr);c.tick=PIC_Ticks;
+    c.profile=native_profile_clock.generation();c.supported=valid&&p.supported();
+    c.running=!IsDebuggerActive();c.frame_exhausted=RENDER_CompletedFrameExhausted();
+    c.dispatch.edges={native_key,native_button,nullptr};c.dispatch.motion=native_motion;c.dispatch.submitted_motion=native_submitted_motion;
+    c.dispatch.profile=native_profile_matches;
+    return c;
+}
+void native_frame(const CaptureFrame::View &view,void *) {
+    if(lua_tasks)lua_tasks->completed_frame(view,native_context(),native_host,nullptr);
+}
+}
+#endif
+bool GFX_CheckpointProfileReady() {
+#if defined(C_SDL2) && !defined(WIN32)
+    if(!sdl.window || !sdl.surface || sdl.desktop.fullscreen ||
+       sdl.desktop.type!=SCREEN_SURFACE)return false;
+    // Check actual SDL window flags too, not only requested/configured state.
+    const Uint32 flags=SDL_GetWindowFlags(sdl.window);
+    return !(flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP));
+#else
+    return false;
+#endif
+}
+bool GFX_CheckpointReady() {
+#if defined(C_SDL2) && !defined(WIN32)
+    return !lua_tasks || lua_tasks->checkpoint_ready();
+#else
+    return false;
+#endif
+}
+bool GFX_CheckpointRebase(uint64_t host,uint32_t tick) {
+#if defined(C_SDL2) && !defined(WIN32)
+    native_cursor.invalidate();
+    live_geometry=LiveGeometry();
+    Mouse_CheckpointInvalidateObservations();
+    return !lua_tasks || lua_tasks->checkpoint_rebase(host,tick);
+#else
+    return false;
+#endif
+}
+LiveTaskStatus GFX_LuaTaskStatus() {
+#if defined(C_SDL2) && !defined(WIN32)
+    if(lua_tasks) {auto status=lua_tasks->status();status.dispatch_sequence=native_dispatch_sequence;return status;}
+#endif
+    return LiveTaskStatus();
+}
+LiveGeometry GFX_LuaGeometry() {
+    LiveGeometry result;
+#if defined(C_SDL2) && !defined(WIN32)
+    result=live_geometry;result.profile=GFX_NativeInputProfile();
+    result.mouse=Mouse_GetDiagnostic();result.generation=native_profile_clock.generation();
+#endif
+    return result;
+}
+bool GFX_InstallLuaTasks(int root,size_t limit) {
+#if defined(C_SDL2) && !defined(WIN32)
+    if(lua_tasks || !limit || limit>16u*1024u*1024u)return false;
+    // Allocate before publishing the observer so allocation failure leaves
+    // neither a registration nor a partially installed task owner.
+    std::unique_ptr<NativeInput::Tasks> tasks(new NativeInput::Tasks(root,limit));
+    if(tasks->closed())return false;
+    if(!RENDER_SetCompletedFrameObserver(native_frame,nullptr))return false;
+    lua_tasks=std::move(tasks);return true;
+#else
+    (void)root;(void)limit;return false;
+#endif
+}
+void GFX_PumpLuaTasks(bool running, bool stopped_cleanup) {
+#if C_DEBUG
+    if (!NativeControl::rawEffectAllowed()) return;
+#endif
+#if defined(C_SDL2) && !defined(WIN32)
+    if(lua_tasks) {
+        auto context=native_context();context.running=running;lua_tasks->pump(context,true,stopped_cleanup);
+        if(native_cursor_epoch!=lua_tasks->epoch()) {native_cursor.invalidate();native_cursor_epoch=lua_tasks->epoch();}
+    }
+#else
+    (void)running;(void)stopped_cleanup;
+#endif
+}
+void GFX_FaultLuaTasks() {
+#if defined(C_SDL2) && !defined(WIN32)
+    if(lua_tasks) {
+        // Retain receipts/input cleanup, but retire the capture registration
+        // only if it is still ours. Publication is synchronous on this thread.
+        lua_tasks->channel_fault();
+        RENDER_RemoveCompletedFrameObserver(native_frame,nullptr);
+    }
+#endif
+}
+std::string GFX_ExecuteLuaTask(const NativeInput::Request &request,bool running) {
+#if C_DEBUG
+    if (!NativeControl::diagnosticEffectAllowed()) return "";
+#endif
+#if defined(C_SDL2) && !defined(WIN32)
+    if(!lua_tasks)return "";
+    auto context=native_context();context.running=running;
+    bool predicate_held=false;
+#if C_DEBUG && C_DEBUG_LUA
+    extern bool Debugger_PredicateHeld();
+    predicate_held=Debugger_PredicateHeld();
+#endif
+    // A held predicate poll is observation only: no clock/task/edge settlement.
+    if(!(request.op==NativeInput::Operation::Poll && predicate_held))
+        lua_tasks->pump(context,false);
+    auto result=lua_tasks->execute(request);
+    NativeInput::Response response;response.begin("lua",request.id,request.op,result.error);
+    lua_tasks->format(response,request,result);
+    if(response.end())return std::string(response.data(),response.size());
+#else
+    (void)request;(void)running;
+#endif
+    return "";
+}
+
+void GFX_DispatchMappedMouseMotion(int32_t host_x, int32_t host_y,
+                                 int32_t relative_x, int32_t relative_y) {
+    user_cursor_x      = host_x - sdl.clip.x;
+    user_cursor_y      = host_y - sdl.clip.y;
+    user_cursor_locked = sdl.mouse.locked;
+    user_cursor_emulation = sdl.mouse.emulation;
+
+    UpdateUserCursorScreenDimensions();
+
+    auto xrel = static_cast<float>(relative_x) * sdl.mouse.xsensitivity / 100.0f;
+    auto yrel = static_cast<float>(relative_y) * sdl.mouse.ysensitivity / 100.0f;
+    auto x    = static_cast<float>(host_x - sdl.clip.x) / (sdl.clip.w - 1) * sdl.mouse.xsensitivity / 100.0f;
+    auto y    = static_cast<float>(host_y - sdl.clip.y) / (sdl.clip.h - 1) * sdl.mouse.ysensitivity / 100.0f;
+    auto emu  = sdl.mouse.locked;
+
+    const auto inside =
+        host_x >= sdl.clip.x && host_x < sdl.clip.x + sdl.clip.w &&
+        host_y >= sdl.clip.y && host_y < sdl.clip.y + sdl.clip.h;
+
+    if (mouse_notify_mode != 0)
+    {
+        /* for mouse integration driver */
+        if (!sdl.mouse.locked)
+            xrel = yrel = x = y = 0.0f;
+
+        emu               = sdl.mouse.locked;
+        const auto isdown = Mouse_GetButtonState() != 0;
+
+#if defined(C_SDL2)
+        if (!vmware_mouse && !sdl.mouse.locked)
+#else
+        /* SDL1 has some sort of weird mouse warping bug in fullscreen mode no matter whether the mouse is captured or not (Windows, Linux/X11) */
+        if (!vmware_mouse && !sdl.mouse.locked && !sdl.desktop.fullscreen)
+#endif
+            SDL_ShowCursor((isdown || inside) ? SDL_DISABLE : SDL_ENABLE);
+    }
+    else if (!user_cursor_locked)
+    {
+        extern bool MOUSE_HasInterruptSub();
+        extern bool MOUSE_IsBeingPolled();
+        extern bool MOUSE_IsHidden();
+        /* Show only when DOS app is not using mouse */
+
+#if defined(C_SDL2)
+        if (!vmware_mouse && !sdl.mouse.locked)
+#else
+        /* SDL1 has some sort of weird mouse warping bug in fullscreen mode no matter whether the mouse is captured or not (Windows, Linux/X11) */
+        if (!vmware_mouse && !sdl.mouse.locked && !sdl.desktop.fullscreen)
+#endif
+            SDL_ShowCursor(((!inside) || ((MOUSE_IsHidden()) && !(MOUSE_IsBeingPolled() || MOUSE_HasInterruptSub()))) ? SDL_ENABLE : SDL_DISABLE);
+    }
+    Mouse_CursorMoved(xrel, yrel, x, y, emu);
+    VMWARE_MousePosition(host_x, host_y);
+}
+
 static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
     bool inputToScreen = false;
 
@@ -4854,57 +5126,7 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
         return;
     }
 
-    user_cursor_x      = motion->x - sdl.clip.x;
-    user_cursor_y      = motion->y - sdl.clip.y;
-    user_cursor_locked = sdl.mouse.locked;
-    user_cursor_emulation = sdl.mouse.emulation;
-
-    UpdateUserCursorScreenDimensions();
-
-    auto xrel = static_cast<float>(motion->xrel) * sdl.mouse.xsensitivity / 100.0f;
-    auto yrel = static_cast<float>(motion->yrel) * sdl.mouse.ysensitivity / 100.0f;
-    auto x    = static_cast<float>(motion->x - sdl.clip.x) / (sdl.clip.w - 1) * sdl.mouse.xsensitivity / 100.0f;
-    auto y    = static_cast<float>(motion->y - sdl.clip.y) / (sdl.clip.h - 1) * sdl.mouse.ysensitivity / 100.0f;
-    auto emu  = sdl.mouse.locked;
-
-    const auto inside =
-        motion->x >= sdl.clip.x && motion->x < sdl.clip.x + sdl.clip.w &&
-        motion->y >= sdl.clip.y && motion->y < sdl.clip.y + sdl.clip.h;
-
-    if (mouse_notify_mode != 0)
-    {
-        /* for mouse integration driver */
-        if (!sdl.mouse.locked)
-            xrel = yrel = x = y = 0.0f;
-
-        emu               = sdl.mouse.locked;
-        const auto isdown = Mouse_GetButtonState() != 0;
-
-#if defined(C_SDL2)
-        if (!vmware_mouse && !sdl.mouse.locked)
-#else
-        /* SDL1 has some sort of weird mouse warping bug in fullscreen mode no matter whether the mouse is captured or not (Windows, Linux/X11) */
-        if (!vmware_mouse && !sdl.mouse.locked && !sdl.desktop.fullscreen)
-#endif
-            SDL_ShowCursor((isdown || inside) ? SDL_DISABLE : SDL_ENABLE);
-    }
-    else if (!user_cursor_locked)
-    {
-        extern bool MOUSE_HasInterruptSub();
-        extern bool MOUSE_IsBeingPolled();
-        extern bool MOUSE_IsHidden();
-        /* Show only when DOS app is not using mouse */
-
-#if defined(C_SDL2)
-        if (!vmware_mouse && !sdl.mouse.locked)
-#else
-        /* SDL1 has some sort of weird mouse warping bug in fullscreen mode no matter whether the mouse is captured or not (Windows, Linux/X11) */
-        if (!vmware_mouse && !sdl.mouse.locked && !sdl.desktop.fullscreen)
-#endif
-            SDL_ShowCursor(((!inside) || ((MOUSE_IsHidden()) && !(MOUSE_IsBeingPolled() || MOUSE_HasInterruptSub()))) ? SDL_ENABLE : SDL_DISABLE);
-    }
-    Mouse_CursorMoved(xrel, yrel, x, y, emu);
-    VMWARE_MousePosition(motion->x, motion->y);
+    GFX_DispatchMappedMouseMotion(motion->x, motion->y, motion->xrel, motion->yrel);
 }
 
 #if DOSBOXMENU_TYPE == DOSBOXMENU_SDLDRAW /* SDL drawn menus */
@@ -7489,6 +7711,12 @@ bool DOSBOX_parse_argv() {
             fprintf(stderr,"  -early-debug                            Log early initialization messages in DOSBox-X (implies -console)\n");
             fprintf(stderr,"  -keydbg                                 Log all SDL key events\n");
             fprintf(stderr,"  -break-start                            Break into debugger at startup\n");
+#if C_DEBUG_LUA
+            fprintf(stderr,"  -debug-lua-script <path>                 Run trusted Lua at startup stopped state\n");
+            fprintf(stderr,"  -debug-lua-validation-exit               Exit after successful startup Lua\n");
+            fprintf(stderr,"  -lua-driver-file <path> | -lua-driver-code <chunk>\n");
+            fprintf(stderr,"  -lua-driver-program <DOS path> [-lua-driver-state <archive>]\n");
+#endif
             fprintf(stderr,"  -console                                Show logging console (Windows builds only)\n");
             fprintf(stderr,"  -noconsole                              Do not show logging console (Windows debug builds only)\n");
             fprintf(stderr,"  -log-con                                Log CON output to a log file\n");
@@ -7546,6 +7774,20 @@ bool DOSBOX_parse_argv() {
         else if (optname == "break-start") {
             control->opt_break_start = true;
         }
+#if C_DEBUG_LUA
+        else if (LuaDriver::Options::isSwitch("-"+optname)) {
+            if (!control->cmdline->NextOptArgv(tmp) ||
+                !control->lua_driver.select(optname,tmp)) return false;
+        }
+        else if (optname == "debug-lua-script") {
+            if (!control->cmdline->NextOptArgv(tmp) || tmp.empty() ||
+                !control->opt_debug_lua_script.empty()) return false;
+            control->opt_debug_lua_script = tmp;
+        }
+        else if (optname == "debug-lua-validation-exit") {
+            control->opt_debug_lua_validation_exit = true;
+        }
+#endif
         else if (optname == "force-gfx-hardware") {
             control->opt_force_gfx_hardware = true;
         }
@@ -7831,6 +8073,15 @@ bool DOSBOX_parse_argv() {
         control->cmdline->NextArgv();
     }
 
+#if C_DEBUG_LUA
+    bool competing = control->opt_debug || control->opt_earlydebug;
+#if defined(C_DOSBOX_AGENT)
+    competing = competing || !control->opt_agent_config.empty() || control->opt_agent_self_test;
+#endif
+    competing = competing || getenv("DOSBOX_Y_LUA_MODE") || getenv("DOSBOX_Y_LUA_LAUNCH_HOLD_MS");
+    if (!control->lua_driver.valid(!control->opt_debug_lua_script.empty(), competing) ||
+        (control->opt_debug_lua_validation_exit && control->opt_debug_lua_script.empty())) return false;
+#endif
     return true;
 }
 
@@ -10316,7 +10567,20 @@ fresh_boot:
         /* FIXME: throwing int() is a stupid and nondescriptive way to signal shutdown/reset. */
         try {
 #if C_DEBUG
+#if C_DEBUG_LUA
+            struct LocalLuaLifetime {
+                ~LocalLuaLifetime() { DEBUG_CloseLocalLuaDriver(); }
+            } local_lua_lifetime;
+            DEBUG_InstallLocalLuaDriver();
+            if (!control->opt_debug_lua_script.empty()) {
+                if (!DEBUG_RunStartupLuaScriptInStoppedState(control->opt_debug_lua_script.c_str()))
+                    E_Exit("Lua debugger: startup script failed: %s", control->opt_debug_lua_script.c_str());
+            } else
+#endif
             if (control->opt_break_start) DEBUG_EnableDebugger();
+#endif
+#if C_DEBUG_LUA
+            if (!control->opt_debug_lua_validation_exit || control->opt_debug_lua_script.empty())
 #endif
             DOSBOX_RunMachine(MachineService::Kind::RootGuest);
         } catch (int x) {
@@ -10798,6 +11062,9 @@ fresh_boot:
          * freed resources. */
         control = NULL; /* any deref past this point and you deserve to segfault */
     }
+#if C_DEBUG && C_DEBUG_LUA
+    if (DEBUG_LocalLuaDriverExitStatus()) return 1;
+#endif
     return saved_opt_test&&testerr?1:0;
 }
 

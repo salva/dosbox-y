@@ -1134,6 +1134,7 @@ fi
 dnl FEATURE: DEBUG and HEAVY DEBUG options (debugger)
 AH_TEMPLATE(C_DEBUG,[Define to 1 to enable internal debugger, requires libcurses])
 AH_TEMPLATE(C_HEAVY_DEBUG,[Define to 1 to enable heavy debugging, also have to enable C_DEBUG])
+AH_TEMPLATE(C_DEBUG_LUA,[Define to 1 to enable the embedded Lua debugger frontend])
 AC_ARG_ENABLE(debug,AC_HELP_STRING([--enable-debug],[Enable debug mode]),[
    if test x$enable_debug = xno; then
      AC_MSG_RESULT([Debugger not enabled])
@@ -1147,6 +1148,65 @@ AC_ARG_ENABLE(debug,AC_HELP_STRING([--enable-debug],[Enable debug mode]),[
      AC_MSG_ERROR([Can't find curses, which is required for debug mode])
    fi
 ],)
+
+AC_ARG_ENABLE(debug-lua,AC_HELP_STRING([--enable-debug-lua],[Enable embedded Lua debugger frontend (requires --enable-debug and Lua 5.4)]),,enable_debug_lua=no)
+DEBUG_LUA_CFLAGS=""
+DEBUG_LUA_LIBS=""
+if test x$enable_debug_lua = xyes; then
+  AC_MSG_CHECKING([whether the Lua debugger can be enabled])
+  if test x$enable_debug = xno -o x$enable_debug = x; then
+    AC_MSG_RESULT([no])
+    AC_MSG_ERROR([--enable-debug-lua currently requires --enable-debug for the transitional debugger-common stopped-state path])
+  fi
+  AC_MSG_RESULT([yes])
+
+  debug_lua_found=no
+  debug_lua_pkg=""
+  for debug_lua_candidate in lua5.4 lua-5.4 lua54; do
+    if pkg-config --exists $debug_lua_candidate; then
+      debug_lua_pkg=$debug_lua_candidate
+      debug_lua_found=yes
+      break
+    fi
+  done
+  if test x$debug_lua_found = xno && pkg-config --exists lua; then
+    debug_lua_pkg=lua
+    debug_lua_found=yes
+  fi
+
+  if test x$debug_lua_found = xyes; then
+    DEBUG_LUA_CFLAGS=`pkg-config $debug_lua_pkg --cflags`
+    DEBUG_LUA_LIBS=`pkg-config $debug_lua_pkg --libs`
+    debug_lua_save_CPPFLAGS="$CPPFLAGS"
+    debug_lua_save_LIBS="$LIBS"
+    CPPFLAGS="$CPPFLAGS $DEBUG_LUA_CFLAGS"
+    LIBS="$DEBUG_LUA_LIBS $LIBS"
+    AC_MSG_CHECKING([whether $debug_lua_pkg is Lua 5.4])
+    AC_LANG_PUSH([C++])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[extern "C" {
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+}
+#if LUA_VERSION_NUM != 504
+#error Lua 5.4 is required
+#endif]], [[lua_State *L = luaL_newstate(); if (L) lua_close(L);]])],
+      [AC_MSG_RESULT([yes])],
+      [AC_MSG_RESULT([no]); debug_lua_found=no])
+    AC_LANG_POP([C++])
+    CPPFLAGS="$debug_lua_save_CPPFLAGS"
+    LIBS="$debug_lua_save_LIBS"
+  fi
+
+  if test x$debug_lua_found != xyes; then
+    AC_MSG_ERROR([Lua debugger requested but Lua 5.4 development files were not found])
+  fi
+
+  AC_DEFINE(C_DEBUG_LUA,1)
+fi
+AC_SUBST([DEBUG_LUA_CFLAGS])
+AC_SUBST([DEBUG_LUA_LIBS])
+AM_CONDITIONAL(C_DEBUG_LUA, test x$enable_debug_lua = xyes)
 
 dnl automake 1.14 and upwards rewrite the host to have always 64 bit unless i386 as host is passed
 dnl this can make building a 32 bit executable a bit tricky, as dosbox relies on the host to select the

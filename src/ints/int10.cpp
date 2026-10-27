@@ -122,7 +122,7 @@ Bitu INT10_Handler(void) {
 					DOSV_FillScreen();
 			}
 		}
-		Mouse_AfterNewVideoMode(true);
+		Mouse_AfterNewVideoMode(true,4);
 		break;
 	case 0x01:								/* Set TextMode Cursor Shape */
 		INT10_SetCursorShape(reg_ch,reg_cl);
@@ -459,7 +459,7 @@ graphics_chars:
 			LOG(LOG_INT10,LOG_ERROR)("Function 11:Unsupported character generator call %2X",reg_al);
 			break;
 		}
-		if ((reg_al&0xf0)==0x10) Mouse_AfterNewVideoMode(false);
+		if ((reg_al&0xf0)==0x10) Mouse_AfterNewVideoMode(false,5);
 		break;
 	case 0x12:								/* alternate function select */
 		if (!IS_EGAVGA_ARCH && machine != MCH_MCGA)
@@ -827,7 +827,7 @@ CX	640x480	800x600	  1024x768/1280x1024
 			Mouse_BeforeNewVideoMode(true);
 			reg_al=0x4f;
 			reg_ah=VESA_SetSVGAMode(reg_bx);
-			Mouse_AfterNewVideoMode(true);
+			Mouse_AfterNewVideoMode(true,6);
 			break;
 		case 0x03:							/* Get videomode */
 			reg_al=0x4f;

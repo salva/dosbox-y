@@ -14,7 +14,26 @@
 #else
 #include <unistd.h>
 #endif
+#include "state_archive_effects.h"
 #include "ioapi.h"
+#include "zip.h"
+
+// Retire minizip before its borrowed FILE owner, including serializer throws.
+// Construct after StateArchiveOutput so stack unwind settles the borrower first.
+class StateArchiveZip {
+    zipFile &archive_;
+public:
+    explicit StateArchiveZip(zipFile &archive) : archive_(archive) {}
+    StateArchiveZip(const StateArchiveZip &) = delete;
+    StateArchiveZip &operator=(const StateArchiveZip &) = delete;
+    ~StateArchiveZip() { close(); }
+    int close() {
+        if (!archive_) return ZIP_OK;
+        const auto archive = archive_;
+        archive_ = nullptr; // zipClose consumes even on reported failure.
+        return zipClose(archive, nullptr);
+    }
+};
 
 // One archive, not a transaction spanning the state and flagged-file sidecar.
 // Minizip borrows the reserved FILE directly, never reopening its pathname.
@@ -23,6 +42,7 @@ class StateArchiveOutput {
     FILE *file_ = nullptr;
     bool borrowed_ = false;
     bool finalized_ = false;
+    StateArchive::Effects *effects_ = nullptr;
 
     static voidpf ZCALLBACK open(voidpf opaque, const void *, int) {
         auto &self = *static_cast<StateArchiveOutput *>(opaque);
@@ -45,15 +65,24 @@ class StateArchiveOutput {
         return ok ? 0 : -1;
     }
 public:
-    explicit StateArchiveOutput(const std::string &destination)
-            : destination_(destination) {}
+    explicit StateArchiveOutput(const std::string &destination,
+                                StateArchive::Effects *effects = nullptr)
+            : destination_(destination), effects_(effects) {}
     StateArchiveOutput(const StateArchiveOutput &) = delete;
     StateArchiveOutput &operator=(const StateArchiveOutput &) = delete;
     ~StateArchiveOutput() {
-        if (file_) fclose(file_);
-        if (!temporary_.empty() && std::remove(temporary_.c_str()) != 0)
-            fprintf(stderr, "Save output cleanup failed: %s (errno %d)\n",
-                    temporary_.c_str(), errno);
+        if (file_) {
+            if (effects_) effects_->cleanup_attempted = true;
+            if (fclose(file_) != 0 && effects_) effects_->cleanup_failed = true;
+        }
+        if (!temporary_.empty()) {
+            if (effects_) effects_->cleanup_attempted = true;
+            if (std::remove(temporary_.c_str()) != 0) {
+                if (effects_) effects_->cleanup_failed = true;
+                fprintf(stderr, "Save output cleanup failed: %s (errno %d)\n",
+                        temporary_.c_str(), errno);
+            }
+        }
     }
     bool prepare(zlib_filefunc64_def &io) {
         if (file_ || !temporary_.empty()) return false;
@@ -64,19 +93,22 @@ public:
 #else
             const auto pid = getpid();
 #endif
-            const std::string path = destination_ + ".tmp-" +
+            std::string path = destination_ + ".tmp-" +
                 std::to_string(pid) + "-" + std::to_string(++sequence);
 #ifdef WIN32
             const int fd = _open(path.c_str(), _O_CREAT | _O_EXCL | _O_RDWR |
-                                 _O_BINARY, _S_IREAD | _S_IWRITE);
+                                 _O_BINARY | _O_NOINHERIT, _S_IREAD | _S_IWRITE);
 #else
-            const int fd = ::open(path.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
+            const int fd = ::open(path.c_str(), O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, 0600);
 #endif
             if (fd < 0) {
                 if (errno == EEXIST) continue;
                 return false;
             }
-            temporary_ = path;
+            // Path allocation precedes acquiring the resource. From here the
+            // destructor must own the reserved name even if fdopen fails;
+            // swap cannot strand the descriptor on allocation failure.
+            temporary_.swap(path);
 #ifdef WIN32
             file_ = _fdopen(fd, "w+b");
             if (!file_) _close(fd);
@@ -102,6 +134,7 @@ public:
         if (std::rename(temporary_.c_str(), destination_.c_str()) != 0) return false;
 #endif
         temporary_.clear();
+        if (effects_) effects_->published = true;
         return true;
     }
 };

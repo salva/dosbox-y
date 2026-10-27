@@ -201,6 +201,8 @@ bool scalerSourceCacheBufferAlloc(unsigned int p,unsigned int h);
 // Emulator-thread native observer; not completed-PNG or host-callback API.
 #include "capture_frame.h"
 bool RENDER_SetCompletedFrameObserver(CaptureFrame::Observer observer, void *context);
+// Retire only the caller's registration; never clear another observer.
+bool RENDER_RemoveCompletedFrameObserver(CaptureFrame::Observer observer, void *context);
 uint64_t RENDER_CompletedFrameSequence();
 bool RENDER_CompletedFrameExhausted();
 

@@ -19,7 +19,11 @@
 #include <assert.h>
 
 #include "dosbox.h"
+#if C_DEBUG
+#include "native_control_owner.h"
+#endif
 #include "keyboard.h"
+#include "bios.h"
 #include "logging.h"
 #include "support.h"
 #include "setup.h"
@@ -1915,6 +1919,9 @@ bool KEYBOARD_NativeInputProfile() {
 }
 
 void KEYBOARD_AddKey(KBD_KEYS keytype,bool pressed) {
+#if C_DEBUG
+    if(!NativeControl::rawEffectAllowed())return;
+#endif
     /* If the BIOS has put the system into APM suspend, let certain keys wake it up again.
      * Send on RELEASE so that the key isn't also typed into the guest OS. */
     if (!pressed && (keytype == KBD_space))
@@ -3026,6 +3033,31 @@ void KEYBOARD_Reset() {
     KEYBOARD_ClrBuffer();
     KEYBOARD_SetLEDs(0);
 }
+
+#if C_DEBUG && C_DEBUG_LUA
+// Observational admission for the process-local checkpoint caller. Controller
+// queues and their scheduled transfer bit belong to the original Keyboard
+// owner; do not inspect or recreate the discarded strict PIC catalogue.
+bool KEYBOARD_CheckpointNeutral() {
+    const uint16_t start=mem_readw(BIOS_KEYBOARD_BUFFER_START);
+    const uint16_t end=mem_readw(BIOS_KEYBOARD_BUFFER_END);
+    const uint16_t head=mem_readw(BIOS_KEYBOARD_BUFFER_HEAD);
+    const uint16_t tail=mem_readw(BIOS_KEYBOARD_BUFFER_TAIL);
+    return keyb.command==CMD_NONE && keyb.aux_command==ACMD_NONE &&
+        !keyb.reset && !keyb.used && !keyb.buf8042_len &&
+        keyb.pending_key<0 && keyb.repeat.key==KBD_NONE &&
+        !keyb.scheduled && !keyb.p60changed && !keyb.auxchanged &&
+        !keyb.leftalt_pressed && !keyb.rightalt_pressed &&
+        !keyb.leftctrl_pressed && !keyb.rightctrl_pressed &&
+        !keyb.leftshift_pressed && !keyb.rightshift_pressed &&
+        !(mem_readb(BIOS_KEYBOARD_FLAGS1)&0x0f) &&
+        !mem_readb(BIOS_KEYBOARD_FLAGS2) &&
+        !(mem_readb(BIOS_KEYBOARD_FLAGS3)&0x0f) &&
+        !mem_readb(BIOS_KEYBOARD_TOKEN) &&
+        !(start&1) && !(end&1) && !(head&1) && start<end &&
+        unsigned(end)-start>=4 && head>=start && head<end && head==tail;
+}
+#endif
 
 //save state support
 void *KEYBOARD_TransferBuffer_PIC_Event = (void*)((uintptr_t)KEYBOARD_TransferBuffer);

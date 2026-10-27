@@ -47,7 +47,7 @@ void Mouse_WheelMoved(int32_t scroll);
 void Mouse_AutoLock(bool enable);
 bool Mouse_IsLocked();
 void Mouse_BeforeNewVideoMode(bool setmode);
-void Mouse_AfterNewVideoMode(bool setmode);
+void Mouse_AfterNewVideoMode(bool setmode,unsigned operation=0);
 
 void UpdateMouseReportRate(void);
 void ChangeMouseReportRate(unsigned int new_rate);

@@ -1,0 +1,420 @@
+change	path	group	disposition (not body-review certification)	source association (not approval)	original-base overlap	incoming overlap
+A	AGENTS.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	TODO.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+M	client/python/dosbox_agent/client.py	transport/adapters	KEEP capabilities; adapt single state owner	retained non-src/include contribution; group disposition applies	yes	no
+M	configure.ac	build/install	KEEP integration/dependencies; remove retired codec source entries	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/active-memory-archives.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/bios-pause-archives.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/bios-typeahead-archives.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/bios-wait-continuation.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/combined-integration.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/exclusive-native-slice.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/interactive-lua-delivery.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/interactive-lua.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/keyboard-output-port-archives.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/live-phase-deferral.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/logical-gameport-archives.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/lua-continuation-conflict.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/lua-driver-cli.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/lua-driver-delivery.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/lua-driver-flags-repair.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/lua-driver-handoff.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/lua-driver-witnesses.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/managed-lua-host-preparation.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/mcp-current-handoff.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/native-stop-conditions.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/observer-memory.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/original-codec-reconciliation.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/priority5-readiness.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/remaining-execution-joins.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+M	docs/rpc-agent-usage.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+M	docs/rpc-development.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/rpc-instrumentation.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/rpc-stopped-observation.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+M	docs/rpc.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/shared-debugger-design.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/shared-debugger-handoff.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/shared-debugger-inputs.txt	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/shared-debugger-sources.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	yes	no
+A	docs/standard-mcp-delivery.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/standard-mcp.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/state-job-context.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+A	docs/upstream-reconciliation.md	guidance/evidence	KEEP evidence; reconcile current guidance	retained non-src/include contribution; group disposition applies	no	no
+M	include/Makefile.am	build/install	KEEP integration/dependencies; remove retired codec source entries	build.diff	yes	no
+M	include/agent/agent_bridge.h	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	include/agent/agent_server.h	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	include/agent/debugger_adapter.h	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+A	include/agent/stop_conditions.h	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	no	no
+M	include/callback.h	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	owner-headers.diff	yes	no
+A	include/capture_frame.h	capture/tasks	KEEP native publication/ownership	final-headers.diff	yes	no
+A	include/cms_state.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	final-headers.diff	yes	no
+M	include/control.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	owner-headers.diff	yes	no
+M	include/cpu.h	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	owner-headers.diff	yes	yes
+M	include/debug.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	owner-headers.diff	yes	no
+A	include/disney_state.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	final-headers.diff	yes	no
+M	include/dma.h	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	owner-headers.diff	yes	no
+M	include/dos_inc.h	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	owner-headers.diff	yes	no
+M	include/dos_system.h	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	owner-headers.diff	yes	yes
+M	include/dosbox.h	startup/SDL/input	KEEP lifecycle/input; PORT consumed state; REMOVE strict profile only	owner-headers.diff	yes	no
+M	include/joystick.h	gameport	PORT timed/untimed state; REMOVE parallel record/catalogue	owner-headers.diff	no	no
+A	include/live_control.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/live_request.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/lua_driver_handoff.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	no	no
+A	include/lua_driver_options.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	no	no
+A	include/lua_driver_worker.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	no	no
+A	include/machine_service.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	native-owner-contracts.txt (exact selected body; added path)	yes	no
+M	include/mem.h	Memory	PORT RAM/maps/A20; KEEP native mapping primitives; REMOVE parallel encoding	owner-headers.diff	yes	no
+M	include/midi.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	owner-headers.diff	yes	no
+M	include/mixer.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	owner-headers.diff	yes	no
+A	include/mixer_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	final-headers.diff	yes	no
+M	include/mouse.h	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	owner-headers.diff	yes	no
+A	include/mouse_diagnostic.h	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	final-headers.diff	yes	no
+A	include/mouse_range_policy.h	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	final-headers.diff	yes	no
+A	include/mouse_route_receipt.h	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	final-headers.diff	yes	no
+A	include/mpu_state.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	final-headers.diff	yes	no
+A	include/native_clock.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_control_owner.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	native-owner-contracts.txt (exact selected body; added path)	yes	no
+A	include/native_debug_execution.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	native-owner-contracts.txt (exact selected body; added path)	no	no
+A	include/native_frontier.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	native-owner-contracts.txt (exact selected body; added path)	no	no
+A	include/native_input.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_ownership.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	native-owner-contracts.txt (exact selected body; added path)	yes	no
+A	include/native_profile.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_queue.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_response.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_slice_observer.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_startup.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+A	include/native_state_job.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	no	no
+A	include/native_state_root.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	yes	no
+A	include/native_stop_conditions.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	no	no
+A	include/native_transport.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+M	include/paging.h	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	owner-headers.diff	yes	no
+M	include/parport.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	owner-headers.diff	yes	no
+M	include/pic.h	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	owner-headers.diff	yes	no
+M	include/regs.h	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	owner-headers.diff	yes	no
+M	include/render.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	owner-headers.diff	yes	no
+M	include/sdlmain.h	startup/SDL/input	KEEP lifecycle/input; PORT consumed state; REMOVE strict profile only	owner-headers.diff	yes	no
+M	include/serialport.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	owner-headers.diff	yes	no
+M	include/timer.h	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	owner-headers.diff	yes	no
+M	include/vga.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	owner-headers.diff	yes	no
+M	include/video.h	SaveState	KEEP jobs/effects; PORT single engine; REMOVE duplicate traversal/catalogue	final-mixed-seams.diff	yes	no
+M	include/voodoo.h	PCI/Voodoo	KEEP runtime; PORT device/bindings; REMOVE dormant catalogue	owner-headers.diff	yes	no
+A	lua-debugger/predicate_live_contract.lua	transport/adapters	KEEP capabilities; adapt single state owner	retained non-src/include contribution; group disposition applies	yes	no
+A	lua-debugger/rcp_dispatcher.lua	transport/adapters	KEEP capabilities; adapt single state owner	retained non-src/include contribution; group disposition applies	yes	no
+A	mcp/.gitignore	transport/adapters	KEEP capabilities; adapt single state owner	retained non-src/include contribution; group disposition applies	no	no
+A	mcp/pyproject.toml	build/install	KEEP integration/dependencies; remove retired codec source entries	retained non-src/include contribution; group disposition applies	no	no
+A	mcp/src/dosbox_y_mcp/__init__.py	transport/adapters	KEEP capabilities; adapt single state owner	retained non-src/include contribution; group disposition applies	no	no
+A	mcp/src/dosbox_y_mcp/server.py	transport/adapters	KEEP capabilities; adapt single state owner	retained non-src/include contribution; group disposition applies	no	no
+A	mcp/tests/installed_client.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	mcp/tests/malformed_client.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+M	src/Makefile.am	build/install	KEEP integration/dependencies; remove retired codec source entries	build.diff	yes	no
+M	src/agent/bridge/agent_bridge.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/agent/debugger/debugger_adapter.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/agent/parser/debugger_output_parser.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/agent/protocol/agent_protocol.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/agent/server/agent_server.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/agent/trace/trace_store.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/agent/transport/local_transport.cpp	transport/adapters	KEEP capabilities; adapt single state owner	adapter-bodies.diff	yes	no
+M	src/cpu/callback.cpp	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/cpu/core_normal/prefix_none.h	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	cpu-small.diff	yes	no
+M	src/cpu/cpu.cpp	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	core-dos.diff	yes	yes
+M	src/cpu/flags.cpp	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	small-seams.diff,cpu-small.diff	yes	no
+M	src/cpu/lazyflags.h	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	cpu-small.diff	yes	no
+M	src/cpu/paging.cpp	CPU/callback/paging	KEEP hooks; PORT state; REMOVE parallel encoding	small-seams.diff,core-dos.diff	yes	no
+M	src/debug/Makefile.am	build/install	KEEP integration/dependencies; remove retired codec source entries	build.diff	yes	no
+M	src/debug/debug.cpp	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-mixed-seams.diff (two unchanged WIN32/getch lines relocated by diff context algorithm; verified)	yes	no
+A	src/debug/debug_common.cpp	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	debug-common-complete.diff	yes	no
+A	src/debug/debug_common.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-headers.diff	yes	no
+M	src/debug/debug_gui.cpp	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-mixed-seams.diff	yes	no
+A	src/debug/debug_lua.cpp	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	debug-lua-complete.diff	yes	no
+A	src/debug/debug_lua.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	final-mixed-seams.diff	yes	no
+M	src/debug/debug_mcp.cpp	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	yes	no
+M	src/debug/debug_mcp.h	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	yes	no
+A	src/debug/lean_live.inc	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	lean-live-complete.diff	yes	no
+A	src/debug/lua_driver_worker.cpp	execution/lifecycle	KEEP ownership; REMOVE strict qualification only	adapter-bodies.diff	no	no
+M	src/dos/dev_con.h	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/dos.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/dos_classes.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/dos_devices.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/dos_execute.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	small-seams.diff,core-dos.diff	yes	no
+M	src/dos/dos_files.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	yes
+M	src/dos/dos_memory.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/dos_misc.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	small-seams.diff,core-dos.diff	yes	no
+M	src/dos/dos_mscdex.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	yes
+M	src/dos/dos_tables.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/drive_cache.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/drive_local.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	yes
+M	src/dos/drive_virtual.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/drives.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dos/drives.h	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	core-dos.diff	yes	no
+M	src/dosbox.cpp	startup/SDL/input	KEEP lifecycle/input; PORT consumed state; REMOVE strict profile only	final-mixed-seams.diff	yes	yes
+M	src/fpu/fpu.cpp	FPU	PORT consumed state; REMOVE parallel encoding	final-mixed-seams.diff	yes	yes
+A	src/fpu/fpu_record.h	FPU	PORT consumed state; REMOVE parallel encoding	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/gui/midi.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/gui/render.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+A	src/gui/render_aspect_owner.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_aspect_rebuild.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_dispatch_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_frame_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_lines_rebuild.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_lines_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_mode_preflight.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_palette_rebuild.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_palette_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_phase_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_progress_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_raster_composition.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_scaler_identity_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/gui/render_scalers.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+M	src/gui/render_scalers.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+M	src/gui/render_simple.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+A	src/gui/render_source_rebuild.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/gui/render_source_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/gui/sdl_mapper.cpp	startup/SDL/input	KEEP lifecycle/input; PORT consumed state; REMOVE strict profile only	video-seams.diff	yes	no
+M	src/gui/sdlmain.cpp	startup/SDL/input	KEEP lifecycle/input; PORT consumed state; REMOVE strict profile only	video-seams.diff	yes	no
+M	src/hardware/Makefile.am	build/install	KEEP integration/dependencies; remove retired codec source entries	build.diff	yes	no
+M	src/hardware/adlib.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	yes
+M	src/hardware/adlib.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	final-headers.diff	yes	no
+A	src/hardware/capture_pending.h	capture/tasks	KEEP native publication/ownership	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/capture_png.h	capture/tasks	KEEP native publication/ownership	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/capture_publish.h	capture/tasks	KEEP native publication/ownership	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/capture_sha256.h	capture/tasks	KEEP native publication/ownership	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/cmos.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	clock-memory-seams.diff	yes	no
+A	src/hardware/cmos_record.h	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/dbopl.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/dbopl.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	final-headers.diff	yes	no
+A	src/hardware/dbopl_operator_logical.inc	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/disney.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+A	src/hardware/disney_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/dma.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	clock-memory-seams.diff	yes	no
+M	src/hardware/gameblaster.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/gus.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	small-seams.diff,sound-seams.diff	yes	yes
+M	src/hardware/hardware.cpp	IO/device bindings	KEEP handlers/runtime; PORT native identities; REMOVE parallel catalogue	clock-memory-seams.diff	yes	no
+M	src/hardware/ide.cpp	IO/device bindings	KEEP handlers/runtime; PORT native identities; REMOVE parallel catalogue	small-seams.diff,device-seams.diff	yes	no
+M	src/hardware/iohandler.cpp	IO/device bindings	KEEP handlers/runtime; PORT native identities; REMOVE parallel catalogue	clock-memory-seams.diff	yes	no
+M	src/hardware/ipx.cpp	IO/device bindings	KEEP handlers/runtime; PORT native identities; REMOVE parallel catalogue	small-seams.diff,device-seams.diff	yes	no
+M	src/hardware/joystick.cpp	gameport	PORT timed/untimed state; REMOVE parallel record/catalogue	input-seams.diff	yes	no
+M	src/hardware/keyboard.cpp	keyboard	PORT unread p60/D1/port61/queues; REMOVE neutral profile	input-seams.diff	yes	no
+A	src/hardware/live_tasks.h	capture/tasks	KEEP native publication/ownership	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/mame/saa1099.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/mame/saa1099.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+A	src/hardware/mame/saa1099_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/mame/sn76496.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/mame/sn76496.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/memory.cpp	Memory	PORT RAM/maps/A20; KEEP native mapping primitives; REMOVE parallel encoding	clock-memory-seams.diff	yes	yes
+M	src/hardware/mixer.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+A	src/hardware/mixer_file_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/mixer_global_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/mpu401.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+A	src/hardware/mpu_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/parport/filelpt.cpp	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/filelpt.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/parport.cpp	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/printer.cpp	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/printer.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/printer_if.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/printer_redir.cpp	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/parport/printer_redir.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/pci_bus.cpp	PCI/Voodoo	KEEP runtime; PORT device/bindings; REMOVE dormant catalogue	remaining-device.diff	yes	no
+M	src/hardware/pcspeaker.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/pic.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	clock-memory-seams.diff	yes	yes
+A	src/hardware/pic_logical_clock.h	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_aux_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_clock_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_control_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_dma_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_dsp_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/sb_sample_logical.h	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/sblaster.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	yes
+M	src/hardware/serialport/serialdummy.h	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/serialport/serialport.cpp	serial/parallel/printer	KEEP runtime; PORT state/resources; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/tandy_sound.cpp	sound	KEEP behavior; PORT chip/mixer history; REMOVE parallel records	sound-seams.diff	yes	no
+M	src/hardware/timer.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	clock-memory-seams.diff	yes	no
+M	src/hardware/vga.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_addressing_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_aperture_context.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_aperture_latches_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_aperture_plan.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_applied_palette.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_attr.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_attr_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_bank_reconstruction.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_bank_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_blank_geometry.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_blank_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_capture_consistency.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_config_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_crtc.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_crtc_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_cursor_color.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_dac.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_dac_logical_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_dac_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_draw.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_draw_bundle.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_draw_handlers.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_draw_progress.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_draw_scanline.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_effective_addressing.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_effective_geometry.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_epoch.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_event_state.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_font_bindings.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_font_reconstruction.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_font_storage.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_frame_mask.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_geometry_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_gfx.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_joined_install.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_latch.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_line_layout.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_mapping_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_memory.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_memory_geometry.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_memory_selection.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_misc.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_mode_memory_selection.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_other.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_output_geometry.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_page_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_panning_scale.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_pending_config_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_planar_composition.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_producer_history.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_register_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_row_extent.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_s3.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_scan_addressing.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_scan_policy.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_scan_schedule.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_scan_timing_owner.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_scanline.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_scanline_storage.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_seq.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+A	src/hardware/vga_seq_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_split_compare.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_split_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_text_background.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_text_frame_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_text_owner_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_text_recurrence.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_timing_reconstruction.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_write_visibility.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/hardware/vga_write_visibility_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/hardware/vga_xga.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	vga-bodies.diff	yes	no
+M	src/hardware/voodoo.cpp	PCI/Voodoo	KEEP runtime; PORT device/bindings; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/hardware/voodoo_emu.cpp	PCI/Voodoo	KEEP runtime; PORT device/bindings; REMOVE dormant catalogue	remaining-device.diff	yes	no
+M	src/hardware/voodoo_emu.h	PCI/Voodoo	KEEP runtime; PORT device/bindings; REMOVE dormant catalogue	remaining-device.diff	yes	no
+M	src/hardware/voodoo_interface.cpp	PCI/Voodoo	KEEP runtime; PORT device/bindings; REMOVE dormant catalogue	device-seams.diff	yes	no
+M	src/ints/bios.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	input-seams.diff	yes	yes
+M	src/ints/bios_keyboard.cpp	keyboard	PORT unread p60/D1/port61/queues; REMOVE neutral profile	input-seams.diff	yes	no
+M	src/ints/ems.cpp	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	ems-xms-mouse.diff	yes	no
+A	src/ints/ems_handle_record.h	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/ints/ems_service_binding_record.h	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/ints/imagedisk_int13.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	small-seams.diff,remaining-device.diff	yes	no
+M	src/ints/int10.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+A	src/ints/int10_mode_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/ints/int10_mode_tables_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/ints/int10_modes.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+M	src/ints/mouse.cpp	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	ems-xms-mouse.diff	yes	no
+A	src/ints/mouse_logical.h	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/ints/mouse_logical_fields.inc	mouse	KEEP routing; PORT consumed state; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/ints/xms.cpp	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	ems-xms-mouse.diff	yes	no
+A	src/ints/xms_a20_record.h	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/ints/xms_handle_record.h	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+A	src/ints/xms_service_record.h	XMS/EMS	PORT consumed state/service bindings; REMOVE parallel records	helper-bodies.txt (exact selected body; added path)	yes	no
+M	src/misc/savestates.cpp	SaveState	KEEP jobs/effects; PORT single engine; REMOVE duplicate traversal/catalogue	engine-complete.diff	yes	no
+M	src/misc/support.cpp	clock/DMA/CMOS	PORT consumed original owner state; KEEP native clock; REMOVE parallel records	small-seams.diff	no	no
+M	src/output/output_surface.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+M	src/output/output_surface.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+M	src/output/output_ttf.cpp	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+A	src/output/presentation_history_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+A	src/output/surface_buffer_record.h	video/render/output	KEEP behavior/reconstruction; PORT history; REMOVE parallel records	video-seams.diff	yes	no
+M	src/shell/shell_misc.cpp	DOS/files	KEEP hooks; PORT original owner state; REMOVE parallel encoding	small-seams.diff	yes	no
+A	tests/fresh-process/check-bootstrap-catalogue.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/fresh-process/check-breakpoint-identity.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/fresh-process/check-fpu.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/fresh-process/check-gameport-logical.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/fresh-process/check-keyboard-output-port.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/fresh-process/check-mouse-logical.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/fresh-process/check-native-state-job.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/fresh-process/check-state-context.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/fresh-process/check-vga-geometry-record.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/fresh-process/state-context-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/fresh-process/state-context.lua	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/historical-native/hardware/native_endpoint.h	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/historical-native/include/native_request.h	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/lua-live-control/phase-loop.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/lua-live-control/phase-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/lua-live-control/unwind-boundaries.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/active-memory.asm	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/active-memory.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/bios-pause.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/bios-typeahead.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/bios-wait-continuation.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/callback-frontiers.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/check.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/machine-service/check.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/machine-service/entry-arm.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/filesystem-restore.md	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/filesystem-restore.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/frontier.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/handoff.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/keyboard-output-port.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-break.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-callback.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-close.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-effects.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-exit.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-fault.asm	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-fault.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-flags.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-freeze.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-install-failure.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver-state.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/local-driver.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/logical-gameport.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/observer-linear.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/observer-memory.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/options.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/state-admission.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/state-eligibility.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/state-progress.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/state-release.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/stop-conditions.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/stop-deadline-active.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/stop-hook-ownership.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/stop-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/untimed-gameport.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/machine-service/worker.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/native-review-defects/check.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/native-review-defects/exhaustion.cpp	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/stopped-continuation/README.md	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/stopped-continuation/agent-queue.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/bridge-lifetime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/check.lua	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/stopped-continuation/common-effects.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/condition-ui.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/dos-upstream-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/dos-upstream.asm	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/dos-upstream.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/exclusive-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/fatal-wait.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/held-loop.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/interactive-lua-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/interrupt-expression.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/lua-intent.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/native.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/stopped-continuation/no-lua-interactive-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/red.lua	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no
+A	tests/stopped-continuation/rpc-instrumentation-queue.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-instrumentation-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-instrumentation.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-nested.asm	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-observation-queue.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-observation.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-stop-queue.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-transport.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/rpc-unlaunched-stop.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	no	no
+A	tests/stopped-continuation/runtime.py	verification	KEEP behavioral tests; adapt removed format assertions	retained non-src/include contribution; group disposition applies	yes	no

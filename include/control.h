@@ -25,8 +25,12 @@
 //#pragma warning ( disable : 4290 )
 #endif
 
+#include "config.h"
 #include "programs.h"
 #include "setup.h"
+#if C_DEBUG_LUA
+#include "lua_driver_options.h"
+#endif
 
 class Config{
 public:
@@ -65,6 +69,11 @@ public:
     void ClearExtraData() { Section_prop *sec_prop; Section_line *sec_line; for (const_it tel = sectionlist.begin(); tel != sectionlist.end(); ++tel) {sec_prop = dynamic_cast<Section_prop *>(*tel); sec_line = dynamic_cast<Section_line *>(*tel); if (sec_prop) sec_prop->data = ""; else if (sec_line) sec_line->data = "";} }
 public:
     std::string opt_editconf,opt_opensaves,opt_opencaptures,opt_lang="",opt_machine="";
+#if C_DEBUG_LUA
+    LuaDriver::Options lua_driver;
+    std::string opt_debug_lua_script;
+    bool opt_debug_lua_validation_exit = false;
+#endif
 #if defined(C_DOSBOX_AGENT)
     std::string opt_agent_config;
     bool opt_agent_self_test = false;

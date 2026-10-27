@@ -111,7 +111,8 @@ int encode(lua_State *L) {
         lua_pushboolean(L,r.guest_advanced);lua_setfield(L,-2,"guest_advanced");
         if(!r.error.empty()) {lua_pushlstring(L,r.error.data(),r.error.size());lua_setfield(L,-2,"error");}
     }
-    if(r.context.invocation && r.context.checkpoint) {
+    if(r.context.invocation && r.context.checkpoint &&
+       !(op==Operation::Save && r.save.valid && !r.save.usable)) {
         auto *c=static_cast<NativeDebug::Context *>(lua_newuserdatauv(L,sizeof(r.context),0));
         *c=r.context;luaL_setmetatable(L,context_type);
     } else lua_pushnil(L);
@@ -195,19 +196,26 @@ Verdict observation(lua_State *L,Worker &w,const Event &event) {
 // Strict schema parsing is protected by invoke's caller before owned requests.
 void fields(lua_State *L,int table,const char *allowed) {
     table=lua_absindex(L,table);luaL_checktype(L,table,LUA_TTABLE);
+    if(lua_getmetatable(L,table))luaL_error(L,"plain table required");
     lua_pushnil(L);
     while(lua_next(L,table)) {
         if(lua_type(L,-2)!=LUA_TSTRING)luaL_error(L,"unknown field");
-        const char *key=lua_tostring(L,-2);
+        size_t length=0;const char *key=lua_tolstring(L,-2,&length);
         bool found=false;
         for(const char *p=allowed;*p;) {
             const char *end=strchr(p+1,'|');if(!end)break;
-            if(size_t(end-p-1)==strlen(key) && !memcmp(p+1,key,end-p-1))found=true;
+            if(size_t(end-p-1)==length && !memcmp(p+1,key,length))found=true;
             p=end+1;
         }
         if(!found)luaL_error(L,"unknown field: %s",key);
         lua_pop(L,1);
     }
+}
+const char *schemaString(lua_State *L,int index) {
+    if(lua_type(L,index)!=LUA_TSTRING)luaL_error(L,"schema string required");
+    size_t length=0;const char *text=lua_tolstring(L,index,&length);
+    if(memchr(text,0,length))luaL_error(L,"invalid schema string");
+    return text;
 }
 lua_Integer integerField(lua_State *L,int t,const char *key,lua_Integer fallback,lua_Integer max) {
     lua_getfield(L,t,key);
@@ -232,6 +240,7 @@ int parseRun(lua_State *L) {
     fields(L,2,"|stop_any|");lua_getfield(L,2,"stop_any");
     if(lua_isnil(L,-1))return 0;
     luaL_checktype(L,-1,LUA_TTABLE);const int list=lua_gettop(L);
+    if(lua_getmetatable(L,list))return luaL_error(L,"plain condition list required");
     const size_t n=lua_rawlen(L,list);if(n>16)return luaL_error(L,"too many conditions");
     lua_pushnil(L);size_t count=0;
     while(lua_next(L,list)) {
@@ -243,11 +252,13 @@ int parseRun(lua_State *L) {
     request.stop_any.resize(n);
     for(size_t i=0;i<n;++i) {
         lua_rawgeti(L,list,i+1);const int t=lua_gettop(L);
-        lua_getfield(L,t,"kind");const char *kind=luaL_checkstring(L,-1);lua_pop(L,1);
+        luaL_checktype(L,t,LUA_TTABLE);
+        if(lua_getmetatable(L,t))return luaL_error(L,"plain condition required");
+        lua_getfield(L,t,"kind");const char *kind=schemaString(L,-1);lua_pop(L,1);
         auto &c=request.stop_any[i];
         if(!strcmp(kind,"elapsed")) {
             fields(L,t,"|kind||clock||ms|");lua_getfield(L,t,"clock");
-            const char *clock=luaL_checkstring(L,-1);
+            const char *clock=schemaString(L,-1);
             if(!strcmp(clock,"guest_ticks"))c.kind=NativeDebug::StopCondition::Kind::GuestElapsed;
             else if(!strcmp(clock,"host_monotonic"))c.kind=NativeDebug::StopCondition::Kind::HostElapsed;
             else return luaL_error(L,"unsupported clock");
@@ -260,7 +271,7 @@ int parseRun(lua_State *L) {
             c.kind=NativeDebug::StopCondition::Kind::Text;
             lua_getfield(L,t,"region");if(!lua_isnil(L,-1))region(L,-1,c.region);lua_pop(L,1);
             c.sample_ms=integerField(L,t,"sample_guest_ms",10,1000);
-            lua_getfield(L,t,"encoding");const char *enc=luaL_checkstring(L,-1);
+            lua_getfield(L,t,"encoding");const char *enc=schemaString(L,-1);
             if(strcmp(enc,"raw") && strcmp(enc,"cp437"))return luaL_error(L,"unsupported encoding");
             c.cp437=!strcmp(enc,"cp437");lua_pop(L,1);
             lua_getfield(L,t,"needle");

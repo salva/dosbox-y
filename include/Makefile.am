@@ -1,12 +1,26 @@
 noinst_HEADERS =  \
 capture_frame.h \
 state_file_io.h \
+state_archive_effects.h \
 native_frontier.h \
 native_slice_observer.h \
 machine_service.h \
 native_debug_execution.h \
 native_control_owner.h \
 native_input.h \
+native_clock.h \
+native_ownership.h \
+native_profile.h \
+native_queue.h \
+native_response.h \
+native_startup.h \
+native_state_root.h \
+native_transport.h \
+live_control.h \
+live_request.h \
+mouse_diagnostic.h \
+mouse_route_receipt.h \
+mouse_range_policy.h \
 native_stop_conditions.h \
 lua_driver_handoff.h \
 lua_driver_options.h \

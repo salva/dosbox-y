@@ -484,6 +484,13 @@ bool RENDER_SetCompletedFrameObserver(CaptureFrame::Observer observer, void *con
     completed_frame_context = observer ? context : nullptr;
     return true;
 }
+bool RENDER_RemoveCompletedFrameObserver(CaptureFrame::Observer observer, void *context) {
+    if (!observer || observer != completed_frame_observer ||
+        context != completed_frame_context) return false;
+    completed_frame_observer = nullptr;
+    completed_frame_context = nullptr;
+    return true;
+}
 uint64_t RENDER_CompletedFrameSequence() { return completed_frame_clock.sequence(); }
 bool RENDER_CompletedFrameExhausted() { return completed_frame_clock.exhausted(); }
 

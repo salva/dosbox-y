@@ -18,6 +18,9 @@
 #include "build_timestamp.h"
 #include "machine_service.h"
 #include "native_frontier.h"
+#if C_DEBUG && C_DEBUG_LUA
+#include "../debug/debug_lua.h"
+#endif
 #include "debug.h"
 #ifdef WIN32
 #include "direct.h"
@@ -35,6 +38,8 @@
 #include "unzip.h"
 #include "ioapi.h"
 #include "state_archive_output.h"
+#include "state_checkpoint_stream.h"
+#include <sstream>
 #include "vs/zlib/contrib/minizip/zip.c"
 #include "vs/zlib/contrib/minizip/unzip.c"
 #include "vs/zlib/contrib/minizip/ioapi.c"
@@ -368,6 +373,53 @@ SaveState& SaveState::instance() {
 	return singleton;
 }
 
+static bool save_state_frontier();
+
+bool SaveState::checkpointSave(Checkpoint &parts, size_t limit) {
+    if (!save_state_frontier()) return false;
+    try {
+        Checkpoint pending;
+        size_t remaining=limit;
+        for (const auto &entry : components) {
+            StateCheckpointStream buffer(remaining);
+            std::ostream stream(&buffer);
+            entry.second.comp.getBytes(stream);
+            if (!stream || buffer.failed()) return false;
+            std::string bytes=buffer.take();
+            remaining-=bytes.size();
+            pending.emplace(entry.first,std::move(bytes));
+        }
+        parts.swap(pending);
+        return true;
+    } catch (const std::exception &) { return false; }
+      catch (const SaveState::Error &) { return false; }
+}
+
+bool SaveState::checkpointLoad(const Checkpoint &parts) {
+    if (!save_state_frontier()) return false;
+    if (parts.size()!=components.size()) return false;
+    for (const auto &entry : components)
+        if (!parts.count(entry.first)) return false;
+#if C_DEBUG && C_DEBUG_LUA
+    if (!Debugger_LuaPrepareRestore()) return false;
+#endif
+    // Only internally captured streams reach this method. A failure after the
+    // first consumer is fatal: the sequential original engine has no rollback.
+    try {
+        for (const auto &entry : components) {
+            std::istringstream stream(parts.at(entry.first),std::ios::in|std::ios::binary);
+            entry.second.comp.setBytes(stream);
+            if (!stream || stream.peek()!=std::char_traits<char>::eof())
+                E_Exit("Checkpoint component %s failed during installation",entry.first.c_str());
+        }
+    } catch (const std::exception &) {
+        E_Exit("Checkpoint installation failed after live state may have changed");
+    } catch (const SaveState::Error &) {
+        E_Exit("Checkpoint installation failed after live state may have changed");
+    }
+    return true;
+}
+
 void SaveState::registerComponent(const std::string& uniqueName, Component& comp) {
 	components.insert(std::make_pair(uniqueName, CompData(comp)));
 }
@@ -438,7 +490,11 @@ static bool save_state_frontier() {
 }
 void SaveState::save(size_t slot) { (void)saveTo(slot, nullptr); }
 bool SaveState::saveFile(const std::string &path) { return saveTo(0, &path); }
-bool SaveState::saveTo(size_t slot, const std::string *destination) { //throw (Error)
+bool SaveState::saveFile(const std::string &path, StateArchive::Effects &effects) {
+    effects = {};
+    return saveTo(0, &path, &effects);
+}
+bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects) {
     if (!save_state_frontier()) { LOG_MSG("Save refused: unsafe native continuation"); return false; }
 	if (slot >= SLOT_COUNT*MAX_PAGE) return false;
 	bool save_err=false;
@@ -495,8 +551,9 @@ bool SaveState::saveTo(size_t slot, const std::string *destination) { //throw (E
 	std::string save=destination ? *destination : (use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav");
     LOG_MSG("Saving state to slot: %d (%s)", (int)slot + 1, save.c_str());
 
-    StateArchiveOutput output(save);
+    StateArchiveOutput output(save, effects);
 	zipFile zf = nullptr;
+    StateArchiveZip archive(zf);
 	{
 		const char *global_comment = "DOSBox-X save state";
 		zlib_filefunc64_def ffunc;
@@ -591,7 +648,7 @@ bool SaveState::saveTo(size_t slot, const std::string *destination) { //throw (E
 
 done:
 	if (zf != NULL) {
-		errclose = zipClose(zf,NULL);
+		errclose = archive.close();
 		if (errclose != ZIP_OK) save_err = true;
 	}
 

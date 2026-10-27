@@ -8,6 +8,18 @@ using namespace LuaDriver;
 int main() {
     Options options;options.select("lua-driver-code",
         "local d=require('dosbox'); local c=d.context(); "
+        "local touched=0; local mt={__index=function() touched=touched+1; return 'elapsed' end}; "
+        "assert(not pcall(d.run,setmetatable({},mt))); "
+        "assert(not pcall(d.run,{stop_any=setmetatable({},mt)})); "
+        "assert(not pcall(d.run,{stop_any={setmetatable({},mt)}})); "
+        "assert(not pcall(d.run,{stop_any={{kind='elapsed'..string.char(0)..'x',clock='guest_ticks',ms=1}}})); "
+        "assert(not pcall(d.run,{stop_any={{kind='elapsed',clock='guest_ticks'..string.char(0)..'x',ms=1}}})); "
+        "assert(not pcall(d.run,{stop_any={{kind='text',encoding='raw'..string.char(0)..'x',needle='a'}}})); "
+        "assert(not pcall(d.run,{['stop_any'..string.char(0)..'x']={}})); "
+        "assert(touched==0); "
+        "assert(d.run{stop_any={{kind='elapsed',clock='guest_ticks',ms=7}, "
+        "{kind='elapsed',clock='host_monotonic',ms=9}, {kind='address',cs=1,ip=2}, "
+        "{kind='text',encoding='raw',needle='ok',region={x=1,y=2,width=3,height=4},sample_guest_ms=10}}}.boundary=='decoder'); "
         "local x=41; assert(d.registers(c).registers.ax==42); "
         "package.preload.m=function() return d.step() end; "
         "assert(require('m').boundary=='decoder'); "
@@ -17,7 +29,7 @@ int main() {
         "assert(s.effects.published and not s.effects.completed and not s.effects.retired); "
         "assert(s.effects.cleanup_failed and not s.effects.durable and s.effects.archive_bytes==17); "
         "assert(s.effects.code=='cleanup_failed' and s.effects.archive_sha256=='fixture'); "
-        "assert(s.error=='native cleanup failed'); "
+        "assert(s.error=='native cleanup failed' and s.context==nil); "
         "setmetatable({}, {__gc=function() assert(not pcall(d.step)) end})");
     Handoff handoff;WorkerResult result;
     std::thread worker([&]{runWorker(options,handoff,result);});
@@ -25,6 +37,16 @@ int main() {
     while(!handoff.isLuaClosed()) {
         Request request;
         if(handoff.take(request)) {
+            if(request.operation==Operation::Run) {
+                assert(request.stop_any.size()==4);
+                using Kind=NativeDebug::StopCondition::Kind;
+                assert(request.stop_any[0].kind==Kind::GuestElapsed && request.stop_any[0].ms==7);
+                assert(request.stop_any[1].kind==Kind::HostElapsed && request.stop_any[1].ms==9);
+                assert(request.stop_any[2].kind==Kind::Address && request.stop_any[2].cs==1 && request.stop_any[2].ip==2);
+                const auto &text=request.stop_any[3];
+                assert(text.kind==Kind::Text && text.needle=="ok" && !text.cp437 && text.sample_ms==10);
+                assert(text.region.x==1 && text.region.y==2 && text.region.width==3 && text.region.height==4);
+            }
             if(request.operation==Operation::RunUntil)assert(request.cs==1 && request.ip==2);
             if(request.operation==Operation::Save)assert(request.path=="/tmp/witness" && request.timeout_ms==30000);
             Response response;response.context={7,1};response.registers_valid=true;
@@ -38,7 +60,7 @@ int main() {
             assert(handoff.complete(response));++calls;
         } else std::this_thread::yield();
     }
-    worker.join();assert(result.completed && result.error.empty() && calls==6);
+    worker.join();assert(result.completed && result.error.empty() && calls==7);
     // Real Lua protected observer, direct-read subrequest and caught effect
     // violation. Native authority here is deliberately a transport fixture.
     Options observing;observing.select("lua-driver-code",

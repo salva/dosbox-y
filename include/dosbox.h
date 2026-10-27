@@ -355,6 +355,7 @@ void ApplyPreventCapMenu(void);
 
 
 
+namespace StateArchive { struct Effects; }
 class SaveState
 {
 public:
@@ -365,7 +366,15 @@ public:
 
     // Explicit-path callers use the same owner serializers and archive engine.
     bool saveFile(const std::string &path);
+    bool saveFile(const std::string &path, StateArchive::Effects &effects);
     bool loadFile(const std::string &path) const;
+
+    // Process-local captures reuse the registered component streams. Native
+    // admission and suspended-continuation lifetime belong to the caller;
+    // these internally produced bytes are not an external import format.
+    typedef std::map<std::string, std::string> Checkpoint;
+    bool checkpointSave(Checkpoint &parts, size_t limit);
+    bool checkpointLoad(const Checkpoint &parts);
 
     void save   (size_t slot);       //throw (Error)
     void load   (size_t slot) const; //throw (Error)
@@ -384,7 +393,7 @@ public:
     void registerComponent(const std::string& uniqueName, Component& comp); //comp must have global lifetime!
 
 private:
-    bool saveTo(size_t slot, const std::string *destination);
+    bool saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects = nullptr);
     bool loadFrom(size_t slot, const std::string *source) const;
     SaveState() {}
     SaveState(const SaveState&);

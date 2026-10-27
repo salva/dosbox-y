@@ -47,6 +47,7 @@ using namespace std;
 #endif
 
 #include "debug.h"
+#include "state_archive_effects.h"
 #if defined(C_DOSBOX_AGENT)
 #include "agent/agent_bridge.h"
 #endif
@@ -2805,22 +2806,8 @@ static bool ParseCommandWithResult(char* str, bool *recognized) {
         while (*argument && !isspace(static_cast<unsigned char>(*argument))) ++argument;
         while (*argument && isspace(static_cast<unsigned char>(*argument))) ++argument;
         if (!*argument) { DEBUG_ShowMsg("State path required\n"); return false; }
-        const auto attachment = DEBUG_CommandSession();
-        const auto context = DEBUG_NativeExecutionContext();
-        if (!DEBUG_AdmitNativeState(attachment, context)) {
-            DEBUG_ShowMsg("State admission refused\n"); return false;
-        }
-        NativeControl::Lease lease;
-        const auto owner = DOSBOX_MachineServiceOwner();
-        if (NativeControl::owner().acquire({context.invocation,context.checkpoint}, owner,
-                DOSBOX_MachineServiceRelation(context.invocation), context.checkpoint, true) != NativeControl::Admission::ok) {
-            DEBUG_ShowMsg("State owner refused\n"); return false;
-        }
-        lease = NativeControl::owner().lease();
-        struct Release { NativeControl::Lease lease; ~Release() { NativeControl::owner().release(lease); } } release{lease};
-        const bool success = command == "STATEWRITE" ? SaveState::instance().saveFile(argument) : SaveState::instance().loadFile(argument);
-        if (success && command == "STATEREAD" && !DEBUG_AdvanceNativeStateContext(attachment,context,lease))
-            E_Exit("Restored state cannot retire prior native context");
+        const bool success = DEBUG_NativeStateFile(DEBUG_CommandSession(),
+                DEBUG_NativeExecutionContext(), argument, command == "STATEREAD");
         DEBUG_ShowMsg(success ? "State completed\n" : "State failed\n");
         return success;
     }
@@ -5618,6 +5605,26 @@ bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeD
     return DEBUG_AdmitNativeState(attachment,expected,&held) &&
         native_execution.checkpointChanged(expected);
 }
+bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
+                           const std::string &path, bool load, StateArchive::Effects *effects) {
+    if (effects) *effects = {};
+    if (path.empty() || path.find('\0') != std::string::npos ||
+        !DEBUG_AdmitNativeState(attachment, expected)) return false;
+    const auto current = DOSBOX_MachineServiceOwner();
+    if (NativeControl::owner().acquire({expected.invocation, expected.checkpoint}, current,
+            DOSBOX_MachineServiceRelation(expected.invocation), expected.checkpoint, true) !=
+            NativeControl::Admission::ok) return false;
+    const auto lease = NativeControl::owner().lease();
+    struct Release {
+        NativeControl::Lease lease;
+        ~Release() { NativeControl::owner().release(lease); }
+    } release{lease};
+    const bool success = load ? SaveState::instance().loadFile(path) :
+        (effects ? SaveState::instance().saveFile(path, *effects) : SaveState::instance().saveFile(path));
+    if (success && load && !DEBUG_AdvanceNativeStateContext(attachment, expected, lease))
+        E_Exit("Restored state cannot retire prior native context");
+    return success;
+}
 const NativeDebug::Result *DEBUG_NativeExecutionResult(NativeDebug::Attachment attachment) {
     return native_execution.result(attachment);
 }
@@ -6208,7 +6215,7 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
                 else {
                     Debugger_LocalDriverSave(local_driver_attachment,current,request.path,
                                              request.timeout_ms,response.save);
-                    if(response.save.poisoned || response.save.cleanup_failed ||
+                    if(!response.save.usable || response.save.poisoned || response.save.cleanup_failed ||
                        (!response.save.retired && response.save.code=="saved"))
                         local_driver_unusable=true;
                     if(!response.save.completed)response.error=response.save.code;

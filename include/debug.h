@@ -89,6 +89,11 @@ const DebuggerPhaseResult *DEBUG_NativePhaseResult(NativeDebug::Attachment attac
 NativeDebug::Context DEBUG_NativeExecutionContext(void);
 bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeDebug::Context expected,
                                     NativeControl::Lease held);
+// Synchronous original-engine operation under the selected native stop/lease.
+// A successful restore retires the supplied context before returning.
+bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
+                           const std::string &path, bool load,
+                           StateArchive::Effects *effects = nullptr);
 bool DEBUG_AdmitNativeObservation(NativeDebug::Attachment attachment, NativeDebug::Context expected);
 // Only the state job may present its exact held lease.
 bool DEBUG_AdmitNativeState(NativeDebug::Attachment attachment, NativeDebug::Context expected,

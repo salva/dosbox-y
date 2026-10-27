@@ -33,6 +33,35 @@
 #include "cpu.h"
 #include "menu.h"
 #include "crc32.h"
+#if C_DEBUG_LUA
+#include "debug/debug_lua.h"
+#include "drives.h"
+
+// Observe the DOS identity of the successful open, not the requested spelling
+// (EXEC may fall back to the built-in command processor). This is a launch
+// receipt, not a host-file immutability or save-profile certification.
+static std::string OpenedExecutable(uint16_t handle) noexcept {
+    try {
+        const unsigned index = RealHandle(handle);
+        if (index >= DOS_FILES || !Files[index] || !Files[index]->IsOpen()) return {};
+        const auto file = Files[index];
+        const unsigned drive = file->GetDrive();
+        if (drive >= DOS_DRIVES || !Drives[drive] || !file->GetName()) return {};
+        std::string value(1,char('A'+drive));
+        value += ":\\";
+        value += file->GetName();
+        for (auto &c : value) {
+            if (c == '/') c = '\\';
+            else if (c >= 'a' && c <= 'z') c = char(c-'a'+'A');
+        }
+        return value;
+    } catch (...) {
+        // Receipt allocation failure cannot strand the successful DOS handle
+        // or unwind an otherwise valid EXEC. An empty receipt cannot arm a hold.
+        return {};
+    }
+}
+#endif
 #if defined(OSFREE)
 #include "exepack.h"
 #include "exepackv1.h"
@@ -371,6 +400,11 @@ bool DOS_Execute(const char* name, PhysPt block_pt, uint16_t flags) {
 			return false;
 		}
 	}
+#if C_DEBUG_LUA
+    // Copy while the successful handle is still live; no host scan or profile
+    // restriction belongs on this natural execution path.
+    const std::string entry_executable = OpenedExecutable(fhandle);
+#endif
 	len=sizeof(EXE_Header);
 	if (!DOS_ReadFile(fhandle,(uint8_t *)&head,&len)) {
 		DOS_CloseFile(fhandle);
@@ -971,6 +1005,10 @@ bool DOS_Execute(const char* name, PhysPt block_pt, uint16_t flags) {
 #if C_DEBUG		
 		/* Started from debug.com, then set breakpoint at start */
 		DEBUG_CheckExecuteBreakpoint(RealSeg(csip),RealOff(csip));
+#if C_DEBUG_LUA
+        Debugger_EntryLoaded(name,pspseg,loadseg,
+                             RealSeg(csip),RealOff(csip),entry_executable.c_str());
+#endif
 #endif
 		return true;
 	}

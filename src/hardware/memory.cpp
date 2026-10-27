@@ -872,7 +872,7 @@ PageHandler * MEM_GetPageHandler(Bitu phys_page) {
 	return &illegal_page_handler;
 }
 
-bool MEM_InspectPhysicalMemory(uint32_t address,uint32_t length,uint8_t *out) {
+static bool InspectPhysicalMemory(uint32_t address,uint32_t length,uint8_t *out,bool ram_only) {
     if (!out || !MemBase || !length || length>4096 ||
         uint64_t(address)+length>16u*1024u*1024u ||
         uint64_t(address)+length>uint64_t(MEM_TotalPages())*MEM_PAGESIZE)
@@ -881,10 +881,17 @@ bool MEM_InspectPhysicalMemory(uint32_t address,uint32_t length,uint8_t *out) {
     for (Bitu page=first;page<=last;++page) {
         if (page>=memory.handler_pages) return false;
         const auto handler=memory.phandlers[page];
-        if (handler!=&ram_page_handler && handler!=&rom_page_handler) return false;
+        if (handler!=&ram_page_handler && (ram_only || handler!=&rom_page_handler)) return false;
     }
     memcpy(out,MemBase+address,length);
     return true;
+}
+
+bool MEM_InspectPhysicalMemory(uint32_t address,uint32_t length,uint8_t *out) {
+    return InspectPhysicalMemory(address,length,out,false);
+}
+bool MEM_InspectPhysicalRam(uint32_t address,uint32_t length,uint8_t *out) {
+    return InspectPhysicalMemory(address,length,out,true);
 }
 
 void MEM_SetPageHandler(Bitu phys_page,Bitu pages,PageHandler * handler) {

@@ -4,7 +4,7 @@ w=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'exclusive-current-probe-lo
 import tempfile
 w=pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=w))
 binary=pathlib.Path(os.environ.get('DOSBOX_TEST_BINARY','src/dosbox-x')).resolve()
-def run(bridge, no_lua=False):
+def run(bridge, no_lua=False, lua=False):
  d=w/('bridge' if bridge else 'interactive');d.mkdir(exist_ok=True)
  listener=None;conn=None
  if bridge:
@@ -106,6 +106,20 @@ def run(bridge, no_lua=False):
    conn.sendall(b'REQ quit EXEC QUIT\n');drain(1)
    assert p.wait(timeout=5)==0
   else:
+   if lua:
+    def command(text, expected):
+     before=(d/'pty.log').read_bytes()
+     os.write(master,text.encode()+b'\n');drain(.5)
+     added=(d/'pty.log').read_bytes()[len(before):]
+     assert expected in added,(text,added[-2500:])
+    command('LUA persistent=40',b'')
+    command('LUA persistent+2',b'42')
+    command('LUA print("sink-marker"); dbg.log("log-marker")',b'log-marker')
+    command('LUA error("repair-marker")',b'repair-marker')
+    command('LUA persistent+3',b'43')
+    command('LUA final=setmetatable({}, {__gc=function() print("final-marker") end})',b'')
+    command('LUARESET',b'final-marker')
+    command('LUA persistent==nil',b'true')
    if no_lua:
     for command in (b'LUA 1+2\n',b'LUAFILE missing.lua\n',b'LUARESET\n'):
      os.write(master,command);drain(.4)

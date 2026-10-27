@@ -1,3 +1,6 @@
+#include "mouse_range_policy.h"
+#include "native_profile.h"
+#include "mouse_route_receipt.h"
 /*
  *  Copyright (C) 2002-2021  The DOSBox Team
  *
@@ -26,12 +29,16 @@
 #include <vector>
 
 #include "dosbox.h"
+#if C_DEBUG
+#include "native_control_owner.h"
+#endif
 #include "callback.h"
 #include "logging.h"
 #include "mem.h"
 #include "regs.h"
 #include "cpu.h"
 #include "mouse.h"
+#include "mouse_diagnostic.h"
 #include "pic.h"
 #include "inout.h"
 #include "int10.h"
@@ -835,6 +842,11 @@ extern bool user_cursor_locked;
  * DOS kernel must not be shutdown since INT 33h is an MS-DOS
  * interface. That means booting into a guest OS should disable
  * all INT 33h emulation leaving only PS/2, serial, and AUX. */
+static bool AbsoluteNeverRangePolicy() {
+    extern MOUSE_EMULATION user_cursor_emulation;
+    return !user_cursor_locked && user_cursor_emulation==MOUSE_EMULATION_NEVER;
+}
+
 static bool AllowINT33RMAccess() {
 	if (!dos_kernel_disabled) {
 		if (!cpu.pmode) // not protected mode
@@ -851,7 +863,102 @@ bool IsDebuggerActive(void);
 #endif
 
 /* FIXME: Re-test this code */
+static MouseDiagnostic mouse_diagnostic;
+static const char *mouse_submitted_motion=nullptr;
+void Mouse_SubmittedMotion(const char *id) {mouse_submitted_motion=id;}
+void Mouse_CheckpointInvalidateObservations() {
+    const auto generation=mouse_diagnostic.first.generation;
+    const auto sequence=mouse_diagnostic.return_sequence;
+    const auto recent_sequence=mouse_diagnostic.recent.sequence;
+    const auto overwritten=mouse_diagnostic.recent.overwritten;
+    const auto exhausted=mouse_diagnostic.recent.exhausted;
+    mouse_diagnostic=MouseDiagnostic();
+    mouse_diagnostic.first.generation=generation;
+    mouse_diagnostic.first.exhausted=true; // fresh arm owns its next generation
+    mouse_diagnostic.return_sequence=sequence;
+    mouse_diagnostic.recent.sequence=recent_sequence;
+    mouse_diagnostic.recent.overwritten=overwritten;
+    mouse_diagnostic.recent.exhausted=exhausted;
+}
+bool Mouse_ArmFirstWitness(const char *id) {return mouse_diagnostic.first.arm(id);}
+
+// Only known real-mode interrupt frames may supply a return address.
+// Backdoor and internal reset callers retain callback CS:IP, no guessed frame.
+static bool mouse_backdoor_call=false;
+struct MouseModeOrigin {
+    unsigned operation=0;uint16_t cs=0,ip=0,ret_cs=0,ret_ip=0;bool valid=false;
+};
+static MouseModeOrigin Mouse_ModeOrigin(unsigned operation) {
+    MouseModeOrigin o;o.operation=operation;o.cs=SegValue(cs);o.ip=reg_ip;
+    if(operation>=2 && operation<=6 && !cpu.pmode && !mouse_backdoor_call) {
+        o.ret_ip=real_readw(SegValue(ss),reg_sp);
+        o.ret_cs=real_readw(SegValue(ss),uint16_t(reg_sp+2));o.valid=true;
+    }
+    return o;
+}
+static void Mouse_RecordWitness(MouseWitnessRoute route,uint16_t seg=0,uint16_t off=0,const MouseModeOrigin *origin=nullptr) {
+    MouseWitnessEvent e;e.route=route;e.tick=PIC_Ticks;e.x=mouse.x;e.y=mouse.y;
+    e.screen_x=mouse.max_screen_x;e.screen_y=mouse.max_screen_y;
+    e.min_x=mouse.min_x;e.max_x=mouse.max_x;e.min_y=mouse.min_y;e.max_y=mouse.max_y;
+    e.gran_x=(uint16_t)mouse.gran_x;e.gran_y=(uint16_t)mouse.gran_y;
+    if(route!=MouseWitnessRoute::Motion){e.ax=reg_ax;e.bx=reg_bx;e.cx=reg_cx;e.dx=reg_dx;}
+    e.dest_seg=seg;e.dest_off=off;
+    if(origin) {
+        e.mode=mouse.mode;e.operation=origin->operation;e.callback_cs=origin->cs;e.callback_ip=origin->ip;
+        e.return_cs=origin->ret_cs;e.return_ip=origin->ret_ip;e.return_valid=origin->valid;
+    }
+    mouse_diagnostic.recent.append(e);
+    if(mouse_diagnostic.recent.exhausted) {
+        if(mouse_diagnostic.first.armed && !mouse_diagnostic.first.frozen) {
+            mouse_diagnostic.first.exhausted=true;mouse_diagnostic.first.frozen=true;
+        }
+    } else {
+        const auto &recorded=mouse_diagnostic.recent.events[mouse_diagnostic.recent.count-1];
+        mouse_diagnostic.first.record(recorded,mouse_submitted_motion);
+    }
+    if(route==MouseWitnessRoute::Motion && !mouse_diagnostic.recent.exhausted)
+        mouse_diagnostic.motion_end=mouse_diagnostic.recent.events[mouse_diagnostic.recent.count-1];
+}
+MouseDiagnostic Mouse_GetDiagnostic() {
+    MouseDiagnostic result=mouse_diagnostic;
+    result.internal_x=mouse.x;result.internal_y=mouse.y;
+    result.screen_x=mouse.max_screen_x;result.screen_y=mouse.max_screen_y;
+    result.min_x=mouse.min_x;result.max_x=mouse.max_x;
+    result.min_y=mouse.min_y;result.max_y=mouse.max_y;return result;
+}
+void Mouse_NativeProfileTuple(NativeInput::Profile &profile) {
+    extern bool Mouse_Vertical,serialMouseEmulated;
+    profile.mouse_tuple=uint64_t(KEYBOARD_AUX_Active()) | (uint64_t(useps2callback)<<1) |
+        (uint64_t(en_vmware)<<2) | (uint64_t(vmware_mouse)<<3) |
+        (uint64_t(Mouse_Vertical)<<4) | (uint64_t(serialMouseEmulated)<<5) |
+        (uint64_t(AllowINT33RMAccess())<<6) | (uint64_t(adjust_x_max_excess)<<7) |
+        (uint64_t(adjust_y_max_excess)<<8);
+    // Preserve signed adjustments exactly without hash collisions.
+    profile.min_x=mouse.min_x;profile.max_x=mouse.max_x;
+    profile.min_y=mouse.min_y;profile.max_y=mouse.max_y;
+    profile.screen_x=mouse.max_screen_x;profile.screen_y=mouse.max_screen_y;
+    profile.user_locked=user_cursor_locked;
+    profile.mode_identity=reinterpret_cast<uintptr_t>(CurMode);
+    if(CurMode){profile.mode_type=static_cast<uint32_t>(CurMode->type);
+        profile.mode_width=static_cast<uint32_t>(CurMode->swidth);
+        profile.mode_height=static_cast<uint32_t>(CurMode->sheight);}
+    profile.adjust_x=adjust_x;profile.adjust_y=adjust_y;
+}
+
+bool Mouse_NativeInputProfile() {
+    // Unlocked host mapping cannot enter serial branch. Exclude alternate
+    // absolute/AUX/PS2 routes and configured cursor adjustment before dispatch.
+    extern bool Mouse_Vertical,serialMouseEmulated;
+    return AllowINT33RMAccess() && CurMode && !Mouse_Vertical && !serialMouseEmulated &&
+        !user_cursor_locked && !IS_PC98_ARCH && !KEYBOARD_AUX_Active() && !useps2callback &&
+        !en_vmware && !vmware_mouse && adjust_x==0 && adjust_y==0 &&
+        !adjust_x_max_excess && !adjust_y_max_excess;
+}
+
 void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
+#if C_DEBUG
+    if(!NativeControl::rawEffectAllowed())return;
+#endif
     extern bool Mouse_Vertical;
     float dx = xrel * mouse.pixelPerMickey_x;
     float dy = (Mouse_Vertical?-yrel:yrel) * mouse.pixelPerMickey_y;
@@ -947,6 +1054,7 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
     {
         auto x1 = (double)user_cursor_x / ((double)user_cursor_sw - 1);
         auto y1 = (double)user_cursor_y / ((double)user_cursor_sh - 1);
+        mouse_diagnostic.absolute_x=x1;mouse_diagnostic.absolute_y=y1;mouse_diagnostic.motion_tick=PIC_Ticks;
         mouse.x       = x1 * mouse.max_screen_x;
         mouse.y       = y1 * mouse.max_screen_y;
 
@@ -984,6 +1092,7 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
     }
 
     Mouse_AddEvent(MOUSE_HAS_MOVED);
+    Mouse_RecordWitness(MouseWitnessRoute::Motion);
 }
 
 uint8_t Mouse_GetButtonState(void) {
@@ -1215,6 +1324,9 @@ void Mouse_Select(int x1, int y1, int x2, int y2, int w, int h, bool select) {
 #endif
 
 void Mouse_ButtonPressed(uint8_t button) {
+#if C_DEBUG
+    if(!NativeControl::rawEffectAllowed())return;
+#endif
     if (!IS_PC98_ARCH && KEYBOARD_AUX_Active()) {
         switch (button) {
             case 0:
@@ -1227,51 +1339,58 @@ void Mouse_ButtonPressed(uint8_t button) {
                 mouse.buttons|=4;
                 break;
             default:
+                MouseRoute::record("guest", "unsupported", button, 1);
                 return;
         }
 
         KEYBOARD_AUX_Event(0,0,mouse.buttons,mouse.scrollwheel);
+        MouseRoute::record("guest", "aux-dispatched-no-int33-coordinate", button, 1);
         mouse.scrollwheel = 0;
         return;
     }
 
-    if (button > 2)
-        return;
+    if (button > 2) { MouseRoute::record("guest", "unsupported", button, 1); return; }
 
     switch (button) {
 #if (MOUSE_BUTTONS >= 1)
     case 0:
-        if (mouse.buttons&1) return;
+        if (mouse.buttons&1) { MouseRoute::record("guest", "duplicate-suppressed", button, 1); return; }
         mouse.buttons|=1;
         Mouse_AddEvent(MOUSE_LEFT_PRESSED);
         break;
 #endif
 #if (MOUSE_BUTTONS >= 2)
     case 1:
-        if (mouse.buttons&2) return;
+        if (mouse.buttons&2) { MouseRoute::record("guest", "duplicate-suppressed", button, 1); return; }
         mouse.buttons|=2;
         Mouse_AddEvent(MOUSE_RIGHT_PRESSED);
         break;
 #endif
 #if (MOUSE_BUTTONS >= 3)
     case 2:
-        if (mouse.buttons&4) return;
+        if (mouse.buttons&4) { MouseRoute::record("guest", "duplicate-suppressed", button, 1); return; }
         mouse.buttons|=4;
         Mouse_AddEvent(MOUSE_MIDDLE_PRESSED);
         break;
 #endif
     default:
+        MouseRoute::record("guest", "unsupported", button, 1);
         return;
     }
     mouse.times_pressed[button]++;
     mouse.last_pressed_x[button]=(uint16_t)POS_X;
     mouse.last_pressed_y[button]=(uint16_t)POS_Y;
 
+    MouseRoute::record("guest", "int33-edge-recorded", button, 1, (uint16_t)POS_X, (uint16_t)POS_Y);
+
     /* serial mouse, if connected, also wants to know about it */
     on_mouse_event_for_serial(0,0,mouse.buttons);
 }
 
 void Mouse_ButtonReleased(uint8_t button) {
+#if C_DEBUG
+    if(!NativeControl::rawEffectAllowed())return;
+#endif
     if (!IS_PC98_ARCH && KEYBOARD_AUX_Active()) {
         switch (button) {
             case 0:
@@ -1290,51 +1409,58 @@ void Mouse_ButtonReleased(uint8_t button) {
                 mouse.scrollwheel += 8;
                 break;
             default:
+                MouseRoute::record("guest", "unsupported", button, 0);
                 return;
         }
 
         KEYBOARD_AUX_Event(0,0,mouse.buttons,mouse.scrollwheel);
+        MouseRoute::record("guest", "aux-dispatched-no-int33-coordinate", button, 0);
         mouse.scrollwheel = 0;
         return;
     }
 
-    if (button > 2)
-        return;
+    if (button > 2) { MouseRoute::record("guest", "unsupported", button, 0); return; }
 
     switch (button) {
 #if (MOUSE_BUTTONS >= 1)
     case 0:
-        if (!(mouse.buttons&1)) return;
+        if (!(mouse.buttons&1)) { MouseRoute::record("guest", "duplicate-suppressed", button, 0); return; }
         mouse.buttons&=~1;
         Mouse_AddEvent(MOUSE_LEFT_RELEASED);
         break;
 #endif
 #if (MOUSE_BUTTONS >= 2)
     case 1:
-        if (!(mouse.buttons&2)) return;
+        if (!(mouse.buttons&2)) { MouseRoute::record("guest", "duplicate-suppressed", button, 0); return; }
         mouse.buttons&=~2;
         Mouse_AddEvent(MOUSE_RIGHT_RELEASED);
         break;
 #endif
 #if (MOUSE_BUTTONS >= 3)
     case 2:
-        if (!(mouse.buttons&4)) return;
+        if (!(mouse.buttons&4)) { MouseRoute::record("guest", "duplicate-suppressed", button, 0); return; }
         mouse.buttons&=~4;
         Mouse_AddEvent(MOUSE_MIDDLE_RELEASED);
         break;
 #endif
     default:
+        MouseRoute::record("guest", "unsupported", button, 0);
         return;
     }
     mouse.times_released[button]++; 
     mouse.last_released_x[button]=(uint16_t)POS_X;
     mouse.last_released_y[button]=(uint16_t)POS_Y;
 
+    MouseRoute::record("guest", "int33-edge-recorded", button, 0, (uint16_t)POS_X, (uint16_t)POS_Y);
+
     /* serial mouse, if connected, also wants to know about it */
     on_mouse_event_for_serial(0,0,mouse.buttons);
 }
 
 void Mouse_WheelMoved(int32_t scroll) {
+#if C_DEBUG
+    if(!NativeControl::rawEffectAllowed())return;
+#endif
 	mouse.wheel = clamp(scroll + mouse.wheel, -0x7FFF, 0x7FFF); /* limit is -0x8000,0x7FFF, but let's keep it symmetric */
 	Mouse_AddEvent(MOUSE_WHEEL_MOVED);
 	mouse.last_scrolled_x=POS_X;
@@ -1395,10 +1521,21 @@ void Mouse_BeforeNewVideoMode(bool setmode) {
 }
 
 //Does way to much. Many things should be moved to mouse reset one day
-void Mouse_AfterNewVideoMode(bool setmode) {
+// Application range intent is distinct from first-range integration inference.
+static bool mouse_explicit_x=false,mouse_explicit_y=false;
+void Mouse_AfterNewVideoMode(bool setmode,unsigned operation) {
+    const auto origin=Mouse_ModeOrigin(operation);
+    Mouse_RecordWitness(MouseWitnessRoute::ModeBefore,0,0,&origin);
     mouse.inhibit_draw = false;
     /* Get the correct resolution from the current video mode */
     uint8_t mode = mem_readb(BIOS_VIDEO_MODE);
+    const int old_min_x=mouse.min_x,old_max_x=mouse.max_x;
+    const int old_min_y=mouse.min_y,old_max_y=mouse.max_y;
+    const bool keep_x=MouseRangePolicy::retain_explicit(setmode,operation,mode,mouse_explicit_x,
+                       old_min_x,old_max_x,639,assume_max_x,pc98_nec_mouse);
+    const bool keep_y=MouseRangePolicy::retain_explicit(setmode,operation,mode,mouse_explicit_y,
+                       old_min_y,old_max_y,199,assume_max_y,pc98_nec_mouse);
+    mouse_explicit_x=keep_x;mouse_explicit_y=keep_y;
     if (setmode && mode == mouse.mode) LOG(LOG_MOUSE,LOG_NORMAL)("New video mode is the same as the old");
     mouse.first_range_setx = false;
     mouse.first_range_sety = false;
@@ -1531,6 +1668,10 @@ void Mouse_AfterNewVideoMode(bool setmode) {
     mouse.cursorType = 0;
     mouse.enabled=true;
 
+    // Target mode/granularity is initialized normally; restore only applicable
+    // logical domains, with identical absolute/report extent for each axis.
+    if(keep_x){mouse.min_x=old_min_x;mouse.max_x=old_max_x;}
+    if(keep_y){mouse.min_y=old_min_y;mouse.max_y=old_max_y;}
     if (assume_max_x > 0)
         mouse.max_screen_x = assume_max_x;
     else
@@ -1540,12 +1681,15 @@ void Mouse_AfterNewVideoMode(bool setmode) {
         mouse.max_screen_y = assume_max_y;
     else
         mouse.max_screen_y = mouse.max_y;
+    if(keep_x)mouse.x=std::max(float(mouse.min_x),std::min(mouse.x,float(mouse.max_x)));
+    if(keep_y)mouse.y=std::max(float(mouse.min_y),std::min(mouse.y,float(mouse.max_y)));
+    Mouse_RecordWitness(MouseWitnessRoute::ModeAfter,0,0,&origin);
 }
 
 //Much too empty, Mouse_NewVideoMode contains stuff that should be in here
-static void Mouse_Reset(void) {
+static void Mouse_Reset(unsigned operation=1) {
     Mouse_BeforeNewVideoMode(false);
-    Mouse_AfterNewVideoMode(false);
+    Mouse_AfterNewVideoMode(false,operation);
     Mouse_SetMickeyPixelRate(8,16);
 
     mouse.mickey_x = 0;
@@ -1594,6 +1738,7 @@ void Mouse_Read_Motion_Data() {
 
 // Reference: http://www.ctyme.com/intr/int-33.htm
 static Bitu INT33_Handler(void) {
+    const unsigned reset_operation=(reg_ax==0)?2:3;
 //  LOG(LOG_MOUSE,LOG_NORMAL)("MOUSE: %04X %X %X %d %d",reg_ax,reg_bx,reg_cx,POS_X,POS_Y);
     switch (reg_ax) {
     case 0x00:  /* MS MOUSE - RESET DRIVER AND READ STATUS */
@@ -1632,6 +1777,10 @@ static Bitu INT33_Handler(void) {
         mouse.first_range_sety = false;
         if (en_int33_hide_if_polling) int33_last_poll = PIC_FullIndex();
         Mouse_Used();
+        mouse_diagnostic.returned_x=reg_cx;mouse_diagnostic.returned_y=reg_dx;
+        if(mouse_diagnostic.return_sequence!=UINT64_MAX)++mouse_diagnostic.return_sequence;
+        mouse_diagnostic.return_tick=PIC_Ticks;
+        Mouse_RecordWitness(MouseWitnessRoute::Poll);
         break;
     case 0x04:  /* MS MOUSE v1.0+ - POSITION MOUSE CURSOR */
         /* If position isn't different from current position
@@ -1646,6 +1795,7 @@ static Bitu INT33_Handler(void) {
         else if ((int16_t)reg_dx != POS_Y) mouse.y = static_cast<float>(reg_dx);
         DrawCursor();
         if (en_int33_hide_if_polling) int33_last_poll = PIC_FullIndex();
+        Mouse_RecordWitness(MouseWitnessRoute::Position);
         break;
     case 0x05:  /* MS MOUSE v1.0+ - RETURN BUTTON PRESS DATA */
         if(pc98_nec_mouse) {
@@ -1724,6 +1874,7 @@ static Bitu INT33_Handler(void) {
             else { min = (int16_t)reg_dx; max = (int16_t)reg_cx; }
             mouse.min_x = min;
             mouse.max_x = max;
+            mouse_explicit_x=true;
             /* Battle Chess wants this */
             if (mouse.x > mouse.max_x) mouse.x = mouse.max_x;
             if (mouse.x < mouse.min_x) mouse.x = mouse.min_x;
@@ -1739,7 +1890,7 @@ static Bitu INT33_Handler(void) {
              *      and then set a mouse range of x=0-1279 and y=0-479. Using the FIRST range
              *      set after mode set is the only way to make sure mouse pointer integration
              *      tracks the guest pointer properly. */
-            if (mouse.first_range_setx || mouse.buttons == 0) {
+            if (MouseRangePolicy::update_screen(mouse.first_range_setx,mouse.buttons!=0,AbsoluteNeverRangePolicy())) {
                 if (mouse.min_x == 0 && mouse.max_x > 0 && assume_max_x == 0) {
                     // most games redefine the range so they can use a saner range matching the screen
                     int16_t nval = mouse.max_x;
@@ -1774,6 +1925,7 @@ static Bitu INT33_Handler(void) {
                 mouse.first_range_setx = false;
             }
         }
+        if(!pc98_nec_mouse)Mouse_RecordWitness(MouseWitnessRoute::RangeX);
         break;
     case 0x08:  /* MS MOUSE v1.0+ - DEFINE VERTICAL CURSOR RANGE */
         if(pc98_nec_mouse) {
@@ -1793,6 +1945,7 @@ static Bitu INT33_Handler(void) {
             else { min = (int16_t)reg_dx; max = (int16_t)reg_cx; }
             mouse.min_y = min;
             mouse.max_y = max;
+            mouse_explicit_y=true;
             /* Battle Chess wants this */
             if (mouse.y > mouse.max_y) mouse.y = mouse.max_y;
             if (mouse.y < mouse.min_y) mouse.y = mouse.min_y;
@@ -1808,7 +1961,7 @@ static Bitu INT33_Handler(void) {
              *      and then set a mouse range of x=0-1279 and y=0-479. Using the FIRST range
              *      set after mode set is the only way to make sure mouse pointer integration
              *      tracks the guest pointer properly. */
-            if (mouse.first_range_sety || mouse.buttons == 0) {
+            if (MouseRangePolicy::update_screen(mouse.first_range_sety,mouse.buttons!=0,AbsoluteNeverRangePolicy())) {
                 if (mouse.min_y == 0 && mouse.max_y > 0 && assume_max_y == 0) {
                     // most games redefine the range so they can use a saner range matching the screen
                     int16_t nval = mouse.max_y;
@@ -1843,6 +1996,7 @@ static Bitu INT33_Handler(void) {
                 mouse.first_range_sety = false;
             }
         }
+        if(!pc98_nec_mouse)Mouse_RecordWitness(MouseWitnessRoute::RangeY);
         break;
     case 0x09:  /* MS MOUSE v3.0+ - DEFINE GRAPHICS CURSOR */
         if(pc98_nec_mouse) {
@@ -2022,7 +2176,7 @@ static Bitu INT33_Handler(void) {
         if (Mouse_Drv) {
             reg_ax = 0xffff;
             reg_bx = MOUSE_BUTTONS;
-            Mouse_Reset();
+            Mouse_Reset(reset_operation);
             Mouse_Used();
             if (!useps2callback)
                 AUX_INT33_Takeover();
@@ -2202,7 +2356,9 @@ static Bitu MOUSE_BD_Handler(void) {
             break;
     }
 
+    mouse_backdoor_call=true;
     INT33_Handler();
+    mouse_backdoor_call=false;
 
     // save back the registers, too
     real_writew(SegValue(ds),raxpt,reg_ax);
@@ -2284,6 +2440,7 @@ static Bitu INT74_Handler(void) {
             reg_di=(uint16_t)static_cast<int16_t>(mouse.mickey_y);
             CPU_Push16(RealSeg(CALLBACK_RealPointer(int74_ret_callback)));
             CPU_Push16(RealOff(CALLBACK_RealPointer(int74_ret_callback))+7);
+            Mouse_RecordWitness(MouseWitnessRoute::Interrupt,mouse.sub_seg,mouse.sub_ofs);
             CPU_Push16(RealSeg(uir_callback));
             CPU_Push16(RealOff(uir_callback));
             CPU_Push16(mouse.sub_seg);
@@ -2799,6 +2956,12 @@ void VMWARE_ScreenParams(uint16_t clip_x, uint16_t clip_y, uint16_t res_x, uint1
         mouse_diff_x = clamp(static_cast<int32_t>(mouse_diff_x), -video_clip_x, static_cast<int32_t>(video_clip_x));
         mouse_diff_y = clamp(static_cast<int32_t>(mouse_diff_y), -video_clip_y, static_cast<int32_t>(video_clip_y));
 }
+
+#if C_DEBUG && C_DEBUG_LUA
+bool Mouse_CheckpointNeutral() {
+    return !mouse.buttons && !mouse.events && !mouse.in_UIR;
+}
+#endif
 
 //save state support
 void *MOUSE_Limit_Events_PIC_Event = (void*)((uintptr_t)MOUSE_Limit_Events);
