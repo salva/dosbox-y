@@ -9,7 +9,7 @@ work.mkdir(exist_ok=True)
 gui = (root/'src/debug/debug_gui.cpp').read_text()
 capture = gui[gui.index('bool DEBUG_AgentBeginOutputCapture(void)'):gui.index('\n#endif', gui.index('bool DEBUG_AgentBeginOutputCapture(void)'))]
 adapter = (root/'src/agent/debugger/debugger_adapter.cpp').read_text()
-start = adapter.index('    std::vector<char> mutable_command(command.begin(), command.end());')
+start = adapter.index('    if (!DEBUG_AgentBeginOutputCapture())', adapter.index('bool DebuggerAdapter::ExecuteDiagnosticCommand'))
 body = adapter[start:adapter.index('\n#else', start)]
 source = r'''
 #include <cassert>
@@ -22,7 +22,10 @@ bool agent_output_capture_active=false;
 std::string agent_output_capture;
 ''' + capture + r'''
 int calls=0; bool fail=false,accept=true;
-bool ParseCommand(char*) {
+namespace NativeDebug { enum class Frontend { Agent }; }
+static int DEBUG_AttachNativeExecution(NativeDebug::Frontend, int) {return 7;}
+bool DEBUG_ExecuteSessionCommand(const char*, int attachment) {
+ assert(attachment==7);
  ++calls; assert(agent_output_capture_active);
  agent_output_capture="diagnostic output";
  if(fail)throw std::runtime_error("parser failure");

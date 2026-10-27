@@ -505,6 +505,12 @@ void E_Exit(const char * format,...) {
 	endwin();
 #endif
 	fprintf(stderr, "E_Exit: %s\n", buf);
+#if C_DEBUG
+    // Fatal exit does not unwind debugger scopes. Contain the transport before
+    // SDL teardown, without retiring work against a partially installed guest.
+    void ControlServer_StopForFatalExit();
+    ControlServer_StopForFatalExit();
+#endif
 	SDL_Quit();
 	if (sdl_wait_on_error()) {
 #if defined(WIN32)

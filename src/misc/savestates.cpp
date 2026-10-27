@@ -16,6 +16,9 @@
 #include "logging.h"
 #include "mixer.h"
 #include "build_timestamp.h"
+#include "machine_service.h"
+#include "native_frontier.h"
+#include "debug.h"
 #ifdef WIN32
 #include "direct.h"
 #endif
@@ -420,25 +423,37 @@ int zipOutOpenFile(zipFile zf,const char *zfname,zip_fileinfo &zi,const bool com
 		NULL/*password*/,0/*crcFile*/,1/*zip64*/);
 }
 
-void SaveState::save(size_t slot) { //throw (Error)
-	if (slot >= SLOT_COUNT*MAX_PAGE)  return;
-#ifdef C_SDL2
-        SDL_PauseAudioDevice(SDL2_AudioDevice, 0);
-#else
-        SDL_PauseAudio(0);
-#endif
+static bool save_state_frontier() {
+    // No decoder, BIOS/DOS callback or idle-wrapper restoration suffix can
+    // remain underneath installation. An audited owner grammar is also needed.
+    const bool quiescent = NativeFrontier::frontiers().quiescent();
+    const auto admission = DOSBOX_MachineContextAdmission();
+    if (!quiescent || admission != MachineService::Denial::None) {
+        const auto owner = DOSBOX_MachineServiceOwner();
+        LOG_MSG("State frontier refused: quiescent=%u owner=%u depth=%u admission=%u",
+                unsigned(quiescent), unsigned(owner.kind), owner.depth, unsigned(admission));
+        return false;
+    }
+    return true;
+}
+void SaveState::save(size_t slot) { (void)saveTo(slot, nullptr); }
+bool SaveState::saveFile(const std::string &path) { return saveTo(0, &path); }
+bool SaveState::saveTo(size_t slot, const std::string *destination) { //throw (Error)
+    if (!save_state_frontier()) { LOG_MSG("Save refused: unsafe native continuation"); return false; }
+	if (slot >= SLOT_COUNT*MAX_PAGE) return false;
 	bool save_err=false;
 	if((MEM_TotalPages()*4096/1024/1024)>1024) {
 		LOG_MSG("Stopped. 1 GB is the maximum memory size for saving/loading states.");
-		notifyError("Unsupported memory size for saving states.", false);
-		return;
+		if (destination) LOG_MSG("Unsupported memory size for saving states.");
+		else notifyError("Unsupported memory size for saving states.", false);
+		return false;
 	}
 	bool compresssaveparts = static_cast<Section_prop *>(control->GetSection("dosbox"))->Get_bool("compresssaveparts");
 	const char *save_remark = "";
 #if !defined(HX_DOS)
 	if (auto_save_state)
 		save_remark = "Auto-save";
-	else if (!noremark_save_state) {
+	else if (!destination && !noremark_save_state) {
 		/* NTS: tinyfd_inputBox() returns a string from an internal statically declared char array.
 		 *      It is not necessary to free the return string, but it is important to understand that
 		 *      the next call to tinyfd_inputBox() will obliterate the previously returned string.
@@ -458,7 +473,7 @@ void SaveState::save(size_t slot) { //throw (Error)
 		MAPPER_ReleaseAllKeys();
 		GFX_LosingFocus();
 		if (fs&&!GFX_IsFullscreen()) GFX_SwitchFullScreen();
-		if (new_remark==NULL) return;
+		if (new_remark==NULL) return false;
 		new_remark=trim(new_remark);
 		if (strlen(new_remark)>30) new_remark[30]=0;
 		save_remark = new_remark;
@@ -477,7 +492,7 @@ void SaveState::save(size_t slot) { //throw (Error)
 	std::stringstream slotname;
 	slotname << slot+1;
 	temp=path;
-	std::string save=use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav";
+	std::string save=destination ? *destination : (use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav");
     LOG_MSG("Saving state to slot: %d (%s)", (int)slot + 1, save.c_str());
 
     StateArchiveOutput output(save);
@@ -586,10 +601,13 @@ done:
     // Sidecar publication is separate; failure here can leave a newer sidecar.
     if (!save_err && !output.publish()) save_err = true;
 
-	if (save_err)
-		notifyError(MSG_Get("SAVE_FAILED"));
+	if (save_err) {
+        if (destination) LOG_MSG("%s", MSG_Get("SAVE_FAILED"));
+        else notifyError(MSG_Get("SAVE_FAILED"));
+    }
 	else
 		LOG_MSG("[%s]: Saved. (Slot %d)", getTime().c_str(), (int)slot+1);
+    return !save_err;
 }
 
 void savestatecorrupt(const char* part) {
@@ -609,20 +627,21 @@ bool loadstateconfirm(int ind) {
 	return ret;
 }
 
-void SaveState::load(size_t slot) const { //throw (Error)
+void SaveState::load(size_t slot) const { (void)loadFrom(slot, nullptr); }
+bool SaveState::loadFile(const std::string &path) const { return loadFrom(0, &path); }
+bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw (Error)
+    // Explicit native operations must return a refusal, never enter modal UI
+    // or let force-load bypass incompatible metadata. Slot UI keeps its policy.
+    if (!save_state_frontier()) { LOG_MSG("Load refused: unsafe native continuation"); return false; }
 	//	if (isEmpty(slot)) return;
 	bool load_err=false;
 	bool installation_started=false;
 	if((MEM_TotalPages()*4096/1024/1024)>1024) {
 		LOG_MSG("Stopped. 1 GB is the maximum memory size for saving/loading states.");
-		notifyError("Unsupported memory size for loading states.", false);
-		return;
+		if (source) LOG_MSG("Unsupported memory size for loading states.");
+		else notifyError("Unsupported memory size for loading states.", false);
+		return false;
 	}
-#ifdef C_SDL2
-        SDL_PauseAudioDevice(SDL2_AudioDevice, 0);
-#else
-        SDL_PauseAudio(0);
-#endif
 	std::string path;
 	int err;
 	bool Get_Custom_SaveDir(std::string& savedir);
@@ -635,14 +654,15 @@ void SaveState::load(size_t slot) const { //throw (Error)
 	temp = path;
 	std::stringstream slotname;
 	slotname << slot+1;
-	std::string save=use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav";
+	std::string save=source ? *source : (use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav");
 	std::ifstream check_slot;
 	check_slot.open(save.c_str(), std::ifstream::in);
 	if(check_slot.fail()) {
 		LOG_MSG("No saved slot - %d (%s)",(int)slot+1,save.c_str());
-		notifyError(use_save_file&&savefilename.size()?"The selected save file is currently empty.":"The selected save slot is an empty slot.", false);
+        if (source) LOG_MSG("The selected save file is currently empty or unavailable.");
+        else notifyError(use_save_file&&savefilename.size()?"The selected save file is currently empty.":"The selected save slot is an empty slot.", false);
 		load_err=true;
-		return;
+		return false;
 	}
 	check_slot.close();
     LOG_MSG("Loading state from slot: %d (%s)", (int)slot + 1, save.c_str());
@@ -681,19 +701,14 @@ void SaveState::load(size_t slot) const { //throw (Error)
 		char buffer[4096];
 		std::streamsize sz = zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer)-1); buffer[sz] = 0;
 
-		char *p;
-		if (strstr(buffer, "\nNo compression") != NULL) {
-			/* 2025/01/12: Removal of this string is required to match version string below even if now ignored */
-			p=strrchr(buffer, '\n');
-			if (p!=NULL) *p=0;
-		}
-		p=strrchr(buffer, '\n'); /* Remove i.e. "Linux" */
-		if (p!=NULL) *p=0;
+		// Only the first line identifies the emulator version. Platform,
+		// build-date and compression annotations are informational.
+		if (char *p = strchr(buffer, '\n')) *p = 0;
 		std::string emulatorversion = std::string("DOSBox-X ") + VERSION + std::string(" (") + SDL_STRING + std::string(")");
 		if (strcasecmp(buffer,emulatorversion.c_str())) {
 			loadstate_detail_saved = strlen(buffer) ? std::string(buffer) : std::string("(none)");
 			loadstate_detail_current = emulatorversion;
-			if(!force_load_state&&!loadstateconfirm(0)) {
+			if(source || (!force_load_state&&!loadstateconfirm(0))) {
 				LOG_MSG("Aborted. Check your DOSBox-X version: %s",buffer);
 				load_err=true;
 				goto done;
@@ -716,7 +731,7 @@ void SaveState::load(size_t slot) const { //throw (Error)
 			buffer[length]='\0';
 			loadstate_detail_saved = length ? std::string(buffer) : std::string("(none)");
 			loadstate_detail_current = RunningProgram.empty() ? std::string("(none)") : RunningProgram;
-			if(!force_load_state&&!loadstateconfirm(1)) {
+			if(source || (!force_load_state&&!loadstateconfirm(1))) {
 				LOG_MSG("Aborted. Check your program name: %s",buffer);
 				load_err=true;
 				goto done;
@@ -759,7 +774,7 @@ void SaveState::load(size_t slot) const { //throw (Error)
 				snprintf(tmp,sizeof(tmp),"%d MB",current_mb);
 				loadstate_detail_current = tmp;
 			}
-			if(!force_load_state&&!loadstateconfirm(2)) {
+			if(source || (!force_load_state&&!loadstateconfirm(2))) {
 				LOG_MSG("Aborted. Check your memory size: %s pages", buffer);
 				load_err=true;
 				goto done;
@@ -784,7 +799,7 @@ void SaveState::load(size_t slot) const { //throw (Error)
 			buffer[length]='\0';
 			loadstate_detail_saved = length ? std::string(buffer) : std::string("(none)");
 			loadstate_detail_current = std::string(str);
-			if(!force_load_state&&!loadstateconfirm(3)) {
+			if(source || (!force_load_state&&!loadstateconfirm(3))) {
 				LOG_MSG("Aborted. Check your machine type: %s",buffer);
 				load_err=true;
 				goto done;
@@ -821,8 +836,10 @@ done:
 	// already have changed; do not publish restore completion or resume.
 	if (load_err && installation_started)
 		E_Exit("Save-state installation failed after live state may have changed");
-	if (!load_err && !dos_kernel_disabled) flagged_restore((char *)save.c_str());
+	if (!load_err && !dos_kernel_disabled && flagged_restore((char *)save.c_str()) != 0)
+        E_Exit("Save-state flagged file restoration failed after live state changed");
 	if (!load_err) LOG_MSG("[%s]: Loaded. (Slot %d)", getTime().c_str(), (int)slot+1);
+    return !load_err;
 }
 
 bool SaveState::isEmpty(size_t slot) const {

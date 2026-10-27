@@ -5,6 +5,7 @@ native_frontier.h \
 native_slice_observer.h \
 machine_service.h \
 native_debug_execution.h \
+native_control_owner.h \
 native_input.h \
 native_stop_conditions.h \
 lua_driver_handoff.h \
@@ -68,6 +69,7 @@ mztools.h
 nobase_noinst_HEADERS = \
 agent/agent_protocol.h \
 agent/agent_bridge.h \
+agent/stop_conditions.h \
 agent/debugger_adapter.h \
 agent/agent_server.h
 

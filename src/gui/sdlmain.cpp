@@ -7957,6 +7957,17 @@ void Windows_DPI_Awareness_Init() {
 }
 #endif
 
+static bool boot_shell_pending = false;
+
+// Run only after the BIOS boot callback has returned and its callback identity
+// and page-fault policy have been restored. The shell is destination bootstrap
+// ancestry, not a suspended guest callback with a native restoration suffix.
+void VM_RunPendingBootShell() {
+    if (!boot_shell_pending) return;
+    boot_shell_pending = false;
+    SHELL_Run();
+}
+
 bool VM_Boot_DOSBox_Kernel() {
     if (!dos_kernel_disabled) {
 #if !defined(OSFREE)
@@ -8059,7 +8070,7 @@ bool VM_Boot_DOSBox_Kernel() {
 
         DispatchVMEvent(VM_EVENT_DOS_INIT_AUTOEXEC_BAT_DONE); // <- we just finished executing AUTOEXEC.BAT
         DispatchVMEvent(VM_EVENT_DOS_INIT_AT_PROMPT); // <- now, we're at the DOS prompt
-        SHELL_Run();
+        boot_shell_pending = true;
     }
 
     return true;

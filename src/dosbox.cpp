@@ -56,6 +56,9 @@
 #include "agent/agent_bridge.h"
 #endif // defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
 #include "debug.h"
+#if C_DEBUG
+#include "native_control_owner.h"
+#endif
 #include "cpu.h"
 #include "logging.h"
 #include "menudef.h"
@@ -444,6 +447,18 @@ Bits DOSBOX_DispatchDecoder() {
             NativeExecution::slice_observer().notify(false);
         }
     } restore;
+#if C_DEBUG
+    struct RequestFlags {
+        unsigned saved = DEBUG_EnterNativeDecoderFlags();
+        decltype(cpudecoder) core = cpudecoder;
+        bool restore_core = DEBUG_NativeDecoderRestoresCore();
+        ~RequestFlags() {
+            if (restore_core) cpudecoder = core;
+            DEBUG_LeaveNativeDecoderFlags(saved);
+        }
+    } request_flags;
+    DEBUG_NativeDecoderEntered();
+#endif
     dosbox_allow_nonrecursive_page_fault = true;
     NativeExecution::slice_observer().notify(true);
     return (*cpudecoder)();
@@ -492,6 +507,17 @@ Bitu DOSBOX_DispatchCallback(Bits callback) {
 }
 
 static Bitu Normal_Loop(void) {
+#if C_DEBUG
+    // Host control is not a guest timer callback: polling it here keeps
+    // transport/session lifetime outside the serialized PIC ticker list.
+    extern void ControlServer_Poll();
+    ControlServer_Poll();
+    if (!NativeControl::rawEffectAllowed() || DEBUG_ContinuationUnavailable()) {
+        GFX_Events();
+        SDL_Delay(1);
+        return 0;
+    }
+#endif
     bool saved_allow = dosbox_allow_nonrecursive_page_fault;
     Bits ret;
 
@@ -528,8 +554,12 @@ static Bitu Normal_Loop(void) {
 
     try {
         while (1) {
+#if C_DEBUG
+            if (DEBUG_NativeExecutionBudgetExpired()) return 0;
+#endif
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
             dosbox_agent::AGENT_BridgePump();
+            if (DEBUG_NativeExecutionPending()) return 0;
 #endif
             NativeFrontier::frontiers().reach(NativeFrontier::Kind::Predispatch,
                                              DOSBOX_MachineServiceOwner().token);
@@ -552,6 +582,10 @@ static Bitu Normal_Loop(void) {
 
                     if (GCC_UNLIKELY(blah > 0U))
                         return blah;
+                    // BIOS boot initializes the kernel inside its callback,
+                    // but the shell must run after that callback unwinds.
+                    extern void VM_RunPendingBootShell();
+                    VM_RunPendingBootShell();
                 }
 #if C_DEBUG
                 if (DEBUG_ExitLoop())
@@ -804,7 +838,11 @@ MachineService::Relation DOSBOX_MachineServiceRelation(uint64_t token) { return 
 
 void DOSBOX_RunMachine(void) { DOSBOX_RunMachine(MachineService::Kind::Unclassified); }
 void DOSBOX_RunMachine(MachineService::Kind kind){
-    MachineService::Coordinator::Scope machine_owner(machine_service,kind);
+    MachineService::Coordinator::Scope machine_owner(machine_service,kind
+#if C_DEBUG
+        ,DEBUG_MachineOwnerDeparting
+#endif
+    );
     Bitu ret;
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
     dosbox_agent::AGENT_BridgeAttachToCurrentThread();
@@ -828,9 +866,18 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
         ret=(*loop)();
         if (!ret) NativeFrontier::frontiers().reach(NativeFrontier::Kind::LoopStop,
                                                   machine_owner.token());
-        // Only a returned handler seam can service data-only requests.
-        // Nonzero native return tokens belong to their restoration caller.
+        // Dispatch only after the loop and decoder/callback frames unwind.
+        // Nonzero tokens remain owned by their native restoration caller.
+#if defined(C_DOSBOX_AGENT)
+        if (!ret) dosbox_agent::AGENT_BridgePumpAtFrontier();
+#endif
+#if C_DEBUG
+        if (!ret) ret = (Bitu)DEBUG_DispatchNativeExecution();
+#endif
         if (!ret) machine_service.service(machine_service_slice,machine_service_context);
+#if C_DEBUG
+        if (!ret) ret = (Bitu)DEBUG_DispatchNativeExecution();
+#endif
     } while (!ret);
 
 #ifdef DEBUG_RECURSION

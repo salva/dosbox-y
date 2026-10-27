@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "native_debug_execution.h"
 
 namespace dosbox_agent {
 
@@ -67,20 +68,25 @@ enum class BreakpointKind {
 };
 
 struct NativeBreakpoint {
-    std::uintptr_t handle = 0;
+    std::uint64_t handle = 0;
     BreakpointKind kind = BreakpointKind::Execution;
     MemoryAddress address;
     bool once = false;
 };
 
 class DebuggerAdapter {
+    NativeDebug::Attachment observation_attachment_;
+    NativeDebug::Context observation_context_;
+    bool RequireStoppedObservation(std::string* error) const;
 public:
+    // Called only by the selected stopped notification, never by a read.
+    void CaptureStoppedContext();
     bool IsAvailable() const;
     bool RequireAvailable(std::string* error) const;
     bool IsShellReady() const;
     bool IsReadyForTargetStart() const;
     std::uint64_t EntryBreakpointSequence() const;
-    bool Continue(std::string* error) const;
+    bool Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const;
     bool Pause(std::string* error) const;
     bool StartTargetAtEntry(const std::string& command,
                             const std::vector<std::string>& arguments,
@@ -105,7 +111,7 @@ public:
                           MemoryAccessError* access_error,
                           std::string* error) const;
     bool DeleteBreakpoint(const NativeBreakpoint& breakpoint, std::string* error) const;
-    std::uintptr_t ConsumeLastBreakpointHandle() const;
+    std::uint64_t ConsumeLastBreakpointHandle() const;
     bool ExecuteDiagnosticCommand(const std::string& command,
                                   std::string* raw_output,
                                   std::string* error) const;

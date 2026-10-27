@@ -1,7 +1,9 @@
 #include "config.h"
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
 #include "agent/agent_bridge.h"
+#include "debug.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <deque>
@@ -18,6 +20,7 @@ public:
         std::uint64_t sequence = 0;
         std::chrono::steady_clock::time_point not_before;
         Command command;
+        bool stop_only = false;
     };
 
     mutable std::mutex mutex;
@@ -61,6 +64,21 @@ std::uint64_t EmulationThreadQueue::Submit(Command command)
     return SubmitAfter(0, std::move(command));
 }
 
+std::uint64_t EmulationThreadQueue::SubmitStop(Command command)
+{
+    if (!command) return 0;
+    std::lock_guard<std::mutex> lock(impl->mutex);
+    if (impl->shutdown || impl->next_sequence == 0) return 0;
+    Impl::PendingCommand pending;
+    pending.sequence = impl->next_sequence++;
+    pending.not_before = std::chrono::steady_clock::now();
+    pending.command = std::move(command);
+    pending.stop_only = true;
+    const auto sequence = pending.sequence;
+    impl->commands.push_back(std::move(pending));
+    return sequence;
+}
+
 std::uint64_t EmulationThreadQueue::SubmitAfter(const std::uint32_t delay_ms, Command command)
 {
     if (!command)
@@ -81,7 +99,7 @@ std::uint64_t EmulationThreadQueue::SubmitAfter(const std::uint32_t delay_ms, Co
 
 std::size_t EmulationThreadQueue::Pump()
 {
-    if (!IsBoundToCurrentThread())
+    if (!IsBoundToCurrentThread() || DEBUG_NativeExecutionPending())
         return 0;
 
     std::size_t pending_count = 0;
@@ -98,8 +116,17 @@ std::size_t EmulationThreadQueue::Pump()
             std::lock_guard<std::mutex> lock(impl->mutex);
             if (impl->commands.empty())
                 return count;
-            pending = std::move(impl->commands.front());
-            impl->commands.pop_front();
+            auto selected = impl->commands.begin();
+            const bool active = DEBUG_NativeExecutionInFlight();
+            if (active) {
+                // A stop may overtake deferred effects, but must not reorder
+                // those effects relative to one another.
+                selected = std::find_if(selected, impl->commands.end(),
+                    [](const Impl::PendingCommand& item) { return item.stop_only; });
+                if (selected == impl->commands.end()) return count;
+            }
+            pending = std::move(*selected);
+            impl->commands.erase(selected);
             ++inspected;
             if (pending.not_before > std::chrono::steady_clock::now()) {
                 impl->commands.push_back(std::move(pending));
@@ -109,6 +136,10 @@ std::size_t EmulationThreadQueue::Pump()
 
         pending.command(pending.sequence);
         ++count;
+        // Activation belongs to the outer RunMachine return seam. Do not
+        // dispatch another command against the pre-execution checkpoint.
+        if (DEBUG_NativeExecutionInFlight())
+            break;
     }
     return count;
 }
@@ -131,6 +162,8 @@ namespace {
 
 std::mutex debugger_stop_listener_mutex;
 DebuggerStopListener debugger_stop_listener;
+TargetExitListener target_exit_listener;
+bool bridge_frontier = false;
 
 } // namespace
 
@@ -144,10 +177,23 @@ std::size_t AGENT_BridgePump()
     return AGENT_EmulationQueue().Pump();
 }
 
+bool AGENT_BridgeAtFrontier() { return bridge_frontier; }
+
+std::size_t AGENT_BridgePumpAtFrontier()
+{
+    struct Restore {
+        bool previous = bridge_frontier;
+        ~Restore() { bridge_frontier = previous; }
+    } restore;
+    bridge_frontier = true;
+    return AGENT_EmulationQueue().Pump();
+}
+
 void AGENT_BridgeShutdown()
 {
     AGENT_EmulationQueue().Shutdown();
     AGENT_SetDebuggerStopListener(DebuggerStopListener());
+    AGENT_SetTargetExitListener(TargetExitListener());
 }
 
 void AGENT_SetDebuggerStopListener(DebuggerStopListener listener)
@@ -157,7 +203,8 @@ void AGENT_SetDebuggerStopListener(DebuggerStopListener listener)
 }
 
 void AGENT_NotifyDebuggerStopped(const std::uint16_t segment,
-                                 const std::uint32_t instruction_pointer)
+                                 const std::uint32_t instruction_pointer,
+                                 const NativeDebug::Result* terminal)
 {
     DebuggerStopListener listener;
     {
@@ -165,7 +212,23 @@ void AGENT_NotifyDebuggerStopped(const std::uint16_t segment,
         listener = debugger_stop_listener;
     }
     if (listener)
-        listener(segment, instruction_pointer);
+        listener(segment, instruction_pointer, terminal);
+}
+
+void AGENT_SetTargetExitListener(TargetExitListener listener)
+{
+    std::lock_guard<std::mutex> lock(debugger_stop_listener_mutex);
+    target_exit_listener = std::move(listener);
+}
+
+void AGENT_NotifyTargetExited()
+{
+    TargetExitListener listener;
+    {
+        std::lock_guard<std::mutex> lock(debugger_stop_listener_mutex);
+        listener = target_exit_listener;
+    }
+    if (listener) listener();
 }
 
 bool AGENT_RunQueueSelfTest(std::string* error)

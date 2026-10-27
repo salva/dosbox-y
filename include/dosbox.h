@@ -363,6 +363,10 @@ public:
    typedef std::string Error;
     static const size_t MAX_PAGE = 10, SLOT_COUNT = 10; //slot: [0,...,SLOT_COUNT - 1]
 
+    // Explicit-path callers use the same owner serializers and archive engine.
+    bool saveFile(const std::string &path);
+    bool loadFile(const std::string &path) const;
+
     void save   (size_t slot);       //throw (Error)
     void load   (size_t slot) const; //throw (Error)
     bool isEmpty(size_t slot) const;
@@ -380,6 +384,8 @@ public:
     void registerComponent(const std::string& uniqueName, Component& comp); //comp must have global lifetime!
 
 private:
+    bool saveTo(size_t slot, const std::string *destination);
+    bool loadFrom(size_t slot, const std::string *source) const;
     SaveState() {}
     SaveState(const SaveState&);
     SaveState& operator=(const SaveState&);

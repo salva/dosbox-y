@@ -23,12 +23,16 @@
 #include <cstdint>
 #include <cstring>
 #include <ios>
+#include <stdio.h>
 #include <list>
 #include <vector>
 #include <fstream>
 #include <iomanip>
 #include <string>
 #include <sstream>
+#if defined(C_DOSBOX_AGENT)
+#include "agent/stop_conditions.h"
+#endif
 using namespace std;
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -45,6 +49,20 @@ using namespace std;
 #include "debug.h"
 #if defined(C_DOSBOX_AGENT)
 #include "agent/agent_bridge.h"
+#endif
+#include "debug_common.h"
+static NativeDebug::Attachment command_attachment;
+static NativeDebug::Attachment instrumentation_attachment;
+#include "native_control_owner.h"
+#include "native_frontier.h"
+#include <chrono>
+#if C_DEBUG_LUA
+#include "lua_driver_worker.h"
+#include <thread>
+#include "debug_lua.h"
+#include "live_control.h"
+#include "machine_service.h"
+#include <assert.h>
 #endif
 #include "cross.h" //snprintf
 #include "fpu_state.h"
@@ -343,6 +361,15 @@ bool	logHeavy	= false;
 
 
 
+// Read-only instrumentation admission witness. Never cancels retained tracing.
+bool Debugger_TraceActive() {
+#if C_HEAVY_DEBUG
+    return cpuLog || logHeavy;
+#else
+    return false;
+#endif
+}
+
 static struct  {
 	uint32_t eax,ebx,ecx,edx,esi,edi,ebp,esp,eip;
 } oldregs;
@@ -379,6 +406,63 @@ bool IsDebuggerRunwatch(void) {
 
 bool IsDebuggerRunNormal(void) {
     return runnormal;
+}
+
+#if C_DEBUG_LUA
+// Experimental Gate G stop: no public capability until integration gates pass.
+static uint64_t Debugger_LiveHostNow();
+enum class PredicateHold { None, Pending, Unsupported, Propagate, Suppress };
+static PredicateHold predicate_hold = PredicateHold::None;
+static bool predicate_selected = false;
+static MachineService::Owner predicate_owner;
+static DebuggerRegisters predicate_registers;
+static uint64_t predicate_selected_id=0;
+static DebuggerPredicateSummary predicate_summary;
+const DebuggerPredicateSummary &Debugger_PredicateSummary(){return predicate_summary;}
+static void PredicateCount(uint64_t &n){if(n==UINT64_MAX)predicate_summary.overflow=true;else ++n;}
+static void PredicateReceipt(const char *disposition,bool terminal) {
+    predicate_summary.last_valid=true;
+    auto &r=predicate_summary.last;
+    snprintf(r.disposition,sizeof(r.disposition),"%s",disposition);
+    if(terminal){predicate_summary.terminal=r;predicate_summary.terminal_valid=true;}
+}
+
+static Bitu predicate_tick=0;
+static LiveTaskStatus predicate_tasks;
+static uint64_t predicate_hold_start=0;
+static bool predicate_hold_reported=false;
+static MachineService::Denial predicate_denial=MachineService::Denial::None;
+const DebuggerRegisters &Debugger_PredicateRegisters() {return predicate_registers;}
+uint32_t Debugger_PredicateTick() {return uint32_t(predicate_tick);}
+bool Debugger_PredicateTasksUnchanged() {
+    const auto now=GFX_LuaTaskStatus();
+    return predicate_tasks.dispatch_sequence==now.dispatch_sequence && predicate_tasks.pending==now.pending && predicate_tasks.held==now.held &&
+        predicate_tasks.guest_ms==now.guest_ms && predicate_tasks.epoch==now.epoch &&
+        predicate_tasks.cleanup_generation==now.cleanup_generation &&
+        predicate_tasks.cleanup_state==now.cleanup_state && predicate_tasks.lifetime==now.lifetime;
+}
+bool Debugger_PredicateHeld() {return predicate_hold != PredicateHold::None;}
+bool Debugger_PredicatePending() {return predicate_hold == PredicateHold::Pending;}
+void Debugger_PredicateResolved(bool suppress, const char *diagnostic) {
+    assert(Debugger_PredicatePending());
+    if(diagnostic && *diagnostic)LOG_MSG("Breakpoint predicate: %.240s",diagnostic);
+    PredicateCount(predicate_summary.evaluated);
+    snprintf(predicate_summary.last.diagnostic,sizeof(predicate_summary.last.diagnostic),"%s",diagnostic?diagnostic:"");
+    if(diagnostic && *diagnostic)PredicateCount(predicate_summary.failed);
+    predicate_hold = suppress ? PredicateHold::Suppress : PredicateHold::Propagate;
+}
+#endif
+
+static void DEBUG_EnterCommonStoppedState(void)
+{
+	/* Shared debugger-common status transition. Both the normal ncurses
+	 * activation path and the explicit -debug-lua-script startup path use this
+	 * helper for the state read by Debugger_GetStatus().stopped. UI/terminal
+	 * ownership remains outside this helper and stays on the ncurses path only.
+	 */
+	debugging = true;
+	debug_running = false;
+	runnormal = false;
 }
 
 static void SetColor(Bitu test) {
@@ -644,18 +728,26 @@ class CBreakpoint
 {
 public:
 
+    static bool HasIndependentAt(uint64_t id,PhysPt location) {
+        for(auto bp:BPoints)
+            if(bp->GetId()!=id && bp->IsActive() && bp->GetType()==BKPNT_PHYSICAL &&
+               bp->GetLocation()==location)return true;
+        return false;
+    }
 	CBreakpoint(void);
-	uintptr_t GetId() const { return id; }
-	static bool DeleteById(uintptr_t id);
 	void					SetAddress		(uint16_t seg, uint32_t off)	{ location = (PhysPt)GetAddress(seg,off); type = BKPNT_PHYSICAL; segment = seg; offset = off; };
 	void					SetAddress		(PhysPt adr)				{ location = adr; type = BKPNT_PHYSICAL; };
 	void					SetInt			(uint8_t _intNr, uint16_t ah, uint16_t al)	{ intNr = _intNr; ahValue = ah; alValue = al; type = BKPNT_INTERRUPT; };
 	void					SetOnce			(bool _once)				{ once = _once; };
+	void					SetEnabled		(bool _enabled)			{ enabled = _enabled; };
+	void					SetOwner		(DebuggerBreakpointOwner _owner) { owner = _owner; };
+	void					SetLabel		(const char *_label);
 	void					SetType			(EBreakpoint _type)			{ type = _type; };
 	void					SetValue		(uint8_t value)				{ ahValue = value; };
 	void					SetOther		(uint8_t other)				{ alValue = other; };	
 
 	bool					IsActive		(void)						{ return active; };
+	bool					IsEnabled		(void)					{ return enabled; };
 	void					Activate		(bool _active);
 
 	EBreakpoint				GetType			(void)						{ return type; };
@@ -666,25 +758,50 @@ public:
 	uint8_t					GetIntNr		(void)						{ return intNr; };
 	uint16_t					GetValue		(void)						{ return ahValue; };
 	uint16_t					GetOther		(void)						{ return alValue; };
+	uint64_t					GetId			(void)						{ return id; };
+	DebuggerBreakpointOwner	GetOwner		(void)						{ return owner; };
+    uint64_t GetMachineOwner() const {return machine_owner;}
+    void SetMachineOwner(uint64_t value) {machine_owner=value;}
+	uint64_t					GetHitCount		(void)					{ return hit_count; };
+	const char*				GetLabel		(void)						{ return label; };
+	void					IncrementHitCount(void)				{ ++hit_count; };
 
 	// statics
-	static CBreakpoint*		AddBreakpoint		(uint16_t seg, uint32_t off, bool once);
+	static CBreakpoint*		AddBreakpoint		(uint16_t seg, uint32_t off, bool once, DebuggerBreakpointOwner owner = DebuggerBreakpointOwner::Unknown, bool enabled = true, const char *label = nullptr, bool after_existing = false);
 	static CBreakpoint*		AddIntBreakpoint	(uint8_t intNum, uint16_t ah, uint16_t al, bool once);
 	static CBreakpoint*		AddMemBreakpoint	(uint16_t seg, uint32_t off);
 	static void				DeactivateBreakpoints();
 	static void				ActivateBreakpoints	();
 	static void				ActivateBreakpointsExceptAt(PhysPt adr);
 	static bool				CheckBreakpoint		(uint16_t seg, uint32_t off);
+	static bool				CheckEnabledBreakpoint(uint16_t seg, uint32_t off);
 	static bool				CheckIntBreakpoint	(PhysPt adr, uint8_t intNr, uint16_t ahValue, uint16_t alValue);
 	static CBreakpoint*		FindPhysBreakpoint	(uint16_t seg, uint32_t off, bool once);
+	static bool				HasVisiblePermanentPhysBreakpointAt(PhysPt adr);
+	static DebuggerTempBreakpointResult PrepareRunUntilAddress(const DebuggerAddress &address, uint64_t *temporary_id_out, bool *created_out, bool exclusive);
+	static bool				DeleteInternalTemporaryById(uint64_t id, bool *cleared);
 	static CBreakpoint*		FindOtherActiveBreakpoint(PhysPt adr, CBreakpoint* skip);
 	static bool				IsBreakpoint		(uint16_t seg, uint32_t off);
 	static bool				DeleteBreakpoint	(uint16_t seg, uint32_t off);
 	static bool				DeleteBreakpoint		(CBreakpoint* breakpoint);
 	static bool				DeleteByIndex		(uint16_t index);
+	static bool				DeleteById		(uint64_t id, DebuggerBreakpointOwner requester, bool *cleared);
+    static bool MarkOnce(uint64_t id, DebuggerBreakpointOwner requester);
+    static void DeleteSession(uint64_t session) {
+        for (auto i=BPoints.begin();i!=BPoints.end();) {
+            auto *bp=*i;
+            if (bp->session_owner!=session) {++i;continue;}
+            bp->Activate(false);
+            if (lastTriggered==bp->id) lastTriggered=0;
+            i=BPoints.erase(i);delete bp;
+        }
+    }
+	static uint32_t			DeleteOwned		(DebuggerBreakpointOwner owner);
+    static void RetireMachineOwner(uint64_t token);
+	static DebuggerBreakpointFailure ListVisible(DebuggerBreakpointInfo *items, uint32_t capacity, uint32_t *count_out, bool include_internal);
 	static void				DeleteAll			(void);
 	static void				ShowList			(void);
-	static uintptr_t ConsumeLastTriggered(void);
+	static uint64_t				ConsumeLastTriggered			(void);
 
 
 private:
@@ -703,11 +820,17 @@ private:
 	// Shared
 	bool		active;
 	bool		once;
-	uintptr_t id;
-	static uintptr_t next_id;
+	bool		enabled;
+	uint64_t	id;
+	DebuggerBreakpointOwner owner;
+    uint64_t machine_owner = 0;
+    uint64_t session_owner = instrumentation_attachment.serial;
+	uint64_t	hit_count;
+	char		label[DebuggerBreakpointLabelMax];
 
 	static std::list<CBreakpoint*>	BPoints;
-	static uintptr_t lastTriggered;
+	static uint64_t lastTriggered;
+	static uint64_t next_id;
 #if C_HEAVY_DEBUG
 	friend bool DEBUG_HeavyIsBreakpoint(void);
 #endif
@@ -717,9 +840,10 @@ CBreakpoint::CBreakpoint(void):type(BKPNT_UNKNOWN),location(0),
 #if !C_HEAVY_DEBUG
 oldData(0xCC),
 #endif
-segment(0),offset(0),intNr(0),ahValue(0),alValue(0),active(false),once(false),id(0) {
-    // Retained adapter handles must not gain authority through address reuse.
-    if (next_id == UINTPTR_MAX) E_Exit("Debugger breakpoint identity exhausted");
+segment(0),offset(0),intNr(0),ahValue(0),alValue(0),active(false),once(false),enabled(true),id(0),owner(DebuggerBreakpointOwner::Unknown),hit_count(0),label{} {
+    // Zero is invalid; identities must never wrap and address reuse must not
+    // make a retained adapter handle refer to another breakpoint.
+    if (next_id == UINT64_MAX) E_Exit("Debugger breakpoint identity exhausted");
     id = next_id++;
 }
 
@@ -765,15 +889,28 @@ void CBreakpoint::Activate(bool _active)
 
 // Statics
 std::list<CBreakpoint*> CBreakpoint::BPoints;
-uintptr_t CBreakpoint::lastTriggered = 0;
-uintptr_t CBreakpoint::next_id = 1;
+uint64_t CBreakpoint::lastTriggered = 0;
+uint64_t CBreakpoint::next_id = 1;
 
-CBreakpoint* CBreakpoint::AddBreakpoint(uint16_t seg, uint32_t off, bool once)
+void CBreakpoint::SetLabel(const char *_label)
+{
+	label[0] = '\0';
+	if (_label != nullptr)
+		snprintf(label, sizeof(label), "%s", _label);
+}
+
+CBreakpoint* CBreakpoint::AddBreakpoint(uint16_t seg, uint32_t off, bool once, DebuggerBreakpointOwner owner, bool enabled, const char *label, bool after_existing)
 {
 	CBreakpoint* bp = new CBreakpoint();
 	bp->SetAddress		(seg,off);
 	bp->SetOnce			(once);
-	BPoints.push_front	(bp);
+	bp->SetOwner		(owner == DebuggerBreakpointOwner::Unknown ? (once ? DebuggerBreakpointOwner::Internal : DebuggerBreakpointOwner::Ncurses) : owner);
+	bp->SetEnabled		(enabled);
+	bp->SetLabel		(label);
+    // Local target is lower priority than independent registrations already
+    // at the PC. Their observer may suppress its candidate, then target wins.
+    if(after_existing)BPoints.push_back(bp);
+    else BPoints.push_front(bp);
 	return bp;
 }
 
@@ -782,6 +919,7 @@ CBreakpoint* CBreakpoint::AddIntBreakpoint(uint8_t intNum, uint16_t ah, uint16_t
 	CBreakpoint* bp = new CBreakpoint();
 	bp->SetInt			(intNum,ah,al);
 	bp->SetOnce			(once);
+	bp->SetOwner		(once ? DebuggerBreakpointOwner::Internal : DebuggerBreakpointOwner::Ncurses);
 	BPoints.push_front	(bp);
 	return bp;
 }
@@ -791,6 +929,7 @@ CBreakpoint* CBreakpoint::AddMemBreakpoint(uint16_t seg, uint32_t off)
 	CBreakpoint* bp = new CBreakpoint();
 	bp->SetAddress		(seg,off);
 	bp->SetOnce			(false);
+	bp->SetOwner		(DebuggerBreakpointOwner::Ncurses);
 	bp->SetType			(BKPNT_MEMORY);
 	BPoints.push_front	(bp);
 	return bp;
@@ -801,7 +940,8 @@ void CBreakpoint::ActivateBreakpoints()
 	// activate all breakpoints
 	std::list<CBreakpoint*>::iterator i;
 	for (i = BPoints.begin(); i != BPoints.end(); ++i)
-		(*i)->Activate(true);
+		if ((*i)->IsEnabled())
+			(*i)->Activate(true);
 }
 
 void CBreakpoint::DeactivateBreakpoints()
@@ -821,10 +961,21 @@ void CBreakpoint::ActivateBreakpointsExceptAt(PhysPt adr)
 		// Do not activate breakpoints at adr
 		if (bp->GetType() == BKPNT_PHYSICAL && bp->GetLocation() == adr)
 			continue;
+		if (!bp->IsEnabled())
+			continue;
 		bp->Activate(true);
 	}
 }
 
+static bool DEBUG_ObserveBuiltinAddress(uint64_t id);
+#if C_DEBUG_LUA
+// Called only on the native hit stack; a false verdict suppresses this hit.
+static bool LocalDriverObserveHit(uint64_t id);
+static void LocalDriverOwnerDeparting(uint64_t token);
+#if !C_HEAVY_DEBUG
+static uint64_t local_driver_suppressed_breakpoint=0;
+#endif
+#endif
 bool CBreakpoint::CheckBreakpoint(uint16_t seg, uint32_t off)
 // Checks if breakpoint is valid and should stop execution
 {
@@ -834,11 +985,45 @@ bool CBreakpoint::CheckBreakpoint(uint16_t seg, uint32_t off)
 	// Search matching breakpoint
 	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
 		CBreakpoint *bp = (*i);
+#if C_DEBUG_LUA
+        if(!Debugger_ExecutionBreakpointEligible(bp->GetId()))continue;
+#endif
 
 		if ((bp->GetType() == BKPNT_PHYSICAL) && bp->IsActive() &&
 		    (bp->GetLocation() == GetAddress(seg, off))) {
+			bp->IncrementHitCount();
+            DEBUG_ObserveBuiltinAddress(bp->GetId());
+#if C_DEBUG_LUA
+            if(!LocalDriverObserveHit(bp->GetId())) {
+#if !C_HEAVY_DEBUG
+                local_driver_suppressed_breakpoint=bp->GetId();
+#endif
+                continue;
+            }
+            // Collision inspection is read-only, before one-shot removal.
+            bool collision=false;
+            for(auto other:BPoints)
+                if(other!=bp && Debugger_ExecutionBreakpointEligible(other->GetId()) && other->IsActive() &&
+                   other->GetType()==BKPNT_PHYSICAL && other->GetLocation()==bp->GetLocation())collision=true;
+            predicate_selected = !collision && bp->GetOwner()==DebuggerBreakpointOwner::Lua &&
+                Debugger_LuaPredicateSelect(bp->GetId(),seg,off,bp->GetHitCount());
+            if(predicate_selected) {
+                predicate_selected_id=bp->GetId();predicate_tick=PIC_Ticks;predicate_tasks=GFX_LuaTaskStatus();
+                PredicateCount(predicate_summary.sequence);
+                predicate_summary.last=DebuggerPredicateReceipt{};
+                auto &r=predicate_summary.last;r.sequence=predicate_summary.sequence;
+                r.id=bp->GetId();r.hits=bp->GetHitCount();r.cs=seg;r.ip=off;
+                PredicateReceipt("pending",false);
+            }
+#endif
 			// Found
 			lastTriggered = bp->GetId();
+			Debugger_RecordBreakpointStop(seg,
+			                             off,
+			                             bp->GetId(),
+			                             bp->GetOwner(),
+			                             bp->GetHitCount(),
+			                             bp->GetLabel());
 			if (bp->GetOnce()) {
 				// delete it, if it should only be used once
 				(BPoints.erase)(i);
@@ -847,7 +1032,11 @@ bool CBreakpoint::CheckBreakpoint(uint16_t seg, uint32_t off)
 			} else {
 				// Also look for once-only breakpoints at this address
 				bp = FindPhysBreakpoint(seg, off, true);
-				if (bp) {
+				if (bp
+#if C_DEBUG_LUA
+                    && Debugger_ExecutionBreakpointEligible(bp->GetId())
+#endif
+                ) {
 					BPoints.remove(bp);
 					bp->Activate(false);
 					delete bp;
@@ -882,12 +1071,50 @@ bool CBreakpoint::CheckBreakpoint(uint16_t seg, uint32_t off)
                     }
 					DEBUG_ShowMsg("DEBUG: Memory breakpoint %s: %04X:%04X - %02X -> %02X\n",(bp->GetType()==BKPNT_MEMORY_PROT)?"(Prot)":"",bp->GetSegment(),bp->GetOffset(),bp->GetValue(),value);
 					bp->SetValue(value);
+					bp->IncrementHitCount();
+#if C_DEBUG_LUA
+                    if(!LocalDriverObserveHit(bp->GetId()))continue;
+#endif
 					lastTriggered = bp->GetId();
+					Debugger_RecordBreakpointStop(seg, off, bp->GetId(), bp->GetOwner(),
+					                             bp->GetHitCount(), bp->GetLabel());
 					return true;
 				}
 			}
 		}
 #endif
+	}
+	return false;
+}
+
+bool CBreakpoint::CheckEnabledBreakpoint(uint16_t seg, uint32_t off)
+// Checks if a logical execute breakpoint is enabled and should stop execution
+{
+	if (BPoints.empty()) return false;
+
+	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
+		CBreakpoint *bp = (*i);
+#if C_DEBUG_LUA
+        if(!Debugger_ExecutionBreakpointEligible(bp->GetId()))continue;
+#endif
+		if ((bp->GetType() == BKPNT_PHYSICAL) && bp->IsEnabled() &&
+		    (bp->GetLocation() == GetAddress(seg, off))) {
+			bp->IncrementHitCount();
+            DEBUG_ObserveBuiltinAddress(bp->GetId());
+			lastTriggered = bp->GetId();
+			Debugger_RecordBreakpointStop(seg,
+			                             off,
+			                             bp->GetId(),
+			                             bp->GetOwner(),
+			                             bp->GetHitCount(),
+			                             bp->GetLabel());
+			if (bp->GetOnce()) {
+				(BPoints.erase)(i);
+				bp->Activate(false);
+				delete bp;
+			}
+			return true;
+		}
 	}
 	return false;
 }
@@ -906,8 +1133,12 @@ bool CBreakpoint::CheckIntBreakpoint(PhysPt adr, uint8_t intNr, uint16_t ahValue
 		CBreakpoint* bp = (*i);
 		if ((bp->GetType()==BKPNT_INTERRUPT) && bp->IsActive() && (bp->GetIntNr()==intNr)) {
 			if (((bp->GetValue()==BPINT_ALL) || (bp->GetValue()==ahValue)) && ((bp->GetOther()==BPINT_ALL) || (bp->GetOther()==alValue))) {
-				// Freeze identity before retiring a one-shot interrupt breakpoint.
+				// Ignore it once ?
+				bp->IncrementHitCount();
+				// Freeze the receipt before a once-only interrupt breakpoint is deleted.
 				lastTriggered = bp->GetId();
+				Debugger_RecordBreakpointStop(SegValue(cs), reg_eip, bp->GetId(),
+				                             bp->GetOwner(), bp->GetHitCount(), bp->GetLabel());
 				if (bp->GetOnce()) {
 					// delete it, if it should only be used once
 					(BPoints.erase)(i);
@@ -982,6 +1213,95 @@ CBreakpoint* CBreakpoint::FindPhysBreakpoint(uint16_t seg, uint32_t off, bool on
 	return nullptr;
 }
 
+bool CBreakpoint::HasVisiblePermanentPhysBreakpointAt(PhysPt adr)
+{
+	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
+		CBreakpoint* bp = (*i);
+		if (bp->GetType() == BKPNT_PHYSICAL && bp->GetLocation() == adr && !bp->GetOnce() &&
+		    bp->GetOwner() != DebuggerBreakpointOwner::Internal)
+			return true;
+	}
+	return false;
+}
+
+DebuggerTempBreakpointResult CBreakpoint::PrepareRunUntilAddress(const DebuggerAddress &address,
+                                                                  uint64_t *temporary_id_out,
+                                                                  bool *created_out, bool exclusive)
+{
+	if (temporary_id_out != nullptr)
+		*temporary_id_out = 0;
+	if (created_out != nullptr)
+		*created_out = false;
+	if (!address.valid || address.off > 0xffff)
+		return DebuggerTempBreakpointResult::InvalidAddress;
+
+	const PhysPt adr = static_cast<PhysPt>(address.resolved);
+	bool saw_visible_enabled = false;
+	bool saw_visible_disabled = false;
+	bool saw_internal = false;
+
+	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
+		CBreakpoint* bp = (*i);
+		if (bp->GetType() != BKPNT_PHYSICAL || bp->GetLocation() != adr)
+			continue;
+		if (bp->GetOnce() || bp->GetOwner() == DebuggerBreakpointOwner::Internal) {
+			saw_internal = true;
+			continue;
+		}
+		if (bp->IsEnabled())
+			saw_visible_enabled = true;
+		else
+			saw_visible_disabled = true;
+	}
+
+	if (saw_internal)
+		return DebuggerTempBreakpointResult::InternalCollision;
+	if (saw_visible_disabled)
+		return DebuggerTempBreakpointResult::DisabledCollision;
+	if (saw_visible_enabled && exclusive)
+        return DebuggerTempBreakpointResult::InternalCollision;
+	if (saw_visible_enabled)
+		return DebuggerTempBreakpointResult::ReusedVisible;
+
+	CBreakpoint* bp = AddBreakpoint(address.seg,
+	                               address.off,
+	                               true,
+	                               DebuggerBreakpointOwner::Internal,
+	                               true,
+	                               "lua-run-until-addr");
+	if (bp == nullptr)
+		return DebuggerTempBreakpointResult::InvalidAddress;
+	if (temporary_id_out != nullptr)
+		*temporary_id_out = bp->GetId();
+	if (created_out != nullptr)
+		*created_out = true;
+	return DebuggerTempBreakpointResult::Created;
+}
+
+bool CBreakpoint::DeleteInternalTemporaryById(uint64_t id, bool *cleared)
+{
+	if (cleared != nullptr)
+		*cleared = false;
+	if (id == 0)
+		return false;
+
+	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
+		CBreakpoint* bp = (*i);
+		if (bp->GetId() != id)
+			continue;
+		if (bp->GetOwner() != DebuggerBreakpointOwner::Internal || !bp->GetOnce())
+			return false;
+		if (lastTriggered == id) lastTriggered = 0;
+		(BPoints.erase)(i);
+		bp->Activate(false);
+		delete bp;
+		if (cleared != nullptr)
+			*cleared = true;
+		return true;
+	}
+	return true;
+}
+
 CBreakpoint* CBreakpoint::FindOtherActiveBreakpoint(PhysPt adr, CBreakpoint* skip)
 {
 	std::list<CBreakpoint*>::iterator i;
@@ -1001,8 +1321,7 @@ bool CBreakpoint::IsBreakpoint(uint16_t seg, uint32_t off)
 
 bool CBreakpoint::DeleteBreakpoint(uint16_t seg, uint32_t off)
 {
-	CBreakpoint* bp = FindPhysBreakpoint(seg, off, false);
-    return DeleteBreakpoint(bp);
+	return DeleteBreakpoint(FindPhysBreakpoint(seg, off, false));
 }
 
 bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)
@@ -1022,20 +1341,226 @@ bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)
 	return false;
 }
 
-bool CBreakpoint::DeleteById(uintptr_t id)
+#if defined(C_DOSBOX_AGENT)
+uint64_t CBreakpoint::ConsumeLastTriggered(void)
 {
-    if (!id) return false;
-    for (auto bp : BPoints)
-        if (bp->GetId() == id) return DeleteBreakpoint(bp);
-    return false;
-}
-
-uintptr_t CBreakpoint::ConsumeLastTriggered(void)
-{
-	const uintptr_t result = lastTriggered;
+	const uint64_t result = lastTriggered;
 	lastTriggered = 0;
 	return result;
 }
+#endif // C_DOSBOX_AGENT
+
+bool CBreakpoint::DeleteById(uint64_t id, DebuggerBreakpointOwner requester, bool *cleared)
+{
+	if (cleared != nullptr)
+		*cleared = false;
+	if (id == 0)
+		return false;
+
+	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
+		CBreakpoint* bp = (*i);
+		if (bp->GetId() != id)
+			continue;
+		if ((requester == DebuggerBreakpointOwner::Lua || requester == DebuggerBreakpointOwner::Agent) &&
+		    bp->GetOwner() != requester)
+			return false;
+		if (lastTriggered == id) lastTriggered = 0;
+		(BPoints.erase)(i);
+		bp->Activate(false);
+		delete bp;
+		if (cleared != nullptr)
+			*cleared = true;
+		return true;
+	}
+	return true;
+}
+
+void CBreakpoint::RetireMachineOwner(uint64_t token)
+{
+    if (!token) return;
+    for (auto i=BPoints.begin(); i!=BPoints.end();) {
+        CBreakpoint *bp=*i;
+        if (bp->GetOwner()!=DebuggerBreakpointOwner::Agent ||
+            bp->GetMachineOwner()!=token) {++i;continue;}
+        if (lastTriggered==bp->GetId()) lastTriggered=0;
+        i=BPoints.erase(i);
+        bp->Activate(false);
+        delete bp;
+    }
+}
+
+static void DEBUG_ExecutionOwnerDeparting(uint64_t token);
+void DEBUG_AgentTraceOwnerDeparting(uint64_t token);
+void DEBUG_MachineOwnerDeparting(uint64_t token)
+{
+    // Native resources retire on exact machine unwind, irrespective of the
+    // structured-RPC projection (including Failed). Never pump the server here.
+    CBreakpoint::RetireMachineOwner(token);
+    DEBUG_ExecutionOwnerDeparting(token);
+#if C_HEAVY_DEBUG && defined(C_DOSBOX_AGENT)
+    DEBUG_AgentTraceOwnerDeparting(token);
+#endif
+#if C_DEBUG_LUA
+    Debugger_ExecutionOwnerDeparting(token);
+#endif
+}
+
+uint32_t CBreakpoint::DeleteOwned(DebuggerBreakpointOwner owner)
+{
+	uint32_t cleared = 0;
+	for (auto i = BPoints.begin(); i != BPoints.end();) {
+		CBreakpoint* bp = (*i);
+		if (bp->GetOwner() != owner) {
+			++i;
+			continue;
+		}
+		if (lastTriggered == bp->GetId()) lastTriggered = 0;
+		i = (BPoints.erase)(i);
+		bp->Activate(false);
+		delete bp;
+		++cleared;
+	}
+	return cleared;
+}
+
+DebuggerBreakpointFailure CBreakpoint::ListVisible(DebuggerBreakpointInfo *items, uint32_t capacity, uint32_t *count_out, bool include_internal)
+{
+	if (count_out != nullptr)
+		*count_out = 0;
+	if (items == nullptr && capacity != 0)
+		return DebuggerBreakpointFailure::BufferTooSmall;
+
+	uint32_t count = 0;
+	for (auto i = BPoints.begin(); i != BPoints.end(); ++i) {
+		CBreakpoint* bp = (*i);
+		if (bp->GetType() != BKPNT_PHYSICAL)
+			continue;
+		if (!include_internal && bp->GetOwner() == DebuggerBreakpointOwner::Internal)
+			continue;
+		if (!include_internal && bp->GetOnce())
+			continue;
+		if (items != nullptr) {
+			if (count >= capacity)
+				return DebuggerBreakpointFailure::BufferTooSmall;
+
+			DebuggerBreakpointInfo &info = items[count];
+			memset(&info, 0, sizeof(info));
+			info.id = bp->GetId();
+			info.seg = bp->GetSegment();
+			info.off = bp->GetOffset();
+			info.resolved = bp->GetLocation();
+			info.resolved_kind = DebuggerAddressKind::Physical;
+			info.enabled = bp->IsEnabled();
+			info.temporary = bp->GetOnce();
+			info.owner = bp->GetOwner();
+			info.hit_count = bp->GetHitCount();
+			if (bp->GetLabel() != nullptr && bp->GetLabel()[0] != '\0')
+				snprintf(info.label, sizeof(info.label), "%s", bp->GetLabel());
+		}
+		++count;
+	}
+
+	if (count_out != nullptr)
+		*count_out = count;
+	return DebuggerBreakpointFailure::None;
+}
+
+DebuggerBreakpointFailure Debugger_BreakpointSet(const DebuggerAddress &address,
+                                                 const DebuggerBreakpointCreateOptions &options,
+                                                 uint64_t *id_out, NativeDebug::Attachment attachment)
+{
+    if (id_out != nullptr) *id_out = 0;
+    if (!DEBUG_AdmitNativeEffect(attachment)) return DebuggerBreakpointFailure::PermissionDenied;
+	if (!address.valid)
+		return DebuggerBreakpointFailure::InvalidAddress;
+	if (options.temporary)
+		return DebuggerBreakpointFailure::UnsupportedOption;
+	if (address.off > 0xffff)
+		return DebuggerBreakpointFailure::InvalidAddress;
+	if (options.owner == DebuggerBreakpointOwner::Lua &&
+	    CBreakpoint::HasVisiblePermanentPhysBreakpointAt(static_cast<PhysPt>(address.resolved)))
+		return DebuggerBreakpointFailure::Duplicate;
+
+	CBreakpoint* bp = CBreakpoint::AddBreakpoint(address.seg,
+	                                           address.off,
+	                                           false,
+	                                           options.owner,
+	                                           options.enabled,
+	                                           options.label);
+	if (bp == nullptr)
+		return DebuggerBreakpointFailure::InvalidAddress;
+	if (id_out != nullptr)
+		*id_out = bp->GetId();
+	return DebuggerBreakpointFailure::None;
+}
+
+bool CBreakpoint::MarkOnce(uint64_t id, DebuggerBreakpointOwner requester)
+{
+    for(auto bp:BPoints) {
+        if(bp->GetId()!=id)continue;
+        if(bp->GetOwner()!=requester)return false;
+        bp->SetOnce(true);return true;
+    }
+    return false;
+}
+
+bool Debugger_BreakpointOnce(uint64_t id, DebuggerBreakpointOwner requester, NativeDebug::Attachment attachment)
+{
+    if (!DEBUG_AdmitNativeEffect(attachment)) return false;
+    return CBreakpoint::MarkOnce(id,requester);
+}
+
+DebuggerBreakpointFailure Debugger_BreakpointClear(uint64_t id,
+                                                   DebuggerBreakpointOwner requester,
+                                                   bool *cleared_out, NativeDebug::Attachment attachment)
+{
+    if (cleared_out != nullptr) *cleared_out = false;
+    if (!DEBUG_AdmitNativeEffect(attachment)) return DebuggerBreakpointFailure::PermissionDenied;
+	if (id == 0)
+		return DebuggerBreakpointFailure::InvalidId;
+	if (!CBreakpoint::DeleteById(id, requester, cleared_out))
+		return DebuggerBreakpointFailure::PermissionDenied;
+	return DebuggerBreakpointFailure::None;
+}
+
+DebuggerBreakpointFailure Debugger_BreakpointList(DebuggerBreakpointInfo *items,
+                                                  uint32_t capacity,
+                                                  uint32_t *count_out,
+                                                  bool include_internal)
+{
+	return CBreakpoint::ListVisible(items, capacity, count_out, include_internal);
+}
+
+DebuggerBreakpointFailure Debugger_BreakpointClearOwned(DebuggerBreakpointOwner owner,
+                                                        uint32_t *cleared_out, NativeDebug::Attachment attachment)
+{
+    if (cleared_out != nullptr) *cleared_out = 0;
+    if (!DEBUG_AdmitNativeEffect(attachment)) return DebuggerBreakpointFailure::PermissionDenied;
+	const uint32_t cleared = CBreakpoint::DeleteOwned(owner);
+	if (cleared_out != nullptr)
+		*cleared_out = cleared;
+	return DebuggerBreakpointFailure::None;
+}
+
+DebuggerTempBreakpointResult Debugger_PrepareRunUntilAddress(const DebuggerAddress &address,
+                                                             uint64_t *temporary_id_out,
+                                                             bool *created_out, bool exclusive)
+{
+	return CBreakpoint::PrepareRunUntilAddress(address, temporary_id_out, created_out, exclusive);
+}
+
+DebuggerBreakpointFailure Debugger_ClearInternalTemporaryBreakpoint(uint64_t id,
+                                                                   bool *cleared_out)
+{
+	if (cleared_out != nullptr)
+		*cleared_out = false;
+	if (id == 0)
+		return DebuggerBreakpointFailure::InvalidId;
+	if (!CBreakpoint::DeleteInternalTemporaryById(id, cleared_out))
+		return DebuggerBreakpointFailure::PermissionDenied;
+	return DebuggerBreakpointFailure::None;
+}
+
 
 void CBreakpoint::ShowList(void)
 {
@@ -1074,6 +1599,21 @@ bool DEBUG_Breakpoint(void)
 	return true;
 }
 
+bool DEBUG_RetrySuppressedBreakpoint(void) {
+#if C_DEBUG_LUA && !C_HEAVY_DEBUG
+    if(local_driver_suppressed_breakpoint) {
+        CBreakpoint::DeactivateBreakpoints();
+        CPU_CycleLeft+=CPU_Cycles;CPU_Cycles=0;
+        return true;
+    }
+#endif
+    return false;
+}
+bool Debugger_CheckBreakpointAt(uint16_t seg, uint32_t off)
+{
+	return CBreakpoint::CheckEnabledBreakpoint(seg, off);
+}
+
 bool DEBUG_IntBreakpoint(uint8_t intNum)
 {
 	if (inhibit_int_breakpoint) return false; /* or else stepping over INT 21h when BPINT 21h does nothing */
@@ -1085,7 +1625,17 @@ bool DEBUG_IntBreakpoint(uint8_t intNum)
 	return true;
 }
 
-static bool StepOver()
+// The sole native execution slot owns only the temporary breakpoint it creates.
+// A visible breakpoint reused by Over is never removed by operation cleanup.
+static uint64_t native_execution_breakpoint=0;
+static std::vector<uint64_t> native_condition_breakpoints;
+static bool native_condition_address_hit=false;
+static bool DEBUG_EvaluateNativeConditions();
+static void DEBUG_NativeConditionFrontier(void *,const NativeFrontier::Descriptor &);
+#if C_DEBUG_LUA
+static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &);
+#endif
+static bool StepOver(uint16_t *target_cs=nullptr,uint32_t *target_ip=nullptr)
 {
 	exitLoop = false;
 	PhysPt start=(PhysPt)GetAddress(SegValue(cs),reg_eip);
@@ -1093,9 +1643,11 @@ static bool StepOver()
 	size=DasmI386(dline, start, reg_eip, cpu.code.big);
 
 	if (strstr(dline,"call") || strstr(dline,"int") || strstr(dline,"loop") || strstr(dline,"rep")) {
+        if(target_cs)*target_cs=SegValue(cs);
+        if(target_ip)*target_ip=uint32_t(reg_eip+size);
 		// Don't add a temporary breakpoint if there's already one here
 		if (!CBreakpoint::FindPhysBreakpoint(SegValue(cs), (uint32_t)(reg_eip+size), true))
-			CBreakpoint::AddBreakpoint(SegValue(cs),(uint32_t)(reg_eip+size), true);
+			native_execution_breakpoint=CBreakpoint::AddBreakpoint(SegValue(cs),(uint32_t)(reg_eip+size), true)->GetId();
 		debugging=false;
 
         logBuffSuppressConsole = false;
@@ -1121,23 +1673,28 @@ bool DEBUG_AgentStep(bool over, bool* continued)
 	if (continued == nullptr || !debugging || debug_running)
 		return false;
 
-	DEBUG_AgentClearLastBreakpoint();
-	DrawRegistersUpdateOld();
-	if (over && StepOver()) {
-		mustCompleteInstruction = true;
-		inhibit_int_breakpoint = true;
-		DEBUG_Run(1,false);
-		inhibit_int_breakpoint = false;
-		mustCompleteInstruction = false;
+	if (over) {
+        NativeDebug::Request request;
+        request.frontend=NativeDebug::Frontend::Agent;
+        request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+        request.expected=DEBUG_NativeExecutionContext();
+        request.over=true;
+        if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted) return false;
+        DEBUG_AgentClearLastBreakpoint();
+        DrawRegistersUpdateOld();
 		*continued = true;
 		return true;
 	}
 
+	NativeDebug::Request request;
+	request.frontend=NativeDebug::Frontend::Agent;
+        request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+	request.expected=DEBUG_NativeExecutionContext();
+	if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted) return false;
+	DEBUG_AgentClearLastBreakpoint();
+	DrawRegistersUpdateOld();
 	exitLoop = false;
-	mustCompleteInstruction = true;
-	DEBUG_Run(1,true);
-	mustCompleteInstruction = false;
-	*continued = false;
+	*continued = true;
 	return true;
 }
 
@@ -1146,8 +1703,8 @@ bool DEBUG_AgentResumeAfterTerminate(void)
 	if (!debugging || debug_running)
 		return true;
 
-	// ParseCommand("RUN") always executes one instruction before returning to
-	// the normal loop. TerminateTarget has already restored CS:IP to the
+	// RUN admits a finite first decoder call before returning to the normal
+	// loop. TerminateTarget has already restored CS:IP to the
 	// callback stop trampoline that must be observed by the enclosing
 	// CALLBACK_RunRealInt invocation. Stepping here consumes that trampoline
 	// inside the debugger and strands the synchronous DEBUGBOX command frame.
@@ -1184,22 +1741,30 @@ uint64_t DEBUG_AgentEntryBreakpointSequence(void)
 	return agent_entry_breakpoint_sequence.load(std::memory_order_relaxed);
 }
 
-bool DEBUG_AgentCreateExecutionBreakpoint(uint16_t seg, uint32_t off, bool once, uintptr_t* handle)
+bool DEBUG_AgentCreateExecutionBreakpoint(uint16_t seg, uint32_t off, bool once, uint64_t* handle,
+                                         NativeDebug::Attachment attachment, NativeDebug::Context expected)
 {
+    if (handle) *handle=0;
+    if (!DEBUG_AdmitNativeObservation(attachment,expected) || !DEBUG_AdmitNativeEffect(attachment)) return false;
 	if (handle == nullptr || GetAddress(seg,off) == mem_no_address)
 		return false;
-	CBreakpoint* breakpoint = CBreakpoint::AddBreakpoint(seg,off,once);
-	*handle = breakpoint->GetId();
+	CBreakpoint* breakpoint = CBreakpoint::AddBreakpoint(seg,off,once,DebuggerBreakpointOwner::Agent);
+    if (breakpoint) breakpoint->SetMachineOwner(DOSBOX_MachineServiceOwner().token);
+	*handle = breakpoint ? breakpoint->GetId() : 0;
 	return breakpoint != nullptr;
 }
 
-bool DEBUG_AgentCreateMemoryBreakpoint(uint16_t seg,
+static bool CreateMemoryBreakpoint(uint16_t seg,
                                        uint32_t off,
                                        bool protected_mode,
                                        bool linear,
-                                       uintptr_t* handle)
+                                       uint64_t* handle,
+                                       NativeDebug::Attachment attachment, NativeDebug::Context expected,
+                                       DebuggerBreakpointOwner frontend)
 {
 #if C_HEAVY_DEBUG
+    if (handle) *handle=0;
+    if (!DEBUG_AdmitNativeObservation(attachment,expected) || !DEBUG_AdmitNativeEffect(attachment)) return false;
 	if (handle == nullptr || (protected_mode && linear))
 		return false;
 	const uint64_t address = linear ? static_cast<uint64_t>(off) : GetAddress(seg,off);
@@ -1216,6 +1781,8 @@ bool DEBUG_AgentCreateMemoryBreakpoint(uint16_t seg,
 	else if (linear)
 		breakpoint->SetType(BKPNT_MEMORY_LINEAR);
 	breakpoint->SetValue(value);
+	breakpoint->SetOwner(frontend);
+    breakpoint->SetMachineOwner(DOSBOX_MachineServiceOwner().token);
 	*handle = breakpoint->GetId();
 	return true;
 #else
@@ -1224,16 +1791,28 @@ bool DEBUG_AgentCreateMemoryBreakpoint(uint16_t seg,
 	(void)protected_mode;
 	(void)linear;
 	(void)handle;
+    (void)attachment;
+    (void)expected;
+    (void)frontend;
 	return false;
 #endif
 }
 
-bool DEBUG_AgentDeleteBreakpoint(uintptr_t handle)
-{
-	return CBreakpoint::DeleteById(handle);
+bool DEBUG_AgentCreateMemoryBreakpoint(uint16_t seg, uint32_t off,
+        bool protected_mode, bool linear, uint64_t *handle,
+        NativeDebug::Attachment attachment, NativeDebug::Context expected) {
+    return CreateMemoryBreakpoint(seg,off,protected_mode,linear,handle,
+                                  attachment,expected,DebuggerBreakpointOwner::Agent);
 }
 
-uintptr_t DEBUG_AgentConsumeLastBreakpoint(void)
+bool DEBUG_AgentDeleteBreakpoint(uint64_t handle, NativeDebug::Attachment attachment, NativeDebug::Context expected)
+{
+    if (!DEBUG_AdmitNativeObservation(attachment,expected) || !DEBUG_AdmitNativeEffect(attachment)) return false;
+	bool cleared = false;
+	return CBreakpoint::DeleteById(handle, DebuggerBreakpointOwner::Agent, &cleared) && cleared;
+}
+
+uint64_t DEBUG_AgentConsumeLastBreakpoint(void)
 {
 	return CBreakpoint::ConsumeLastTriggered();
 }
@@ -1243,12 +1822,6 @@ void DEBUG_AgentClearLastBreakpoint(void)
 	(void)CBreakpoint::ConsumeLastTriggered();
 }
 
-#if C_HEAVY_DEBUG
-bool DEBUG_AgentStartTrace(uint32_t instruction_count);
-bool DEBUG_AgentStopTrace(uint32_t* event_count);
-bool DEBUG_AgentTraceIsActive(void);
-void DEBUG_AgentCopyTraceEvents(std::vector<DEBUG_AgentTraceEvent>* events);
-#endif
 
 #endif // C_DEBUG && C_DOSBOX_AGENT
 
@@ -2202,7 +2775,15 @@ static bool ParseMemoryDumpArguments(char *&found, uint16_t &seg, uint32_t &ofs,
 	return true;
 }
 
-bool ParseCommand(char* str) {
+// The text parser is an adapter, not an independent mutation authority.
+// Each ingress supplies its selected attachment; the parser never attaches a
+// frontend implicitly. The native owner validates the held context/lease.
+static NativeDebug::Attachment DEBUG_CommandSession();
+static bool ParseCommandWithResult(char* str, bool *recognized) {
+    // Separate operation failure from unknown-command fallback diagnostics.
+    if (recognized) *recognized = true;
+    if (!DEBUG_AdmitNativeEffect(DEBUG_CommandSession())) return false;
+    if (!NativeControl::diagnosticEffectAllowed()) return false;
     std::string copy_str = str;
     for (auto &c : copy_str) c = toupper(c);
     copy_str += '\0'; /* paranoid */
@@ -2217,6 +2798,71 @@ bool ParseCommand(char* str) {
 	if(next == string::npos) next = command.size();
 	(s_found.erase)(0,next);
 	found = const_cast<char*>(s_found.c_str());
+
+    if (command == "STATEWRITE" || command == "STATEREAD") {
+        const char *argument = str;
+        while (*argument && isspace(static_cast<unsigned char>(*argument))) ++argument;
+        while (*argument && !isspace(static_cast<unsigned char>(*argument))) ++argument;
+        while (*argument && isspace(static_cast<unsigned char>(*argument))) ++argument;
+        if (!*argument) { DEBUG_ShowMsg("State path required\n"); return false; }
+        const auto attachment = DEBUG_CommandSession();
+        const auto context = DEBUG_NativeExecutionContext();
+        if (!DEBUG_AdmitNativeState(attachment, context)) {
+            DEBUG_ShowMsg("State admission refused\n"); return false;
+        }
+        NativeControl::Lease lease;
+        const auto owner = DOSBOX_MachineServiceOwner();
+        if (NativeControl::owner().acquire({context.invocation,context.checkpoint}, owner,
+                DOSBOX_MachineServiceRelation(context.invocation), context.checkpoint, true) != NativeControl::Admission::ok) {
+            DEBUG_ShowMsg("State owner refused\n"); return false;
+        }
+        lease = NativeControl::owner().lease();
+        struct Release { NativeControl::Lease lease; ~Release() { NativeControl::owner().release(lease); } } release{lease};
+        const bool success = command == "STATEWRITE" ? SaveState::instance().saveFile(argument) : SaveState::instance().loadFile(argument);
+        if (success && command == "STATEREAD" && !DEBUG_AdvanceNativeStateContext(attachment,context,lease))
+            E_Exit("Restored state cannot retire prior native context");
+        DEBUG_ShowMsg(success ? "State completed\n" : "State failed\n");
+        return success;
+    }
+
+    if (command == "RUNANY") {
+#if defined(C_DOSBOX_AGENT)
+        const char *argument=str;
+        while(*argument && isspace(static_cast<unsigned char>(*argument)))++argument;
+        while(*argument && !isspace(static_cast<unsigned char>(*argument)))++argument;
+        dosbox_agent::JsonValue list;
+        std::vector<NativeDebug::StopCondition> conditions;
+        std::string error;
+        if (!dosbox_agent::AGENT_ParseJson(argument,&list,&error) ||
+            !dosbox_agent::ParseStopConditions(&list,conditions,error)) {
+            DEBUG_ShowMsg("RUNANY rejected: %s\n",error.c_str());return false;
+        }
+        return DEBUG_ResumeNativeExecution(NativeDebug::Frontend::Interactive,false,false,DEBUG_CommandSession(),conditions);
+#else
+        DEBUG_ShowMsg("RUNANY requires the built-in Agent JSON codec\n");return false;
+#endif
+    }
+
+    if (command == "LUA" || command == "LUAFILE" || command == "LUARESET") {
+#if C_DEBUG_LUA
+        if(command=="LUARESET")return Debugger_LuaInteractiveReset();
+        // Preserve source/path case: only the command verb is case-insensitive.
+        const char *argument=str;
+        while(*argument && isspace(static_cast<unsigned char>(*argument)))++argument;
+        while(*argument && !isspace(static_cast<unsigned char>(*argument)))++argument;
+        while(*argument && isspace(static_cast<unsigned char>(*argument)))++argument;
+        Debugger_LuaInteractive(argument,command=="LUAFILE",DEBUG_CommandSession());
+#else
+        DEBUG_ShowMsg("Lua support is not compiled in");
+#endif
+        return true;
+    }
+
+    if (command == "DETACH") {
+        const bool detached=DEBUG_DetachNativeExecution(DEBUG_CommandSession());
+        LOG_MSG("DEBUG: session detach %s",detached ? "complete" : "pending cleanup");
+        return detached;
+    }
 
     if (command == "QUIT") {
         void DoKillSwitch(void);
@@ -2909,76 +3555,25 @@ bool ParseCommand(char* str) {
 		return true;
 	}
 
-	if (command == "VRT") {
-		DEBUG_HaltOnRetrace = true;
-		command = "RUN";
-	}
+    const bool halt_on_retrace=(command == "VRT");
+    if (halt_on_retrace) command = "RUN";
 
-	if (command == "RUN") {
-		DrawRegistersUpdateOld();
-		debug_running = false;
-		debugging=false;
-		DrawCode();
-		DrawInput();
-		logBuffSuppressConsole = false;
-		if (logBuffSuppressConsoleNeedUpdate) {
-			logBuffSuppressConsoleNeedUpdate = false;
-			DEBUG_RefreshPage(0);
-		}
+	if (command == "RUN")
+        return DEBUG_ResumeNativeExecution(NativeDebug::Frontend::Interactive,false,halt_on_retrace,DEBUG_CommandSession());
 
-		Bits DEBUG_NullCPUCore(void);
-
-		inhibit_int_breakpoint = true;
-		DEBUG_Run(1,false);
-		inhibit_int_breakpoint = false;
-		mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
-		mainMenu.get_item("debugger_runnormal").check(true).refresh_item(mainMenu);
-		mainMenu.get_item("debugger_runwatch").check(false).refresh_item(mainMenu);
-
-		DOSBOX_SetNormalLoop();	
-		GFX_SetTitle(-1,-1,-1,is_paused);
-		return true;
-	}
-
-	if (command == "RUNWATCH") {
-		auto oldcore = cpudecoder;
-		runnormal = false;
-		inhibit_int_breakpoint = true;
-		DEBUG_Run(1,true);
-		inhibit_int_breakpoint = false;
-		cpudecoder = oldcore;
-		debug_running = true;
-		debugging = true;
-		CBreakpoint::ActivateBreakpoints();
-		mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
-		mainMenu.get_item("debugger_runnormal").check(false).refresh_item(mainMenu);
-		mainMenu.get_item("debugger_runwatch").check(true).refresh_item(mainMenu);
-		DEBUG_DrawScreen();
-		return true;
-	}
+	if (command == "RUNWATCH")
+        return DEBUG_ResumeNativeExecution(NativeDebug::Frontend::Interactive,true,false,DEBUG_CommandSession());
 
 	if (command == "STEPIN") {
-		/* External single-instruction step-into. Mirrors the KEY_F(11) trace-into
-		 * path so the CPU decoder executes exactly one guest instruction inside
-		 * DEBUG_Run(1,true) and returns before the command response is sent;
-		 * execution therefore stays stopped in the debugger loop. */
-		if (!debugging || debug_running) {
-			DEBUG_ShowMsg("DEBUG: STEPIN requires the debugger to be stopped\n");
-			return false;
-		}
-		exitLoop = false;
-		mustCompleteInstruction = true;
-		DEBUG_Run(1,true);
-		mustCompleteInstruction = false;
-		DEBUG_ShowMsg("DEBUG: STEPIN CS:IP=%04X:%04X AX=%04X BX=%04X CX=%04X DX=%04X\n",
-			SegValue(cs),reg_eip,reg_ax,reg_bx,reg_cx,reg_dx);
-		/* Keep the interactive display truthful after an external step. The
-		 * F10/F11 key handlers refresh it, but an EXEC STEPIN bypasses them and
-		 * check_rescroll has already been consumed, so do it explicitly with the
-		 * existing update routines. */
-		DrawRegistersUpdateOld();
-		DEBUG_DrawScreen();
-		return true;
+        NativeDebug::Request request;
+        request.frontend=NativeDebug::Frontend::Interactive;
+        request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+        request.expected=DEBUG_NativeExecutionContext();
+        if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted) {
+            DEBUG_ShowMsg("DEBUG: STEPIN native execution admission refused\n");
+            return false;
+        }
+        return true; // External bridge defers its wire reply until Poll(result).
 	}
 
 	if (command == "MEMREAD") {
@@ -3135,67 +3730,40 @@ bool ParseCommand(char* str) {
 
 #if C_HEAVY_DEBUG
 
-	if (command == "LOG") { // Create Cpu normal log file
-		cpuLogType = 1;
-		command = "logcode";
-	}
-
-	if (command == "LOGS") { // Create Cpu short log file
-		cpuLogType = 0;
-		command = "logcode";
-	}
-
-	if (command == "LOGL") { // Create Cpu long log file
-		cpuLogType = 2;
-		command = "logcode";
-	}
-
-	if (command == "LOGC") { // Create Cpu coverage log file
-		cpuLogType = 3;
-		command = "logcode";
-	}
-
-	if (command == "logcode") { //Shared code between all logs
-		DEBUG_ShowMsg("DEBUG: Starting log\n");
-		cpuLogFile.open("LOGCPU.TXT");
-		if (!cpuLogFile.is_open()) {
-			DEBUG_ShowMsg("DEBUG: Logfile couldn't be created.\n");
-			return false;
-		}
-		//Initialize log object
-		cpuLogFile << hex << noshowbase << setfill('0') << uppercase;
-		cpuLog = true;
-		cpuLogCounter = (int)GetHexValue(found,found);
-
-		debugging = false;
-		CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
-		DOSBOX_SetNormalLoop();	
-		return true;
+	if (command == "LOG" || command == "LOGS" || command == "LOGL" || command == "LOGC") {
+		NativeDebug::Request request;
+        request.attachment=DEBUG_CommandSession();
+		request.expected=DEBUG_NativeExecutionContext();
+		request.resume=true;
+		request.log=true;
+		request.log_type=command=="LOG" ? 1 : command=="LOGL" ? 2 : command=="LOGC" ? 3 : 0;
+		DEBUG_ParseLogArgument(found,request.log_count);
+		return DEBUG_RequestNativeExecution(request)==NativeDebug::Admission::Accepted;
 	}
 
 #endif
 
 	if (command == "INTT") { //trace int.
-		uint8_t intNr = (uint8_t)GetHexValue(found,found);
-		DEBUG_ShowMsg("DEBUG: Tracing INT %02X\n",intNr);
-		CPU_HW_Interrupt(intNr);
-		SetCodeWinStart();
-		return true;
+		uint8_t intNr=0;
+		if (!DEBUG_ParseInterruptArgument(found,intNr)) return false;
+		NativeDebug::Request request;
+        request.attachment=DEBUG_CommandSession();
+		request.expected=DEBUG_NativeExecutionContext();
+		request.action=NativeDebug::Request::Action::TraceInterrupt;
+		request.interrupt=intNr;
+		return DEBUG_RequestNativeExecution(request)==NativeDebug::Admission::Accepted;
 	}
 
 	if (command == "INT") { // start int.
-		uint8_t intNr = (uint8_t)GetHexValue(found,found);
-		DEBUG_ShowMsg("DEBUG: Starting INT %02X\n",intNr);
-		CBreakpoint::AddBreakpoint(SegValue(cs),reg_eip, true);
-		CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip-1);
-		debugging = false;
-		DrawCode();
-        mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
-        mainMenu.get_item("debugger_runnormal").check(true).refresh_item(mainMenu);
-        mainMenu.get_item("debugger_runwatch").check(false).refresh_item(mainMenu);
-		DOSBOX_SetNormalLoop();
-		CPU_HW_Interrupt(intNr);
-		return true;
+		uint8_t intNr=0;
+		if (!DEBUG_ParseInterruptArgument(found,intNr)) return false;
+		NativeDebug::Request request;
+        request.attachment=DEBUG_CommandSession();
+		request.expected=DEBUG_NativeExecutionContext();
+		request.action=NativeDebug::Request::Action::RunInterrupt;
+		request.interrupt=intNr;
+		request.resume=true;
+		return DEBUG_RequestNativeExecution(request)==NativeDebug::Admission::Accepted;
 	}
 
 	if (command == "SELINFO") {
@@ -4418,6 +4986,7 @@ bool ParseCommand(char* str) {
 		DEBUG_ShowMsg("IN[P|W|D] [port]          - I/O port read byte/word/dword.\n");
 		DEBUG_ShowMsg("OUT[P|W|D] [port] [data]  - I/O port write byte/word/dword.\n");
 
+		DEBUG_ShowMsg("LUA expr/chunk | LUAFILE path | LUARESET - Persistent trusted Interactive Lua (when compiled).\n");
 		DEBUG_ShowMsg("HELP                      - Help\n");
 		DEBUG_ShowMsg("Keys------------------------------------------------\n");
 		DEBUG_ShowMsg("F3/F6                     - Previous command in history.\n");
@@ -4437,8 +5006,43 @@ bool ParseCommand(char* str) {
 		return true;
 	}
 
+	if (recognized) *recognized = false;
 	return false;
 }
+
+bool ParseCommand(char* str)
+{
+    return ParseCommandWithResult(str, nullptr);
+}
+
+bool DEBUG_ParseInterruptArgument(const char *argument, uint8_t &interrupt)
+{
+    std::vector<char> text(argument,argument+strlen(argument));
+    text.push_back(0);
+    upcase(text.data());
+    char *end=text.data();
+    while (*end==' ' || *end=='\t') ++end;
+    if (!*end) return false;
+    bool parsed=false;
+    const auto value=GetHexValue(end,end,&parsed);
+    while (*end==' ' || *end=='\t') ++end;
+    if (!parsed || *end) return false;
+    // Preserve the debugger parser's byte conversion, including expressions.
+    interrupt=static_cast<uint8_t>(value);
+    return true;
+}
+
+#if C_HEAVY_DEBUG
+void DEBUG_ParseLogArgument(const char *argument, int &count)
+{
+    // Preserve the debugger's existing hexadecimal expression/count semantics.
+    std::string text=argument ? argument : "";
+    for (auto &c:text) c=toupper(static_cast<unsigned char>(c));
+    text.push_back('\0');
+    char *cursor=&text[0];
+    count=static_cast<int>(GetHexValue(cursor,cursor));
+}
+#endif
 
 bool DEBUG_ExecuteCommand(const char* command)
 {
@@ -4450,11 +5054,24 @@ bool DEBUG_ExecuteCommand(const char* command)
 	std::vector<char> buffer(command, command + strlen(command));
 	buffer.push_back(0);
 
-	if (ParseCommand(buffer.data()))
+	bool recognized = false;
+	if (ParseCommandWithResult(buffer.data(), &recognized))
 		return true;
 
-	DEBUG_ShowMsg("*** Debugger command not recognized");
+	if (!recognized) DEBUG_ShowMsg("*** Debugger command not recognized");
 	return false;
+}
+
+bool DEBUG_ExecuteSessionCommand(const char* command, NativeDebug::Attachment attachment)
+{
+    if (!attachment.serial) return false;
+    const auto previous=command_attachment;
+    struct Restore {
+        NativeDebug::Attachment previous;
+        ~Restore(){command_attachment=previous;}
+    } restore{previous};
+    command_attachment=attachment;
+    return DEBUG_ExecuteCommand(command);
 }
 
 char* AnalyzeInstruction(char* inst, bool saveSelector) {
@@ -4728,6 +5345,14 @@ extern "C" INPUT_RECORD * _pdcurses_hax_inputrecord(void);
  *      emulator time used everywhere else in this code,
  *      specifically PIC_TickIndex() and PIC_FullIndex(). */
 int32_t DEBUG_Run(int32_t amount,bool quickexit) {
+    if (!NativeControl::diagnosticEffectAllowed()) return 0;
+    // Also guard native/manual stepping after a Lua decoder return was lost.
+    if (DEBUG_ContinuationUnavailable()) return 0;
+#if C_DEBUG_LUA
+    // Native authorized step/continue releases the current terminal receipt;
+    // automatic predicate suppression is never a terminal release.
+    if(!Debugger_PredicateHeld())predicate_summary.terminal_valid=false;
+#endif
 	skipFirstInstruction = true;
 	CPU_CycleLeft += CPU_Cycles - amount;
 	CPU_Cycles = amount;
@@ -4821,10 +5446,1177 @@ static int dbg_getch_vt(void) {
 	return 27;
 }
 #endif
+// Native execution-result tail shared by debugger continuation paths.
+// Retain decoder callbacks here; only the RunMachine return seam consumes them
+// after command/evaluator/service unwind. Negative loop results pass through.
+static NativeDebug::Execution native_execution;
+NativeDebug::Attachment DEBUG_AttachNativeExecution(NativeDebug::Frontend frontend,uint64_t principal);
+bool DEBUG_DetachNativeExecution(NativeDebug::Attachment attachment);
+// Selected DEBUGBOX launch only. Nested EXEC and foreign termination cannot
+// establish absence of this target. The shell return is the cleanup fence.
+static bool agent_target_launch=false, agent_target_exited=false;
+static uint16_t agent_target_psp=0;
+static uint64_t agent_target_owner=0;
+void DEBUG_AgentBeginTarget(void) {
+    agent_target_launch=true;agent_target_exited=false;
+    agent_target_psp=0;agent_target_owner=0;
+}
+void DEBUG_AgentTargetTerminated(uint16_t psp) {
+    if (agent_target_psp && psp==agent_target_psp &&
+        DOSBOX_MachineServiceOwner().token==agent_target_owner)
+        agent_target_exited=true;
+}
+bool DEBUG_AgentEndTarget(void) {
+    const bool exited=agent_target_exited;
+    agent_target_launch=false;
+    if (exited) {
+        const auto attachment=DEBUG_AttachNativeExecution(NativeDebug::Frontend::Agent,0);
+        if (!DEBUG_DetachNativeExecution(attachment)) return false;
+        agent_target_psp=0;agent_target_owner=0;
+    }
+    return exited;
+}
+uint64_t DEBUG_NativeExecutionOperation(void) {return native_execution.operation();}
+// Terminal projection is synchronous and optional, never ownership or delivery
+// acknowledgement. Native cleanup has already run and the slot is immutable.
+static void DEBUG_ProjectNativeTerminal(NativeDebug::Attachment attachment) {
+#if defined(C_DOSBOX_AGENT)
+    const auto *terminal=native_execution.result(attachment);
+    if (terminal && terminal->frontend==NativeDebug::Frontend::Agent)
+        dosbox_agent::AGENT_NotifyDebuggerStopped(terminal->cs,terminal->ip,terminal);
+#else
+    (void)attachment;
+#endif
+}
+#if C_HEAVY_DEBUG
+static void DEBUG_CleanupSessionInstrumentation();
+#endif
+void DEBUG_NativeDecoderEntered(void) {
+    const auto *request=native_execution.activeRequest();
+    if (request && request->frontend==NativeDebug::Frontend::Lua &&
+        request->completion==NativeDebug::Request::Completion::NativeBoundary &&
+        !request->resume) {
+        // The original native continuation enters this decoder, never held
+        // service. Match DEBUG_Run(1) after PIC allocated the slice, retaining
+        // unused cycles for subsequent execution.
+        CPU_CycleLeft+=CPU_Cycles-1;
+        CPU_Cycles=1;
+    }
+    native_execution.decoderEntered();
+}
+static uint64_t dispatch_operation=0;
+unsigned DEBUG_EnterNativeDecoderFlags(void) {
+    const unsigned saved=(inhibit_int_breakpoint?1u:0u) |
+                         (mustCompleteInstruction?2u:0u);
+    if (const auto *request=native_execution.activeRequest()) {
+        // Ordinary RUN's initial skip is scoped to its dispatcher decoder,
+        // not every subsequent normal-loop slice. Otherwise a retained RUN
+        // would inhibit its own execution breakpoint forever.
+        const bool local=request->frontend==NativeDebug::Frontend::Lua &&
+                         request->completion==NativeDebug::Request::Completion::NativeBoundary;
+        if (request->action!=NativeDebug::Request::Action::Phase &&
+            (local || dispatch_operation==native_execution.operation())) {
+            inhibit_int_breakpoint=request->resume && !local;
+            mustCompleteInstruction=true;
+        }
+    }
+    return saved;
+}
+bool DEBUG_NativeDecoderRestoresCore(void) {
+    const auto *request=native_execution.activeRequest();
+    return request && request->action!=NativeDebug::Request::Action::Phase && request->watch;
+}
+void DEBUG_LeaveNativeDecoderFlags(unsigned saved) {
+    inhibit_int_breakpoint=(saved&1u)!=0;
+    mustCompleteInstruction=(saved&2u)!=0;
+}
+// Cleanup belongs to the exact active request, not the frontend projection.
+static void DEBUG_CleanupNativeExecution(const NativeDebug::Request &request) {
+    for(auto id:native_condition_breakpoints)CBreakpoint::DeleteInternalTemporaryById(id,nullptr);
+    native_condition_breakpoints.clear();
+    if (native_execution_breakpoint) {
+        CBreakpoint::DeleteInternalTemporaryById(native_execution_breakpoint,nullptr);
+        native_execution_breakpoint=0;
+    }
+#if C_HEAVY_DEBUG
+    if (request.log && cpuLog) {
+        cpuLogFile.flush();cpuLogFile.close();cpuLog=false;cpuLogCounter=0;
+    }
+#else
+    (void)request;
+#endif
+}
+static void DEBUG_ExecutionOwnerDeparting(uint64_t token) {
+#if C_DEBUG_LUA
+    LocalDriverOwnerDeparting(token);
+#endif
+    const auto *request=native_execution.activeRequest();
+    if (!request) request=native_execution.pendingRequest();
+    if (request && request->expected.invocation==token &&
+        !(native_execution.state()==NativeDebug::State::Active &&
+          request->frontend==NativeDebug::Frontend::Lua &&
+          request->completion==NativeDebug::Request::Completion::NativeBoundary))
+        DEBUG_CleanupNativeExecution(*request);
+    const auto attachment=request?request->attachment:NativeDebug::Attachment{};
+    if (token==agent_target_owner && agent_target_exited)
+        native_execution.settle(native_execution.decoderCalls(),false,0,0,0,0,0,0,NativeDebug::Terminal::ProgramExit);
+    native_execution.ownerDeparting(token);
+    DEBUG_ProjectNativeTerminal(attachment);
+}
+
+static bool native_phase_executing=false;
+static DebuggerPhaseResult native_phase_result={};
+static uint64_t native_phase_operation=0;
+bool DEBUG_NativePhaseExecuting() { return native_phase_executing; }
+const DebuggerPhaseResult *DEBUG_NativePhaseResult(NativeDebug::Attachment attachment, uint64_t operation) {
+    const auto *result=native_execution.result(attachment);
+    return result && result->operation==operation && native_phase_operation==operation ? &native_phase_result : nullptr;
+}
+bool DEBUG_NativeExecutionPending(void) {
+    return native_execution.state()==NativeDebug::State::Pending;
+}
+bool DEBUG_NativeExecutionInFlight(void) {
+    return native_execution.state()==NativeDebug::State::Pending ||
+           native_execution.state()==NativeDebug::State::Active;
+}
+NativeDebug::Context DEBUG_NativeExecutionContext(void) {
+    return native_execution.context(DOSBOX_MachineServiceOwner().token);
+}
+bool DEBUG_AdmitNativeObservation(NativeDebug::Attachment attachment, NativeDebug::Context expected) {
+    if (!native_execution.admits(attachment) || DEBUG_NativeExecutionInFlight() ||
+        !debugging || debug_running || DEBUG_ContinuationUnavailable() ||
+        DOSBOX_MachineContextAdmission()!=MachineService::Denial::None ||
+        !NativeControl::rawEffectAllowed()) return false;
+    const auto current=DEBUG_NativeExecutionContext();
+#if C_DEBUG_LUA
+    // Accepted checkpoint installer requires disposal of the pre-load frame.
+    // Do not borrow its still-held debugger notification after restore/poison.
+    if (Debugger_LuaCheckpointOwnerMustDispose(current.invocation)) return false;
+#endif
+    return expected.invocation && expected.checkpoint &&
+        expected.invocation==current.invocation && expected.checkpoint==current.checkpoint;
+}
+bool DEBUG_AdmitNativeState(NativeDebug::Attachment attachment, NativeDebug::Context expected,
+                           const NativeControl::Lease *held, bool require_stopped) {
+    if (!native_execution.admits(attachment) || DEBUG_NativeExecutionInFlight() ||
+        DEBUG_ContinuationUnavailable() ||
+        DOSBOX_MachineContextAdmission()!=MachineService::Denial::None ||
+        (held ? !NativeControl::owner().matches(*held) : NativeControl::owner().busy())) return false;
+#if C_DEBUG_LUA
+    // Live evaluators temporarily project a stopped debugger; that projection
+    // is not admission. Use the saved/deliberately selected native state.
+    if (require_stopped && !Debugger_LiveEffectiveStopped()) return false;
+#else
+    if (require_stopped && (!debugging || debug_running)) return false;
+#endif
+    const auto current=DEBUG_NativeExecutionContext();
+    return expected.invocation && expected.checkpoint &&
+        expected.invocation==current.invocation && expected.checkpoint==current.checkpoint;
+}
+bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeDebug::Context expected,
+                                    NativeControl::Lease held) {
+    return DEBUG_AdmitNativeState(attachment,expected,&held) &&
+        native_execution.checkpointChanged(expected);
+}
+const NativeDebug::Result *DEBUG_NativeExecutionResult(NativeDebug::Attachment attachment) {
+    return native_execution.result(attachment);
+}
+static bool DEBUG_HoldNativeExecution(void) {
+    if (!native_execution.activeRequest()) return false;
+    // Stop publication cannot toggle execution, require a tty or apply the
+    // interactive run-on-entry policy. Final notification waits for unwind.
+    CPU_CycleLeft+=CPU_Cycles;
+    CPU_Cycles=0;
+    DEBUG_EnterCommonStoppedState();
+    CBreakpoint::DeactivateBreakpoints();
+    exitLoop=true;
+    Bitu DEBUG_Loop(void);
+    DOSBOX_SetLoop(DEBUG_Loop);
+    return true;
+}
+static uint64_t DEBUG_ExecutionWallMilliseconds() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+bool DEBUG_NativeExecutionBudgetExpired(void) {
+    const auto *request=native_execution.activeRequest();
+    if (!request || request->expected.invocation!=DOSBOX_MachineServiceOwner().token)
+        return false;
+    if (!native_execution.budgetExpired(DEBUG_ExecutionWallMilliseconds(),PIC_FullIndex()))
+        return false;
+    DEBUG_HoldNativeExecution();
+    return true;
+}
+bool DEBUG_DetachNativeExecution(NativeDebug::Attachment attachment) {
+    if (!native_execution.close(attachment)) return false;
+    const auto *active=native_execution.activeRequest();
+    if (active && active->attachment.serial==attachment.serial) {
+        // Departure revokes only this attachment's continuing grant; defer
+        // settlement and retirement until the decoder/callback owner unwinds.
+        native_execution.detach(attachment);
+        DEBUG_HoldNativeExecution();
+        return false;
+    }
+    // A live evaluator/state lease is not disposable instrumentation.
+    if (NativeControl::owner().busy()) return false;
+#if C_DEBUG_LUA
+    if (Debugger_PredicateHeld() || !Debugger_LuaSessionPrepareDetach()) return false;
+#endif
+    if (const auto *pending=native_execution.pendingRequest()) {
+        const auto selected=*pending;
+        DEBUG_CleanupNativeExecution(selected);
+        native_execution.settle(0,true);
+        DEBUG_ProjectNativeTerminal(attachment);
+    }
+    CBreakpoint::DeleteSession(attachment.serial);
+    // CPU syscall and VGA retrace stops are session instrumentation, not
+    // CBreakpoint entries. Active work and live leases have drained here.
+    Clear_SYSENTER_Debug();
+    DEBUG_HaltOnRetrace=false;
+    // Parser-owned observations and command input are session resources too.
+    // Keep guest edits, but do not expose an old search/symbol or execute an
+    // old partially typed command after a different debugger attaches.
+    delete MEMFINDInstance;
+    MEMFINDInstance=nullptr;
+    CDebugVar::DeleteAll();
+    histBuff.clear();
+    histBuffPos=histBuff.end();
+    ClearInputLine();
+#if C_HEAVY_DEBUG
+    DEBUG_CleanupSessionInstrumentation();
+#endif
+    if (instrumentation_attachment.serial==attachment.serial) instrumentation_attachment={};
+    return native_execution.detach(attachment);
+}
+bool DEBUG_ReleaseNativeExecutionResult(NativeDebug::Attachment attachment, uint64_t operation) {
+    const auto *result=native_execution.result(attachment);
+    if (!result || result->operation!=operation) return false;
+    return native_execution.release(attachment,operation);
+}
+NativeDebug::Attachment DEBUG_AttachNativeExecution(NativeDebug::Frontend frontend, uint64_t principal) {
+    return native_execution.attach(frontend,principal);
+}
+bool DEBUG_AdmitNativeEffect(NativeDebug::Attachment attachment) {
+    const auto context=DOSBOX_MachineContextAdmission();
+    // Standalone stopped Lua diagnostics predate the machine invocation. They
+    // may use synchronous stopped effects, but this grants no invocation or
+    // checkpoint: queued execution still validates both at enqueue/activation.
+    const bool admitted=native_execution.admits(attachment) && native_execution.canEnqueue() &&
+        debugging && !debug_running &&
+        (context==MachineService::Denial::None || context==MachineService::Denial::NoOwner) &&
+        NativeControl::diagnosticEffectAllowed() && !DEBUG_ContinuationUnavailable();
+    if (admitted) instrumentation_attachment=attachment;
+    return admitted;
+}
+static NativeDebug::Attachment DEBUG_CommandSession() {
+    return command_attachment;
+}
+NativeDebug::Admission DEBUG_RequestNativeExecution(NativeDebug::Request request) {
+    if (NativeDebug::validateConditions(request.stop_any)) return NativeDebug::Admission::Capacity;
+    if (!request.stop_any.empty()) {
+        if (!request.resume || cpudecoder!=CPU_Core_Normal_Run) return NativeDebug::Admission::UnsafeContext;
+        for (const auto &condition:request.stop_any) {
+            if (condition.kind==NativeDebug::StopCondition::Kind::Predicate &&
+                request.frontend!=NativeDebug::Frontend::Lua)
+                return NativeDebug::Admission::UnsafeContext; // worker-local rendezvous only
+            NativeDebug::TextSnapshot snapshot;
+            if (condition.kind==NativeDebug::StopCondition::Kind::Text &&
+                !VGA_CopyTextSnapshot(condition.region,snapshot)) return NativeDebug::Admission::UnsafeContext;
+        }
+    }
+    const auto context=DEBUG_NativeExecutionContext();
+    if (native_execution.state()!=NativeDebug::State::Empty)
+        return native_execution.state()==NativeDebug::State::Terminal?
+            NativeDebug::Admission::Capacity:NativeDebug::Admission::Busy;
+    const bool safe=debugging && !debug_running &&
+        DOSBOX_MachineContextAdmission()==MachineService::Denial::None &&
+        NativeControl::diagnosticEffectAllowed() && !DEBUG_ContinuationUnavailable();
+    if (!safe) return NativeDebug::Admission::UnsafeContext;
+    if (request.action==NativeDebug::Request::Action::Phase &&
+        (!request.phase_limit || request.phase_limit>10000 ||
+         !request.phase_wall_ms || request.phase_wall_ms>100 || !request.retain_result))
+        return NativeDebug::Admission::Capacity;
+    if (!context.invocation || !context.checkpoint ||
+        context.invocation!=request.expected.invocation ||
+        context.checkpoint!=request.expected.checkpoint)
+        return NativeDebug::Admission::StaleContext;
+    if (!native_execution.admits(request.attachment))
+        return NativeDebug::Admission::UnsafeContext;
+    instrumentation_attachment=request.attachment;
+    return native_execution.enqueue(request,context,safe);
+}
+
+
+bool DEBUG_ResumeNativeExecution(NativeDebug::Frontend frontend, bool watch, bool retrace, NativeDebug::Attachment attachment,
+                                 const std::vector<NativeDebug::StopCondition> &conditions) {
+    NativeDebug::Request request;
+    request.attachment=attachment;
+    request.frontend=frontend;
+    request.expected=DEBUG_NativeExecutionContext();
+    request.resume=true;request.watch=watch;
+    request.retrace=retrace;request.normal_resume=true;
+    request.stop_any=conditions;
+    if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted) {
+        DEBUG_ShowMsg("RUN admission rejected: unsupported or unavailable stopped context\n");return false;
+    }
+    return true;
+}
+
+// Finish only the operation currently owned by this caller. This action never
+// invokes a decoder or callback; no request copy survives across guest work in
+// this completion primitive. Native return seams can supply the actual current
+// invocation rather than implicitly reviving the request's start context.
+static void DEBUG_FinishNativeExecution(uint64_t operation, Bits result) {
+    if (!native_execution.ownsActive(operation)) return;
+    const auto request=*native_execution.activeRequest();
+    DEBUG_CleanupNativeExecution(request);
+    // Predicate's internal suppression grant is not a user-visible hold.
+    // All other completed continuing grants must restore hold before publish.
+    if (!result && (!request.resume ||
+                    request.frontend!=NativeDebug::Frontend::Predicate)) {
+        DEBUG_EnterCommonStoppedState();
+        CBreakpoint::DeactivateBreakpoints();
+        SetCodeWinStart();
+        DEBUG_DrawScreen();
+    }
+    const bool target_exit=request.frontend==NativeDebug::Frontend::Agent &&
+        agent_target_exited && request.expected.invocation==agent_target_owner;
+    native_execution.settle(native_execution.decoderCalls(),result!=0 && !target_exit,
+        SegValue(cs),reg_eip,reg_ax,reg_bx,reg_cx,reg_dx,
+        target_exit?NativeDebug::Terminal::ProgramExit:NativeDebug::Terminal::Held,
+        DOSBOX_MachineServiceOwner().token);
+#if defined(C_DOSBOX_AGENT)
+    if (request.frontend==NativeDebug::Frontend::Agent)
+        DEBUG_ProjectNativeTerminal(request.attachment);
+    else if (!result)
+        dosbox_agent::AGENT_NotifyDebuggerStopped(SegValue(cs),reg_eip);
+#endif
+    if (request.frontend==NativeDebug::Frontend::Interactive && !request.stop_any.empty()) {
+        const auto &stop=native_execution.result(request.attachment)->stop;
+        DEBUG_ShowMsg("RUN stop: %s index=%u error=%s ticks=%llu..%llu host_ms=%llu advanced=%u context=%04X:%08X\n",
+            stop.reason.c_str(),stop.condition_index,stop.error.c_str(),
+            (unsigned long long)stop.start_tick,(unsigned long long)stop.end_tick,
+            (unsigned long long)stop.host_elapsed_ms,unsigned(stop.guest_advanced),SegValue(cs),reg_eip);
+        if (!stop.text.cells.empty()) {
+            const auto &text=stop.text;
+            DEBUG_ShowMsg("RUN text: tick=%llu start=%u stride=%u codepage=%u region=%u,%u,%u,%u match=%u,%u cells=hex-char-attribute\n",
+                (unsigned long long)text.tick,text.start,text.stride,unsigned(text.dos_codepage),
+                text.region.x,text.region.y,text.region.width,text.region.height,stop.match_x,stop.match_y);
+            static const char hex[]="0123456789ABCDEF";
+            for (unsigned row=0;row<text.region.height;++row) {
+                std::string cells;
+                for (unsigned col=0;col<text.region.width*2;++col) {
+                    const auto b=text.cells[row*text.region.width*2+col];
+                    cells+=hex[b>>4];cells+=hex[b&15];
+                }
+                DEBUG_ShowMsg("RUN text row %u: %s\n",text.region.y+row,cells.c_str());
+            }
+        }
+    }
+    // Cleanup and immutable publication precede exact slot release. Selected
+    // synchronous adapters retain their existing result ownership policy.
+    if (request.frontend!=NativeDebug::Frontend::Bridge && !request.retain_result) {
+        const auto *terminal=native_execution.result(request.attachment);
+        native_execution.release(request.attachment,terminal->operation);
+    }
+}
+
+// Built-ins use the same slot/evaluator as the worker, without a worker rendezvous.
+static bool DEBUG_EvaluateNativeConditions() {
+    const NativeDebug::StopObservations observations{
+        [](const NativeDebug::StopCondition &c) {
+            const auto *request=native_execution.activeRequest();
+            return request && (native_condition_address_hit || native_execution.decoderCalls()==0) &&
+                DOSBOX_MachineServiceOwner().token==request->expected.invocation &&
+                SegValue(cs)==c.cs && reg_eip==c.ip;
+        }, VGA_CopyTextSnapshot,
+        [](bool &error) {error=true;return false;}
+    };
+    return NativeDebug::evaluateConditions(native_execution.conditions(),native_execution.stopRuntime(),PIC_Ticks,
+        PIC_Ticks!=native_execution.stopRuntime().evidence.start_tick || native_execution.decoderCalls()!=0,observations);
+}
+static bool DEBUG_ObserveBuiltinAddress(uint64_t id) {
+    const auto *request=native_execution.activeRequest();
+    if (!request || request->frontend==NativeDebug::Frontend::Lua ||
+        std::find(native_condition_breakpoints.begin(),native_condition_breakpoints.end(),id)==native_condition_breakpoints.end()) return false;
+    if (CBreakpoint::HasIndependentAt(id,GetAddress(SegValue(cs),reg_eip))) return false;
+    native_condition_address_hit=true;
+    const bool matched=DEBUG_EvaluateNativeConditions();
+    native_condition_address_hit=false;
+    return matched;
+}
+static void DEBUG_NativeConditionFrontier(void *,const NativeFrontier::Descriptor &seam) {
+    const auto *request=native_execution.activeRequest();
+    if (!request || request->frontend==NativeDebug::Frontend::Lua || request->stop_any.empty() ||
+        !request->resume || exitLoop || debugging || debug_running) return;
+    if (seam.kind==NativeFrontier::Kind::ExitFence || seam.kind==NativeFrontier::Kind::LoopStop) return;
+    if (DEBUG_EvaluateNativeConditions()) DEBUG_HoldNativeExecution();
+}
+
+bool DEBUG_DeferPredicateInstruction(void) {
+    NativeDebug::Request request;
+    request.frontend=NativeDebug::Frontend::Predicate;
+    request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+    request.expected=DEBUG_NativeExecutionContext();
+    request.resume=true;
+    return DEBUG_RequestNativeExecution(request)==NativeDebug::Admission::Accepted;
+}
+
+#if C_DEBUG_LUA
+static bool local_driver_preparing=false;
+static bool local_driver_host_break=false;
+static LuaDriver::Handoff local_driver_handoff;
+static LuaDriver::WorkerResult local_driver_result;
+static std::thread local_driver_thread;
+static NativeDebug::Attachment local_driver_attachment;
+static bool local_driver_started=false;
+// Selected natural EXEC departure is not target absence: retain the request
+// through native return restoration and the shell's actual cleanup fence.
+static uint64_t local_driver_selected_owner=0;
+static bool local_driver_selected_departed=false;
+static void LocalDriverOwnerDeparting(uint64_t token) {
+    if(local_driver_started && token==local_driver_selected_owner)
+        local_driver_selected_departed=true;
+}
+static bool local_driver_fatal=false;
+static std::thread::id local_driver_native_thread;
+// Retained poisoned/failed-cleanup Jobs fence this attachment, not just saves.
+static bool local_driver_unusable=false;
+static uint64_t local_driver_operation=0;
+static bool local_driver_continuous=false,local_driver_target=false;
+static bool local_driver_legacy_until=false;
+static uint16_t local_driver_target_cs=0;
+static uint32_t local_driver_target_ip=0;
+static uint64_t local_driver_target_owner=0;
+static bool local_driver_hit=false,local_driver_observer_error=false;
+static bool local_driver_address_hit=false;
+static bool LocalDriverConditions();
+struct LocalDriverRegistration {uint64_t lua_id,native_id;bool observer;};
+static std::vector<LocalDriverRegistration> local_driver_registrations;
+static LuaDriver::Response LocalDriverImage(const NativeFrontier::Descriptor &seam) {
+    LuaDriver::Response image;
+    image.context=DEBUG_NativeExecutionContext();
+    const auto r=Debugger_GetRegisters();
+    image.cs=r.cs;image.ip=r.eip;image.ax=r.eax;image.bx=r.ebx;image.cx=r.ecx;image.dx=r.edx;
+    image.eax=r.eax;image.ebx=r.ebx;image.ecx=r.ecx;image.edx=r.edx;
+    image.esi=r.esi;image.edi=r.edi;image.ebp=r.ebp;image.esp=r.esp;
+    // Heavy normal-core hits precede the decoder's FillFlags(). Evaluate the
+    // copied image without changing the native deferred arithmetic state.
+    image.flags=CPU_InspectFlags();
+    image.ds=r.ds;image.es=r.es;image.fs=r.fs;image.gs=r.gs;image.ss=r.ss;
+    image.code_big=r.code_big;
+    image.registers_valid=seam.kind!=NativeFrontier::Kind::ExitFence;
+    image.continuation=image.registers_valid && image.context.invocation && image.context.checkpoint;
+    image.partial=seam.decoder_entered || seam.callback_entered ||
+                  seam.kind==NativeFrontier::Kind::PartialParent;
+    switch(seam.kind) {
+    case NativeFrontier::Kind::Decoder:image.boundary="decoder";break;
+    case NativeFrontier::Kind::CallbackEntry:image.boundary="callback-entry";break;
+    case NativeFrontier::Kind::Predispatch:image.boundary="predispatch";break;
+    case NativeFrontier::Kind::PostTick:image.boundary="post-tick";break;
+    case NativeFrontier::Kind::NestedEntry:image.boundary="nested-entry";break;
+    case NativeFrontier::Kind::NativeReturn:image.boundary="native-return";break;
+    case NativeFrontier::Kind::PartialParent:image.boundary="partial-parent";break;
+    case NativeFrontier::Kind::LoopStop:image.boundary="loop-stop";break;
+    case NativeFrontier::Kind::ExitFence:image.boundary="exit-fence";break;
+    }
+    return image;
+}
+static bool LocalDriverObserveHit(uint64_t id) {
+    const auto *active=native_execution.activeRequest();
+    if(!active || active->frontend!=NativeDebug::Frontend::Lua)return true;
+    auto found=std::find_if(local_driver_registrations.begin(),local_driver_registrations.end(),
+        [id](const LocalDriverRegistration &r){return r.native_id==id;});
+    if(id && found==local_driver_registrations.end()) {
+        auto target=std::find(native_condition_breakpoints.begin(),native_condition_breakpoints.end(),id);
+        if(target!=native_condition_breakpoints.end()) {
+            // Independent active registrations at this address win; their
+            // observers are still serviced by the ordinary hit producer.
+            if(CBreakpoint::HasIndependentAt(id,GetAddress(SegValue(cs),reg_eip)))return true;
+            local_driver_address_hit=true;
+            LocalDriverConditions();
+            local_driver_address_hit=false;
+        }
+        return true;
+    }
+    if(id && !found->observer){local_driver_hit=true;return true;}
+    static uint64_t next_event=0;
+    if(next_event==UINT64_MAX)return true;
+    // This stack frame is the authority. No ordinary admission or general
+    // Active permission is granted, and it expires before this hit returns.
+    const auto context=native_execution.eventContext(local_driver_attachment,
+        native_execution.operation(),DOSBOX_MachineServiceOwner().token);
+    if(!context.invocation || DOSBOX_MachineFrontierAdmission()!=MachineService::Denial::None ||
+       NativeControl::owner().busy()) {
+        local_driver_observer_error=true;local_driver_hit=true;return true;
+    }
+    NativeFrontier::Descriptor seam{};seam.kind=NativeFrontier::Kind::Decoder;
+    LuaDriver::Event event;event.ordinal=++next_event;event.registration=id?found->lua_id:0;
+    event.image=LocalDriverImage(seam);event.image.context=context;
+    event.image.start_tick=native_execution.stopRuntime().evidence.start_tick;
+    event.image.end_tick=PIC_Ticks;
+    event.image.host_elapsed_ms=std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now()-native_execution.stopRuntime().host_start).count();
+    // Provisional event identity authorizes reads only, never continuation.
+    event.image.continuation=false;
+    if(!local_driver_handoff.offerEvent(std::move(event))) {
+        local_driver_observer_error=true;local_driver_hit=true;return true;
+    }
+    for(;;) {
+        LuaDriver::Request read;
+        if(local_driver_handoff.takeObserverRead(read)) {
+            LuaDriver::Response response;
+            const bool valid=read.context.invocation==context.invocation &&
+                read.context.checkpoint==context.checkpoint;
+            if(!valid)response.error="expired observer context";
+            else if(read.operation==LuaDriver::Operation::TextSnapshot) {
+                if(!VGA_CopyTextSnapshot(read.region,response.text))response.error="unsupported_text_layout";
+            } else {
+                response.bytes.resize(read.length);
+                if(!PAGING_InspectLinear(read.address,read.length,response.bytes.data()))
+                    response.error="unsupported side-effect-free read";
+            }
+            const bool violation=!response.error.empty();
+            local_driver_handoff.completeObserverRead(std::move(response),violation);
+        }
+        LuaDriver::Verdict verdict;
+        if(local_driver_handoff.takeVerdict(verdict)) {
+            local_driver_observer_error=verdict.violation || verdict.error;
+            local_driver_hit=verdict.propagate || local_driver_observer_error;
+            // Consume queued host events before conditions after a held verdict.
+            // False must not turn a requested host break/close into success.
+            GFX_Events();
+            if(local_driver_host_break || local_driver_handoff.closing())return true;
+            if(!local_driver_hit && id) {
+                // A suppressed observer is not a suppressed requested address.
+                // Evaluate the ordered OR at this actual producer only after
+                // the independent verdict has settled.
+                local_driver_address_hit=true;
+                const bool matched=LocalDriverConditions();
+                local_driver_address_hit=false;
+                if(matched)return true;
+            }
+            return local_driver_hit || exitLoop || local_driver_handoff.closing();
+        }
+        GFX_Events();SDL_Delay(1);
+    }
+}
+static bool LocalDriverConditions() {
+    const NativeDebug::StopObservations observations{
+        [](const NativeDebug::StopCondition &c) {
+            return (local_driver_address_hit || native_execution.decoderCalls()==0) &&
+                DOSBOX_MachineServiceOwner().token==local_driver_target_owner && SegValue(cs)==c.cs && reg_eip==c.ip;
+        },
+        VGA_CopyTextSnapshot,
+        [](bool &error) {
+            const bool match=LocalDriverObserveHit(0);
+            error=local_driver_observer_error;local_driver_hit=false;return match;
+        }
+    };
+    const bool stopped=NativeDebug::evaluateConditions(native_execution.conditions(),
+        native_execution.stopRuntime(),PIC_Ticks,
+        PIC_Ticks!=native_execution.stopRuntime().evidence.start_tick ||
+            native_execution.decoderCalls()!=0,observations);
+    if(local_driver_host_break && !local_driver_observer_error) {
+        // Host break is terminal arbitration, not a condition match.
+        native_execution.stopRuntime().evidence={};
+        return true;
+    }
+    return stopped;
+}
+bool Debugger_LocalDriverClosing() {return local_driver_handoff.closing();}
+static void LocalDriverRetire() {
+    // luaClosed is published after lua_close; never join an unpublished waiter.
+    local_driver_thread.join();
+    for(const auto &registration:local_driver_registrations) {
+        bool cleared=false;
+        // Disposal revokes our exact retained resources even after the machine
+        // invocation has unwound. It is not admission for a new guest effect.
+        if(!CBreakpoint::DeleteById(registration.native_id,DebuggerBreakpointOwner::Lua,
+                                   &cleared) || !cleared)
+            E_Exit("Lua driver registration cleanup failed");
+    }
+    local_driver_registrations.clear();
+    if(!DEBUG_DetachNativeExecution(local_driver_attachment))
+        E_Exit("Lua driver detach failed");
+    LOG_MSG("Lua driver closed: %s",local_driver_result.completed?"completed":local_driver_result.error.c_str());
+}
+static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
+    if(seam.kind==NativeFrontier::Kind::Predispatch || seam.kind==NativeFrontier::Kind::PostTick) {
+        const auto *active=native_execution.activeRequest();
+        if((!active || !active->resume || active->frontend!=NativeDebug::Frontend::Lua ||
+           native_execution.conditions().empty()) &&
+           !(local_driver_operation && native_execution.result(local_driver_attachment)))return;
+    }
+    // Loaded disposal is earlier and wins. For an ordinary selected return do
+    // not expose the restored shell as a new guest context or settle a step.
+    if(local_driver_selected_departed && seam.kind!=NativeFrontier::Kind::ExitFence)return;
+    if(seam.kind==NativeFrontier::Kind::ExitFence && local_driver_started) {
+        if(local_driver_operation) {
+            DEBUG_CleanupNativeExecution(*native_execution.activeRequest());
+            native_execution.settle(native_execution.decoderCalls(),false,0,0,0,0,0,0,
+                                    NativeDebug::Terminal::ProgramExit);
+            const auto *terminal=native_execution.result(local_driver_attachment);
+            if(!terminal || terminal->operation!=local_driver_operation)
+                E_Exit("Lua driver exit terminal identity lost");
+            LuaDriver::Response response;
+            response.reason=local_driver_selected_departed &&
+                !Debugger_LuaCheckpointOwnerMustDispose(seam.invocation)?
+                "target_exit":"guest_lifetime_ended";
+            response.boundary="exit-fence";
+            if(!native_execution.release(local_driver_attachment,local_driver_operation))
+                E_Exit("Lua driver exit release failed");
+            local_driver_operation=0;
+            if(!local_driver_handoff.complete(std::move(response)))
+                E_Exit("Lua driver exit response lost");
+        }
+        local_driver_handoff.close();
+        while(!local_driver_handoff.isLuaClosed()){GFX_Events();SDL_Delay(1);}
+        LocalDriverRetire();
+        return;
+    }
+#if !C_HEAVY_DEBUG
+    if(local_driver_suppressed_breakpoint) {
+        local_driver_suppressed_breakpoint=0;
+        CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
+    }
+#endif
+    if (!NativeFrontier::frontiers().ownsHold(seam) ||
+        DOSBOX_MachineFrontierAdmission()!=MachineService::Denial::None ||
+        NativeControl::owner().busy()) return;
+    if (!local_driver_started) {
+        const auto owner=DOSBOX_MachineServiceOwner();
+        if(!local_driver_attachment.serial) {
+            if(owner.kind!=MachineService::Kind::RootGuest || owner.depth!=1 ||
+               seam.decoder_entered || seam.callback_entered)return;
+            local_driver_attachment=native_execution.attach(NativeDebug::Frontend::Lua,0);
+            if(!local_driver_attachment.serial)E_Exit("Lua driver attachment unavailable");
+            if(control->lua_driver.program_set) {
+                if(!Debugger_LocalDriverArm(local_driver_attachment,
+                        DEBUG_NativeExecutionContext(),control->lua_driver.program))
+                    E_Exit("Lua driver startup program arm refused");
+                return; // natural bootstrap, never launch from held service
+            }
+        }
+        if(control->lua_driver.program_set) {
+            const int entry=Debugger_LocalDriverEntry();
+            if(entry<0)E_Exit("Lua driver startup program nonarrival");
+            if(!entry)return;
+            local_driver_selected_owner=seam.invocation;
+            if(control->lua_driver.archive_set) {
+                if(const char *error=Debugger_LocalDriverLoad(local_driver_attachment,
+                        DEBUG_NativeExecutionContext(),control->lua_driver.archive))
+                    E_Exit("Lua driver startup archive: %s",error);
+            }
+        }
+        DEBUG_EnterCommonStoppedState();
+        local_driver_thread=std::thread(LuaDriver::runWorker,std::cref(control->lua_driver),
+                                       std::ref(local_driver_handoff),std::ref(local_driver_result));
+        local_driver_started=true;
+        local_driver_handoff.ready();
+    } else {
+        const auto *active=native_execution.activeRequest();
+        if(active && active->attachment.serial==local_driver_attachment.serial) {
+            // RUN ignores synthetic step frontiers. A genuine stopped loop,
+            // not decoder/callback entry, is its completion boundary.
+            if(active->resume) {
+                if(seam.kind!=NativeFrontier::Kind::LoopStop || !debugging || debug_running) {
+                    if(local_driver_handoff.closing() || exitLoop || local_driver_hit || local_driver_observer_error)return;
+                    if(!LocalDriverConditions())return;
+                    DEBUG_EnterCommonStoppedState();
+                }
+            } else if(seam.kind==NativeFrontier::Kind::LoopStop)return;
+        }
+        if(active && active->attachment.serial==local_driver_attachment.serial) {
+            DEBUG_FinishNativeExecution(native_execution.operation(),0);
+        }
+        if(local_driver_operation && native_execution.activeRequest())return;
+        if(local_driver_operation) {
+            const auto *terminal=native_execution.result(local_driver_attachment);
+            if(!terminal || terminal->operation!=local_driver_operation)
+                E_Exit("Lua driver terminal identity lost");
+            auto image=LocalDriverImage(seam);
+            image.reason=local_driver_continuous?"manual":"step";
+            if(local_driver_target && seam.invocation==local_driver_target_owner &&
+               SegValue(cs)==local_driver_target_cs &&
+               reg_eip==local_driver_target_ip)image.reason="target";
+            const auto &local_driver_condition_result=terminal->stop;
+            if(local_driver_condition_result.condition_index || !local_driver_condition_result.error.empty()) {
+                image.reason=local_driver_legacy_until?"target":"condition";image.error=local_driver_condition_result.error;
+                image.condition_index=local_driver_condition_result.condition_index;
+                image.start_tick=local_driver_condition_result.start_tick;
+                image.end_tick=local_driver_condition_result.end_tick;
+                image.host_elapsed_ms=local_driver_condition_result.host_elapsed_ms;
+                image.guest_advanced=local_driver_condition_result.guest_advanced;
+                image.text=local_driver_condition_result.text;
+                image.match_x=local_driver_condition_result.match_x;
+                image.match_y=local_driver_condition_result.match_y;
+            }
+            if(local_driver_hit)image.reason="breakpoint";
+            if(local_driver_observer_error)image.reason="error";
+            if(terminal->failed)image.error="native execution failed";
+            if(!native_execution.release(local_driver_attachment,local_driver_operation))
+                E_Exit("Lua driver result release failed");
+            local_driver_operation=0;
+            local_driver_handoff.complete(std::move(image));
+        }
+    }
+    for(;;) {
+        if(local_driver_handoff.isLuaClosed()) {
+            LocalDriverRetire();
+            throw 1;
+        }
+        LuaDriver::Request request;
+        if(local_driver_handoff.take(request)) {
+            auto response=LocalDriverImage(seam);
+            const auto current=response.context;
+            if(local_driver_unusable)response.error="native state cleanup failed; driver unusable";
+            else if(request.operation==LuaDriver::Operation::Read &&
+               (!request.length || request.length>4096)) response.error="unsupported read length";
+            else if((request.operation==LuaDriver::Operation::Registers ||
+                     request.operation==LuaDriver::Operation::Read ||
+                     request.operation==LuaDriver::Operation::TextSnapshot ||
+                     request.operation==LuaDriver::Operation::RunUntil) &&
+               (request.context.invocation!=current.invocation ||
+                request.context.checkpoint!=current.checkpoint)) response.error="stale context";
+            else if((request.operation==LuaDriver::Operation::Breakpoint ||
+                     request.operation==LuaDriver::Operation::Watchpoint ||
+                     request.operation==LuaDriver::Operation::Remove) &&
+                    // The shell EXEC's outer callback remains entered for the
+                    // whole natural program. Its current ShellExec decoder is
+                    // ordinary; boundary kind and entered decoder exclude the
+                    // restricted wrapper/partial seams, not callback ancestry.
+                    ((seam.kind!=NativeFrontier::Kind::LoopStop &&
+                      seam.kind!=NativeFrontier::Kind::Decoder) ||
+                     seam.decoder_entered ||
+                     (DOSBOX_MachineServiceOwner().kind!=MachineService::Kind::RootGuest &&
+                      DOSBOX_MachineServiceOwner().kind!=MachineService::Kind::ShellExecGuest)))
+                response.error="instrumentation requires ordinary stopped context";
+            else if(request.operation==LuaDriver::Operation::TextSnapshot) {
+                if(!VGA_CopyTextSnapshot(request.region,response.text))response.error="unsupported_text_layout";
+            } else if(request.operation==LuaDriver::Operation::Read) {
+                response.bytes.resize(request.length);
+                if(!PAGING_InspectLinear(request.address,request.length,response.bytes.data()))
+                    response.error="unsupported side-effect-free read";
+            } else if(request.operation==LuaDriver::Operation::StateReady ||
+                      request.operation==LuaDriver::Operation::Save) {
+                if(!Debugger_LiveOwnsStop(current.invocation) &&
+                   !Debugger_LocalClaimStop(local_driver_attachment,current,seam))
+                    response.error="state operation requires ordinary owned stop";
+                else if(request.operation==LuaDriver::Operation::StateReady)
+                    Debugger_LocalDriverStateReady(local_driver_attachment,current,response);
+                else {
+                    Debugger_LocalDriverSave(local_driver_attachment,current,request.path,
+                                             request.timeout_ms,response.save);
+                    if(response.save.poisoned || response.save.cleanup_failed ||
+                       (!response.save.retired && response.save.code=="saved"))
+                        local_driver_unusable=true;
+                    if(!response.save.completed)response.error=response.save.code;
+                }
+            } else if(request.operation==LuaDriver::Operation::Breakpoint) {
+                if(cpudecoder!=CPU_Core_Normal_Run) {
+                    response.error="unsupported-core";
+                    local_driver_handoff.complete(std::move(response));continue;
+                }
+                const auto address=Debugger_ResolveAddress(request.cs,request.ip);
+                DebuggerBreakpointCreateOptions options{};
+                options.enabled=true;options.owner=DebuggerBreakpointOwner::Lua;
+                uint64_t id=0;
+                if(Debugger_BreakpointSet(address,options,&id,local_driver_attachment)!=
+                   DebuggerBreakpointFailure::None)response.error="breakpoint refused";
+                else {
+                    local_driver_registrations.push_back({request.registration,id,request.observer});
+                    response.registration=request.registration;
+                }
+            } else if(request.operation==LuaDriver::Operation::Watchpoint) {
+                uint64_t id=0;
+#if defined(C_DOSBOX_AGENT)
+                if(cpudecoder==CPU_Core_Normal_Run &&
+                   CreateMemoryBreakpoint(request.cs,request.address,false,false,&id,
+                       local_driver_attachment,current,DebuggerBreakpointOwner::Lua)) {
+                    local_driver_registrations.push_back({request.registration,id,request.observer});
+                    response.registration=request.registration;
+                } else
+#endif
+                    response.error="unsupported watchpoint";
+            } else if(request.operation==LuaDriver::Operation::Remove) {
+                auto found=std::find_if(local_driver_registrations.begin(),local_driver_registrations.end(),
+                    [&](const LocalDriverRegistration &r){return r.lua_id==request.registration;});
+                bool cleared=false;
+                if(found==local_driver_registrations.end() ||
+                   Debugger_BreakpointClear(found->native_id,DebuggerBreakpointOwner::Lua,
+                       &cleared,local_driver_attachment)!=DebuggerBreakpointFailure::None)
+                    response.error="registration removal refused";
+                else local_driver_registrations.erase(found);
+            } else if(request.operation==LuaDriver::Operation::Step ||
+                      request.operation==LuaDriver::Operation::Run ||
+                      request.operation==LuaDriver::Operation::Over ||
+                      request.operation==LuaDriver::Operation::RunUntil) {
+                if(request.operation==LuaDriver::Operation::Over &&
+                   ((seam.kind!=NativeFrontier::Kind::LoopStop &&
+                     seam.kind!=NativeFrontier::Kind::Decoder) ||
+                    seam.decoder_entered ||
+                    (DOSBOX_MachineServiceOwner().kind!=MachineService::Kind::RootGuest &&
+                     DOSBOX_MachineServiceOwner().kind!=MachineService::Kind::ShellExecGuest))) {
+                    response.error="unsupported_context";
+                    local_driver_handoff.complete(std::move(response));
+                    continue;
+                }
+                NativeDebug::Request execution;
+                execution.frontend=NativeDebug::Frontend::Lua;
+                execution.attachment=local_driver_attachment;execution.expected=current;
+                execution.completion=NativeDebug::Request::Completion::NativeBoundary;
+                execution.resume=request.operation==LuaDriver::Operation::Run ||
+                                 request.operation==LuaDriver::Operation::RunUntil;
+                execution.over=request.operation==LuaDriver::Operation::Over;
+                if(request.operation==LuaDriver::Operation::RunUntil &&
+                   cpudecoder!=CPU_Core_Normal_Run) {
+                    response.error="unsupported-core";
+                    local_driver_handoff.complete(std::move(response));
+                    continue;
+                }
+                execution.stop_any=request.stop_any;
+                if(request.operation==LuaDriver::Operation::RunUntil) {
+                    NativeDebug::StopCondition address;
+                    address.cs=request.cs;address.ip=request.ip;
+                    execution.stop_any.push_back(address);
+                }
+                if(const char *error=NativeDebug::validateConditions(execution.stop_any))response.error=error;
+                if(!execution.stop_any.empty() && cpudecoder!=CPU_Core_Normal_Run)response.error="unsupported-core";
+                for(const auto &condition:execution.stop_any)
+                    if(condition.kind==NativeDebug::StopCondition::Kind::Text &&
+                       !VGA_CopyTextSnapshot(condition.region,response.text))response.error="unsupported_text_layout";
+                if(!response.error.empty()) {local_driver_handoff.complete(std::move(response));continue;}
+                execution.retain_result=true;
+                if(native_execution.enqueue(execution,current,true)!=NativeDebug::Admission::Accepted)
+                    response.error="native execution refused";
+                else {
+                    local_driver_operation=native_execution.operation();
+                    local_driver_hit=false;local_driver_observer_error=false;
+                    local_driver_host_break=false;
+                    local_driver_continuous=execution.resume;
+                    local_driver_target=false; // RunUntil uses the address condition owner.
+                    local_driver_legacy_until=request.operation==LuaDriver::Operation::RunUntil;
+                    local_driver_target_cs=request.cs;local_driver_target_ip=request.ip;
+                    local_driver_target_owner=current.invocation;
+                    native_execution.stopRuntime().begin(execution.stop_any.size(),PIC_Ticks);
+                    local_driver_preparing=true;
+                    DEBUG_DispatchNativeExecution();
+                    local_driver_preparing=false;
+                    if(native_execution.result(local_driver_attachment)) {
+                        // Publish initial-match terminal before relinquishing
+                        // this held frontier to its machine continuation.
+                        LocalDriverFrontier(nullptr,seam);
+                    }
+                    return;
+                }
+            } else if(request.operation!=LuaDriver::Operation::Context &&
+                      request.operation!=LuaDriver::Operation::Registers)
+                response.error="operation not yet connected";
+            local_driver_handoff.complete(std::move(response));
+        }
+        GFX_Events();SDL_Delay(1);
+    }
+}
+void DEBUG_CloseLocalLuaDriver() {
+    if(!local_driver_thread.joinable())return;
+    local_driver_handoff.close();
+    // Native guest/service frames have unwound. Revoke only this attachment's
+    // grant before waking its waiter; never execute guest work or replay here.
+    const auto *request=native_execution.activeRequest();
+    if(!request)request=native_execution.pendingRequest();
+    if(request && request->attachment.serial==local_driver_attachment.serial) {
+        DEBUG_CleanupNativeExecution(*request);
+        native_execution.settle(native_execution.decoderCalls(),true);
+    }
+    if(const auto *terminal=native_execution.result(local_driver_attachment)) {
+        if(!native_execution.release(local_driver_attachment,terminal->operation))
+            E_Exit("Lua driver close release failed");
+    }
+    local_driver_operation=0;
+    while(!local_driver_handoff.isLuaClosed()) {
+        // GFX_Events can throw with a read/event/verdict still awaiting native
+        // consumption. Refuse reads, drain protected callback, then settle.
+        LuaDriver::Request read;
+        if(local_driver_handoff.takeObserverRead(read)) {
+            LuaDriver::Response refused;refused.error="native lifecycle closed";
+            local_driver_handoff.completeObserverRead(std::move(refused),true);
+        }
+        LuaDriver::Verdict verdict;
+        local_driver_handoff.takeVerdict(verdict);
+        LuaDriver::Response response;response.error="native lifecycle closed";
+        local_driver_handoff.complete(std::move(response));
+        SDL_Delay(1);
+    }
+    LocalDriverRetire();
+}
+int DEBUG_LocalLuaDriverExitStatus() {
+    return local_driver_fatal || (local_driver_started && !local_driver_result.completed) ? 1 : 0;
+}
+void DEBUG_LocalLuaDriverShellReturned() {
+    if(local_driver_selected_departed) {
+        NativeFrontier::frontiers().reach(NativeFrontier::Kind::ExitFence,
+                                         DOSBOX_MachineServiceOwner().token);
+        // Script/worker closed at the real absence fence; this frontend has
+        // no same-script relaunch and must not enter another shell decoder.
+        throw 1;
+    }
+}
+void DEBUG_LocalLuaDriverRootReturned() {
+    // Normal Root return before the selected natural entry is nonarrival.
+    // Called before any checkpoint disposal or worker teardown.
+    if(control->lua_driver.program_set && !local_driver_started)
+        E_Exit("Lua driver startup program nonarrival");
+}
+bool DEBUG_UnwindLocalLuaDriverFatal() {
+    if(!local_driver_thread.joinable() ||
+       local_driver_native_thread!=std::this_thread::get_id())return false;
+    local_driver_fatal=true;
+    return true;
+}
+void DEBUG_InstallLocalLuaDriver() {
+    local_driver_native_thread=std::this_thread::get_id();
+    // The shared hook is installed by DEBUG_Init, including builds without Lua.
+}
+#endif
+Bits DEBUG_DispatchNativeExecution(void) {
+    // Leave the held seam through its original continuation before activation.
+    if (NativeFrontier::frontiers().holding()
+#if C_DEBUG_LUA
+        && !local_driver_preparing
+#endif
+       ) return 0;
+    // Do not reenter a suspended grant's decoder tail. Unlike a boolean
+    // dispatcher lifetime lock, this admits B after A has settled/released,
+    // even while an old native A stack remains suspended.
+    if (dispatch_operation && dispatch_operation==native_execution.operation()) return 0;
+    // Consume known transport loss before activating its pending operation.
+    ControlServer_RetireDeparture();
+    const auto *pending=native_execution.pendingRequest();
+    const bool local_boundary=pending && pending->frontend==NativeDebug::Frontend::Lua &&
+        pending->completion==NativeDebug::Request::Completion::NativeBoundary;
+    if (local_boundary) {
+        NativeDebug::Request local;
+        if (!native_execution.activate(DOSBOX_MachineServiceOwner().token,local)) return 0;
+        // Only prepare the original machine continuation. No decoder/callback
+        // frame or local request copy may survive into guest execution.
+        if(local.over) {
+#if C_DEBUG_LUA
+            local.resume=StepOver(&local_driver_target_cs,&local_driver_target_ip);
+            local_driver_target=local.resume;
+#else
+            local.resume=StepOver();
+#endif
+            native_execution.setContinuing(local.resume);
+#if C_DEBUG_LUA
+            local_driver_continuous=local.resume;
+#endif
+        }
+        // Initial conditions run while the original stop and all native
+        // resources are still untouched. The active slot permits typed reads.
+#if C_DEBUG_LUA
+        if(!local.stop_any.empty() && LocalDriverConditions()) {
+            DEBUG_FinishNativeExecution(native_execution.operation(),0);
+            return 0;
+        }
+#endif
+        skipFirstInstruction=true;
+#if C_DEBUG_LUA
+        if(local.resume && local_driver_target &&
+           !CBreakpoint::FindPhysBreakpoint(local_driver_target_cs,local_driver_target_ip,true))
+            native_execution_breakpoint=CBreakpoint::AddBreakpoint(
+                local_driver_target_cs,local_driver_target_ip,true,
+                DebuggerBreakpointOwner::Internal,true,nullptr,true)->GetId();
+#endif
+        for(const auto &condition:local.stop_any)
+            if(condition.kind==NativeDebug::StopCondition::Kind::Address)
+                native_condition_breakpoints.push_back(CBreakpoint::AddBreakpoint(
+                    condition.cs,condition.ip,true,DebuggerBreakpointOwner::Internal,
+                    true,nullptr,true)->GetId());
+        CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
+        CPU_CycleLeft+=CPU_Cycles;
+        CPU_Cycles=0;
+        exitLoop=false;debugging=false;debug_running=false;runnormal=false;
+        DOSBOX_SetNormalLoop();
+        return 0;
+    }
+    NativeDebug::Request request;
+    const bool activated=native_execution.activate(DOSBOX_MachineServiceOwner().token,request);
+    if (activated && !request.stop_any.empty()) {
+        native_execution.stopRuntime().begin(request.stop_any.size(),PIC_Ticks);
+        if (DEBUG_EvaluateNativeConditions()) {
+            DEBUG_FinishNativeExecution(native_execution.operation(),0);
+            return 0;
+        }
+        for (const auto &condition:request.stop_any)
+            if (condition.kind==NativeDebug::StopCondition::Kind::Address)
+                native_condition_breakpoints.push_back(CBreakpoint::AddBreakpoint(
+                    condition.cs,condition.ip,true,DebuggerBreakpointOwner::Internal,
+                    true,nullptr,true)->GetId());
+    }
+    if (!activated) {
+        const auto *active=native_execution.activeRequest();
+        // Local boundary requests resume only through their original native
+        // suffix. The frontier owner, never an ordinary dispatcher tail, settles.
+        if(active && active->frontend==NativeDebug::Frontend::Lua &&
+           active->completion==NativeDebug::Request::Completion::NativeBoundary)return 0;
+        // A continuing grant can outlive this dispatcher's initial frame.
+        // A nested machine invocation must not settle its ancestor's grant.
+        if (!active || active->expected.invocation!=DOSBOX_MachineServiceOwner().token ||
+            !debugging || debug_running) return 0;
+        request=*active;
+    }
+    const uint64_t operation=native_execution.operation();
+    struct DispatchScope {
+        uint64_t &active;
+        const uint64_t previous;
+        DispatchScope(uint64_t &value,uint64_t operation):active(value),previous(value){active=operation;}
+        ~DispatchScope(){active=previous;}
+    } scope(dispatch_operation,operation);
+    {
+        if (!NativeControl::diagnosticEffectAllowed() || DEBUG_ContinuationUnavailable() ||
+            DOSBOX_MachineServiceAdmission()!=MachineService::Denial::None) {
+            DEBUG_CleanupNativeExecution(request);
+            native_execution.settle(native_execution.decoderCalls(),true,0,0,0,0,0,0,NativeDebug::Terminal::ContinuationLost);
+            DEBUG_ProjectNativeTerminal(request.attachment);
+            E_Exit("Native execution lost its continuation");
+        }
+        if (request.action==NativeDebug::Request::Action::Phase) {
+            // No evaluator/service frames remain. Reuse the owning instruction
+            // loop: a native decoder budget is not a retired-instruction count.
+            struct PhaseScope {
+                PhaseScope() { native_phase_executing=true; }
+                ~PhaseScope() { native_phase_executing=false; }
+            } phase_scope;
+            native_phase_operation=native_execution.operation();
+            native_phase_result=Debugger_RunPhase(request.phase_limit,request.phase_wall_ms,
+                request.phase_target,request.phase_cs,request.phase_ip);
+            DEBUG_CleanupNativeExecution(request);
+            native_execution.settle(native_execution.decoderCalls(),native_phase_result.event.type==DebuggerStopType::Error,
+                SegValue(cs),reg_eip,reg_ax,reg_bx,reg_cx,reg_dx);
+            DEBUG_ProjectNativeTerminal(request.attachment);
+            DOSBOX_RequestMachineService();
+            return 0;
+        }
+        Bits result=0;
+        if (activated) try {
+            native_execution.startBudget(DEBUG_ExecutionWallMilliseconds(),PIC_FullIndex());
+#if C_HEAVY_DEBUG
+            if (request.log) {
+                DEBUG_ShowMsg("DEBUG: Starting log\n");
+                cpuLogFile.open("LOGCPU.TXT");
+                if (!cpuLogFile.is_open()) {
+                    DEBUG_ShowMsg("DEBUG: Logfile couldn't be created.\n");
+                    DEBUG_CleanupNativeExecution(request);
+                    native_execution.settle(0,true,SegValue(cs),reg_eip,0,0,0,0,NativeDebug::Terminal::LogOpenError);
+                    DEBUG_ProjectNativeTerminal(request.attachment);
+                    if (request.frontend!=NativeDebug::Frontend::Bridge &&
+                        !request.retain_result) {
+                        native_execution.release(request.attachment,native_execution.result(request.attachment)->operation);
+                    }
+                    return 0;
+                }
+                cpuLogFile << hex << noshowbase << setfill('0') << uppercase;
+                cpuLogType=request.log_type;
+                cpuLogCounter=request.log_count;
+                cpuLog=true;
+                CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
+                DOSBOX_SetNormalLoop();
+            }
+#endif
+            if (request.normal_resume) {
+                if (request.retrace) DEBUG_HaltOnRetrace=true;
+                if (!request.watch) {
+                    DrawRegistersUpdateOld();
+                    debug_running=false;debugging=false;
+                    DrawCode();DrawInput();
+                    logBuffSuppressConsole=false;
+                    if (logBuffSuppressConsoleNeedUpdate) {
+                        logBuffSuppressConsoleNeedUpdate=false;
+                        DEBUG_RefreshPage(0);
+                    }
+                    DOSBOX_SetNormalLoop();
+                    GFX_SetTitle(-1,-1,-1,is_paused);
+                }
+                mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
+                mainMenu.get_item("debugger_runnormal").check(!request.watch).refresh_item(mainMenu);
+                mainMenu.get_item("debugger_runwatch").check(request.watch).refresh_item(mainMenu);
+                if (request.watch) DEBUG_DrawScreen();
+            }
+            if (request.action!=NativeDebug::Request::Action::Execute) {
+                if (request.action==NativeDebug::Request::Action::RunInterrupt) {
+                    native_execution_breakpoint=CBreakpoint::AddBreakpoint(SegValue(cs),reg_eip,true)->GetId();
+                    CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip-1);
+                    debugging=false;
+                    DrawCode();
+                    mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
+                    mainMenu.get_item("debugger_runnormal").check(true).refresh_item(mainMenu);
+                    mainMenu.get_item("debugger_runwatch").check(false).refresh_item(mainMenu);
+                    DOSBOX_SetNormalLoop();
+                }
+                CPU_HW_Interrupt(request.interrupt);
+            }
+            if (request.action!=NativeDebug::Request::Action::TraceInterrupt) {
+            if (request.over) {
+                request.resume=StepOver();
+                native_execution.setContinuing(request.resume);
+            }
+            if (request.resume && request.frontend!=NativeDebug::Frontend::Predicate) debugging=false;
+            // The shared decoder wrapper restores request flags/watch core
+            // before this owner dispatches the returned callback.
+            result=DEBUG_Run((int32_t)request.cycle_budget,!request.resume || request.watch);
+            // Fatal diagnostic stops must unwind DEBUG_WaitNoExecute without
+            // switching back into guest execution on its null decoder.
+            Bits DEBUG_NullCPUCore(void);
+            if (request.resume && cpudecoder==DEBUG_NullCPUCore) result=-1;
+            if(!result)NativeFrontier::frontiers().reach(NativeFrontier::Kind::Decoder,
+                                                       DOSBOX_MachineServiceOwner().token);
+            // Consume the callback under the same active grant, after the
+            // decoder returns, not in an adapter/evaluator activation.
+            if (result>0) result=(Bits)DOSBOX_DispatchCallback(result);
+            }
+        } catch (...) {
+            // Native unwind may already have settled this grant. Never clean
+            // resources belonging to a later operation from an old A frame.
+            if (!native_execution.ownsActive(operation)) throw;
+            DEBUG_CleanupNativeExecution(request);
+            debugging=true;debug_running=false;runnormal=false;
+            native_execution.settle(native_execution.decoderCalls(),true,0,0,0,0,0,0,NativeDebug::Terminal::Exception);
+            DEBUG_ProjectNativeTerminal(request.attachment);
+            throw;
+        }
+        if (!native_execution.ownsActive(operation)) {
+            const auto *terminal=native_execution.result(request.attachment);
+            if (terminal && terminal->operation==operation && terminal->failed && !result)
+                return -1;
+            return result;
+        }
+        // Sample ceilings after the owned decoder/callback suffix as well as
+        // before normal-loop work. A long single turn cannot be preempted;
+        // its actual overrun remains a budget stop, not invented retirement.
+        const bool budget_stop=!result && DEBUG_NativeExecutionBudgetExpired();
+        // A callback may unwind the exact invocation and settle owner loss.
+        // Do not overwrite that terminal fact or resume its old continuation.
+        const auto *departed=native_execution.result(request.attachment);
+        if (departed && departed->failed && !result) result=-1;
+        if (activated && request.watch && !result && !budget_stop) {
+            runnormal=false;debugging=true;debug_running=true;
+            CBreakpoint::ActivateBreakpoints();
+            DEBUG_DrawScreen();
+        }
+        // A continuing grant owns subsequent normal-loop decoder/callback
+        // turns. A held stop, exit or owner unwind ends it, not the first slice.
+        if (request.resume && request.frontend!=NativeDebug::Frontend::Predicate &&
+            !result && (!debugging || debug_running)) return 0;
+        DEBUG_FinishNativeExecution(operation,result);
+        return result;
+    }
+    return 0;
+}
+
 
 uint32_t DEBUG_CheckKeys(void) {
 	Bits ret=0;
-	bool numberrun = false;
 	bool skipDraw = false;
 #ifdef WIN32
 	int key=dbg_getch_vt();
@@ -4862,19 +6654,19 @@ uint32_t DEBUG_CheckKeys(void) {
 	if (key >='0' && key <='5' && strlen(codeViewData.inputStr) == 0) {
 		const int32_t v[] ={1,5,500,1000,5000,10000};
 
-		ret = DEBUG_Run(v[key - '0'],true);
+        NativeDebug::Request request;
+        request.frontend=NativeDebug::Frontend::Interactive;
+        request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+        request.expected=DEBUG_NativeExecutionContext();
+        request.cycle_budget=v[key - '0'];
+        if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted)
+            DEBUG_ShowMsg("DEBUG: native execution admission refused\n");
+        return 0;
 
-		/* Setup variables so we end up at the proper ret processing */
-		numberrun = true;
-
-		// Don't redraw the screen if it's going to get redrawn immediately
-		// afterwards, to avoid resetting oldregs.
-		if (ret == (Bits)debugCallback)
-			skipDraw = true;
 		key = -1;
 	}
 
-	if (key>0 || numberrun) {
+	if (key>0) {
 #if defined(WIN32) && defined(__PDCURSES__)
 		switch (key) {
 		case PADENTER:	key=0x0A;	break;
@@ -5092,34 +6884,19 @@ uint32_t DEBUG_CheckKeys(void) {
 				}
 				codeViewData.inputPos = (int)strlen(codeViewData.inputStr);
 				break;
-		case KEY_F(5):	// Run Program
-				DrawRegistersUpdateOld();
-				debugging=false;
-				DrawCode();
-				DrawInput();
-				logBuffSuppressConsole = false;
-				if (logBuffSuppressConsoleNeedUpdate) {
-					logBuffSuppressConsoleNeedUpdate = false;
-					DEBUG_RefreshPage(0);
-				}
-
-				Bits DEBUG_NullCPUCore(void);
-
-				inhibit_int_breakpoint = true;
-				ret = DEBUG_Run(1,false);
-				if(cpudecoder == DEBUG_NullCPUCore)
-					ret = -1; /* DEBUG_Loop() must exit */
-				inhibit_int_breakpoint = false;
-				mainMenu.get_item("debugger_rundebug").check(false).refresh_item(mainMenu);
-				mainMenu.get_item("debugger_runnormal").check(true).refresh_item(mainMenu);
-				mainMenu.get_item("debugger_runwatch").check(false).refresh_item(mainMenu);
-
-				skipDraw = true; // don't update screen after this instruction
-				break;
+		case KEY_F(5): { // Run Program
+                if (!DEBUG_ResumeNativeExecution(NativeDebug::Frontend::Interactive,false,false,DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0)))
+                    DEBUG_ShowMsg("DEBUG: native execution admission refused\n");
+                return 0;
+            }
 		case KEY_F(8):	// Toggle printable characters
 				showPrintable = !showPrintable;
 				break;
 		case KEY_F(9):	// Set/Remove Breakpoint
+                if (!DEBUG_AdmitNativeEffect(DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0))) {
+                    DEBUG_ShowMsg("DEBUG: breakpoint admission refused\n");
+                    break;
+                }
 				if (CBreakpoint::IsBreakpoint(codeViewData.cursorSeg, codeViewData.cursorOfs)) {
 					if (CBreakpoint::DeleteBreakpoint(codeViewData.cursorSeg, codeViewData.cursorOfs))
 						DEBUG_ShowMsg("DEBUG: Breakpoint deletion success.\n");
@@ -5131,25 +6908,33 @@ uint32_t DEBUG_CheckKeys(void) {
 					DEBUG_ShowMsg("DEBUG: Set breakpoint at %04X:%04X\n",codeViewData.cursorSeg,codeViewData.cursorOfs);
 				}
 				break;
-		case KEY_F(10):	// Step over inst
+		case KEY_F(10): { // Step over inst
+                NativeDebug::Request request;
+                request.frontend=NativeDebug::Frontend::Interactive;
+        request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+                request.expected=DEBUG_NativeExecutionContext();
+                request.over=true;
+                if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted) {
+                    DEBUG_ShowMsg("DEBUG: native execution admission refused\n");
+                    return 0;
+                }
 				DrawRegistersUpdateOld();
                 if(!CPU_IsDynamicCore()) warn_dynamic = false;
                 else if(!warn_dynamic) {
                     DEBUG_WarnDynamic();
                     warn_dynamic = true;
                 }
-                if (StepOver()) {
-					mustCompleteInstruction = true;
-					inhibit_int_breakpoint = true;
-					ret = DEBUG_Run(1,false);
-					inhibit_int_breakpoint = false;
-					mustCompleteInstruction = false;
-					skipDraw = true;
-					break;
-				}
-				// If we aren't stepping over something, do a normal step.
-				/* FALLTHROUGH */
-		case KEY_F(11):	// trace into
+                break;
+            }
+		case KEY_F(11): { // trace into
+                NativeDebug::Request request;
+                request.frontend=NativeDebug::Frontend::Interactive;
+        request.attachment=DEBUG_AttachNativeExecution(request.frontend,0);
+                request.expected=DEBUG_NativeExecutionContext();
+                if (DEBUG_RequestNativeExecution(request)!=NativeDebug::Admission::Accepted) {
+                    DEBUG_ShowMsg("DEBUG: native execution admission refused\n");
+                    return 0;
+                }
 				DrawRegistersUpdateOld();
                 if(!CPU_IsDynamicCore()) warn_dynamic = false;
                 else if(!warn_dynamic) {
@@ -5157,10 +6942,8 @@ uint32_t DEBUG_CheckKeys(void) {
                     warn_dynamic = true;
                 }
 				exitLoop = false;
-				mustCompleteInstruction = true;
-				ret = DEBUG_Run(1,true);
-				mustCompleteInstruction = false;
-				break;
+                break;
+            }
         case 0x09: //TAB
                 void DBGUI_NextWindow(void);
                 DBGUI_NextWindow();
@@ -5172,9 +6955,10 @@ uint32_t DEBUG_CheckKeys(void) {
 		case 0x0A: //Parse typed Command
                 if (codeViewData.inputPos > 0) {
                     codeViewData.inputStr[MAXCMDLEN] = '\0';
-                    if(ParseCommand(codeViewData.inputStr)) {
+                    if(DEBUG_ExecuteSessionCommand(codeViewData.inputStr,
+                            DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0))) {
                         char* cmd = ltrim(codeViewData.inputStr);
-                        if (histBuff.empty() || *--histBuff.end()!=cmd)
+                        if (*cmd && (histBuff.empty() || *--histBuff.end()!=cmd))
                             histBuff.emplace_back(cmd);
                         if (histBuff.size() > MAX_HIST_BUFFER) histBuff.pop_front();
                         histBuffPos = histBuff.end();
@@ -5220,18 +7004,10 @@ uint32_t DEBUG_CheckKeys(void) {
 				}
 				break;
 		}
-		if (ret<0) return (uint32_t)ret;
-		if (ret>0) {
-			if (GCC_UNLIKELY(ret >= (Bits)CB_MAX)) 
-				ret = 0;
-			else
-				ret = (Bits)DOSBOX_DispatchCallback(ret);
-			if (ret) {
-				exitLoop=true;
-				CPU_Cycles=CPU_CycleLeft=0;
-				return (uint32_t)ret;
-			}
-		}
+        // Do not consume another command while a decoded callback still owns
+        // the native suffix. RunMachine dispatches it after this frame returns.
+        if (native_execution.state()==NativeDebug::State::Pending) return 0;
+		if (ret) return (uint32_t)ret;
 		ret=0;
 		if (!skipDraw)
 			DEBUG_DrawScreen();
@@ -5244,11 +7020,6 @@ Bitu DEBUG_LastRunningUpdate = 0;
 LoopHandler *DOSBOX_GetLoop(void);
 Bitu DEBUG_Loop(void);
 
-void DEBUG_Wait(void) {
-    while (DOSBOX_GetLoop() == DEBUG_Loop)
-        DOSBOX_RunMachine();
-}
-
 Bits DEBUG_NullCPUCore(void) {
     return CBRET_NONE;
 }
@@ -5257,10 +7028,16 @@ void DEBUG_WaitNoExecute(void) {
     /* the caller uses this version to indicate a fatal error
      * in a condition where single-stepping or executing any
      * more x86 instructions is very unwise */
-    auto oldcore = cpudecoder;
+    // Fatal diagnostic UI, not a guest invocation: do not recursively run
+    // the machine dispatcher/service tail against corrupted DOS state.
+    struct RestoreDecoder {
+        decltype(cpudecoder) saved;
+        ~RestoreDecoder() { cpudecoder = saved; }
+    } restore{cpudecoder};
     cpudecoder = DEBUG_NullCPUCore;
-    DEBUG_Wait();
-    cpudecoder = oldcore;
+    while (DOSBOX_GetLoop() == DEBUG_Loop) {
+        if (DEBUG_Loop()) break;
+    }
 }
 
 int GetDynamicType();
@@ -5270,10 +7047,66 @@ void dyn_core_dh_debug_flush (void);
 #endif
 
 Bitu DEBUG_Loop(void) {
+    if (DEBUG_NativeExecutionBudgetExpired()) return 0;
+    // Publish the held stop at the outer seam before accepting another command.
+    if (native_execution.state()==NativeDebug::State::Active && debugging && !debug_running)
+        return 0;
+    if (DEBUG_ContinuationUnavailable()) {
+        GFX_Events();
+        SDL_Delay(1);
+        return 0;
+    }
+#if C_DEBUG_LUA
+    if(Debugger_PredicateHeld()) {
+        // Before PIC, GFX, Lua pump and native debugger command processing.
+        if(predicate_hold==PredicateHold::Unsupported || predicate_hold==PredicateHold::Pending) {
+            if(predicate_hold==PredicateHold::Unsupported && !predicate_hold_reported &&
+               Debugger_LiveHostNow()-predicate_hold_start>=100) {
+                predicate_hold_reported=true;
+                const auto now=Debugger_GetRegisters();
+                const auto &before=predicate_registers;
+                const bool regs_unchanged=now.eax==before.eax && now.ebx==before.ebx &&
+                    now.ecx==before.ecx && now.edx==before.edx && now.esi==before.esi &&
+                    now.edi==before.edi && now.ebp==before.ebp && now.esp==before.esp &&
+                    now.eip==before.eip && now.cs==before.cs && now.ds==before.ds &&
+                    now.es==before.es && now.fs==before.fs && now.gs==before.gs &&
+                    now.ss==before.ss && now.flags==before.flags;
+
+                fprintf(stderr,"hook-unsupported-held id=%llu cs=%04x ip=%08x tick_before=%llu tick_now=%llu tasks_unchanged=%u regs_unchanged=%u\n",
+                    (unsigned long long)predicate_selected_id,SegValue(cs),reg_eip,
+                    (unsigned long long)predicate_tick,(unsigned long long)PIC_Ticks,unsigned(Debugger_PredicateTasksUnchanged()),unsigned(regs_unchanged));
+            }
+            SDL_Delay(1);return 0;
+        }
+        Debugger_ExecutionMaintain(); // absolute deadline is not paused
+        const bool channel_healthy=Debugger_LuaPredicateChannelHealthy();
+        if(channel_healthy && Debugger_LuaPredicateRequestPending())return 0;
+        const bool suppress=channel_healthy && predicate_hold==PredicateHold::Suppress &&
+            DOSBOX_MachineServiceOwner().token==predicate_owner.token &&
+            DOSBOX_MachineServiceAdmission()==MachineService::Denial::None &&
+            cpudecoder==CPU_Core_Normal_Run;
+        PredicateCount(suppress?predicate_summary.suppressed:predicate_summary.propagated);
+        PredicateReceipt(suppress?"suppressed":(*predicate_summary.last.diagnostic?"error":"propagated"),!suppress);
+        predicate_hold=PredicateHold::None;
+        if(!suppress) {
+            DEBUG_EnableDebugger();
+            // Genuine predicate propagation uses the existing task fault cleanup;
+            // release owned edges without advancing guest or executing suffix.
+            GFX_FaultLuaTasks();GFX_PumpLuaTasks(false,true);
+            return 0;
+        }
+        if (!DEBUG_DeferPredicateInstruction())
+            E_Exit("Predicate continuation could not be deferred");
+        debugging=false;debug_running=false;runnormal=true;
+        return 0;
+    }
+#endif
 #if defined(C_DOSBOX_AGENT)
     dosbox_agent::AGENT_BridgePump();
+    if (native_execution.state()==NativeDebug::State::Pending) return 0;
 #endif
     ControlServer_Poll();
+    if (native_execution.state()==NativeDebug::State::Pending) return 0;
 
     // MCP commands such as RUN or VRT can switch back to the normal loop.
     if (DOSBOX_GetLoop() != DEBUG_Loop)
@@ -5291,10 +7124,22 @@ Bitu DEBUG_Loop(void) {
         return old_loop();
     }
     else {
+#if C_DEBUG_LUA
+        // In configured live mode a genuine stop must not execute PIC IRQs
+        // or reenter guest while waiting for read-only service at its owner.
+        const auto owner=DOSBOX_MachineServiceOwner();
+        if(Debugger_LuaLiveConfigured() && owner.token &&
+           (owner.kind==MachineService::Kind::RootGuest || owner.kind==MachineService::Kind::ShellExecGuest)) {
+            Debugger_EntryMaintain();
+    GFX_Events();Debugger_LuaLivePump();SDL_Delay(1);return 0;
+        }
+#endif
         //TODO Disable sound
         GFX_Events();
-        // Held means host service only. Pending IRQs belong to the next
-        // explicit execution grant, not an implicit return-from-IRQ resume.
+        if (native_execution.state()==NativeDebug::State::Pending) return 0;
+        // Held means no guest work. Host input may enqueue an explicit native
+        // execution request, but must not inject an IRQ or implicitly resume
+        // the guest to return from one. Pending IRQs belong to the next grant.
         SDL_Delay(1);
 
 #if (C_DYNAMIC_X86)
@@ -5346,6 +7191,16 @@ static bool hidedebugger=false;
 void DEBUG_Enable_Handler(bool pressed) {
 	if (!pressed || control->opt_display2)
 		return;
+#if C_DEBUG_LUA
+    // The selected worker has no interactive tty or UI toggle. A host break
+    // publishes a native stop even while an observer is deciding its verdict;
+    // the hit stack's exitLoop check preserves it against a false verdict.
+    if(local_driver_thread.joinable()) {
+        local_driver_host_break=true;
+        DEBUG_HoldNativeExecution();
+        return;
+    }
+#endif
 
     if (hidedebugger) {
         hidedebugger=false;
@@ -5376,21 +7231,11 @@ void DEBUG_Enable_Handler(bool pressed) {
     }
 
     if (debugging) {
-        DrawRegistersUpdateOld();
-        debugging=false;
-        logBuffSuppressConsole = false;
-        if (logBuffSuppressConsoleNeedUpdate) {
-            logBuffSuppressConsoleNeedUpdate = false;
-            DEBUG_RefreshPage(0);
-        }
-
-        void DEBUG_DrawScreen(void);
-        DEBUG_DrawScreen();
-
-        CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
-        DOSBOX_SetNormalLoop();	
-        GFX_SetTitle(-1,-1,-1,is_paused);
-//      if (tohide) return;
+        // Toggling a held debugger is an execution request, not permission to
+        // switch loops on the input handler's stack. Preserve Busy refusal.
+        if (!DEBUG_ResumeNativeExecution(NativeDebug::Frontend::Interactive,false,false,DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0)))
+            DEBUG_ShowMsg("DEBUG: native execution admission refused\n");
+        return;
     }
 
 	static bool showhelp=false;
@@ -5422,8 +7267,7 @@ void DEBUG_Enable_Handler(bool pressed) {
     LoopHandler *ol = DOSBOX_GetLoop();
     if (ol != DEBUG_Loop) old_loop = ol;
 
-    debugging=true;
-    debug_running=false;
+    DEBUG_EnterCommonStoppedState();
     check_rescroll=true;
     DrawRegistersUpdateOld();
     DEBUG_SetupConsole();
@@ -5447,8 +7291,9 @@ void DEBUG_Enable_Handler(bool pressed) {
 #if defined(C_DOSBOX_AGENT)
     dosbox_agent::AGENT_NotifyDebuggerStopped(SegValue(cs), reg_eip);
 #endif
-    if (debugrunmode==1) {char command[] = "RUN"; ParseCommand(command);}
-    else if (debugrunmode==2) {char command[] = "RUNWATCH"; ParseCommand(command);}
+    if (debugrunmode==1 || debugrunmode==2)
+        DEBUG_ExecuteSessionCommand(debugrunmode==1?"RUN":"RUNWATCH",
+            DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0));
 }
 
 void DEBUG_DrawScreen(void) {
@@ -6109,6 +7954,10 @@ void DEBUG_CheckExecuteBreakpoint(uint16_t seg, uint32_t off)
 #if !defined(OSFREE)
 # if C_DEBUG
     if (debugger_break_on_exec) {
+        if (agent_target_launch && !agent_target_psp) {
+            agent_target_psp=dos.psp();
+            agent_target_owner=DOSBOX_MachineServiceOwner().token;
+        }
 #  if defined(C_DOSBOX_AGENT)
         // The new entry breakpoint is created at the current CS:IP. The
 		// existing bulk activation intentionally skips that address, so arm
@@ -6134,8 +7983,48 @@ void DEBUG_CheckExecuteBreakpoint(uint16_t seg, uint32_t off)
 #endif
 }
 
+#if C_DEBUG_LUA
+static bool Debugger_ExecutionStop();
+static void ExecutionFinish(const char *reason);
+#endif
 Bitu DEBUG_EnableDebugger(void)
 {
+#if C_DEBUG_LUA
+    if(local_driver_started && local_driver_thread.joinable()) {
+        local_driver_host_break=true;
+        CPU_CycleLeft+=CPU_Cycles;CPU_Cycles=0;
+        DEBUG_EnterCommonStoppedState();
+        CBreakpoint::DeactivateBreakpoints();
+        exitLoop=true;
+        DOSBOX_SetLoop(DEBUG_Loop);
+        return 0;
+    }
+    if(predicate_selected) {
+        predicate_selected=false;
+        predicate_owner=DOSBOX_MachineServiceOwner();
+        const auto denial=DOSBOX_MachineServiceAdmission();
+        predicate_denial=denial;predicate_registers=Debugger_GetRegisters();
+        predicate_hold_start=Debugger_LiveHostNow();predicate_hold_reported=false;
+        predicate_hold=denial==MachineService::Denial::None ? PredicateHold::Pending : PredicateHold::Unsupported;
+        CPU_CycleLeft+=CPU_Cycles;CPU_Cycles=0;
+        DEBUG_EnterCommonStoppedState();CBreakpoint::DeactivateBreakpoints();
+        exitLoop=true;DOSBOX_SetLoop(DEBUG_Loop);
+        if(predicate_hold==PredicateHold::Pending)DOSBOX_RequestMachineService();
+        else {
+            snprintf(predicate_summary.last.diagnostic,sizeof(predicate_summary.last.diagnostic),"hook-unsupported-context");
+            PredicateReceipt("unsupported",true);
+            fprintf(stderr,"hook-unsupported-context id=%llu cs=%04x ip=%08x owner=%u depth=%u denial=%u\n",
+            (unsigned long long)predicate_selected_id,SegValue(cs),reg_eip,unsigned(predicate_owner.kind),predicate_owner.depth,unsigned(predicate_denial));
+        }
+        return 0;
+    }
+    // This callback publishes a stop only; Lua runs later at handler return.
+    if (Debugger_ExecutionStop()) return 0;
+    if(Debugger_LiveGenuineStop())return 0;
+#endif
+    // Active execution uses a native held-stop transition, not the UI toggle
+    // (which may require a tty or apply a run-on-entry preference).
+    if (DEBUG_HoldNativeExecution()) return 0;
 	exitLoop = true;
 
 	if (!debugging || (debugging && debug_running))
@@ -6145,6 +8034,280 @@ Bitu DEBUG_EnableDebugger(void)
 	CPU_Cycles = 0;
 	return 0;
 }
+
+#if C_DEBUG_LUA
+static uint64_t live_stop_token=0,live_stop_started=0,live_stop_finished=0;
+static bool live_error=false;
+static uint64_t Debugger_LiveHostNow() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+uint64_t Debugger_LiveStopStarted() {return live_stop_started;}
+uint64_t Debugger_LiveStopFinished() {return live_stop_finished;}
+const char *Debugger_LiveStopReason() {
+    if(live_error)return "error";
+    if(!Debugger_LiveEffectiveStopped())return "running";
+    return live_stop_token && DOSBOX_MachineServiceOwner().token==live_stop_token ? "deliberate":"genuine";
+}
+static bool live_slice=false,live_decided=false;
+static bool live_saved_active=false,live_saved_watch=false,live_saved_normal=false;
+static Bitu Debugger_LiveIdle() {
+    // No PIC IRQs, CPU or ncurses while deliberately stopped.
+    Debugger_EntryMaintain();
+    GFX_Events();Debugger_LuaLivePump();SDL_Delay(1);return 0;
+}
+bool Debugger_LiveEffectiveStopped() {
+    return live_slice && !live_decided ?
+        live_saved_active && !live_saved_watch && !live_saved_normal : Debugger_GetStatus().stopped;
+}
+void Debugger_LiveBeginSlice() {
+    assert(!live_slice);
+    live_saved_active=debugging;live_saved_watch=debug_running;live_saved_normal=runnormal;
+    live_slice=true;live_decided=false;DEBUG_EnterCommonStoppedState();
+}
+void Debugger_LiveEndSlice() {
+    assert(live_slice);
+    if(!live_decided) {debugging=live_saved_active;debug_running=live_saved_watch;runnormal=live_saved_normal;}
+    live_slice=false;
+}
+bool Debugger_LiveStop(uint64_t token) {
+    const auto owner=DOSBOX_MachineServiceOwner();
+    if(!token || owner.token!=token)return false;
+    const bool provisional_stop=Debugger_PredicateHeld();
+    if(provisional_stop) {
+        if(predicate_owner.token!=token || predicate_hold==PredicateHold::Unsupported)return false;
+        // Explicit outer stop wins over the provisional stopped projection.
+        PredicateCount(predicate_summary.propagated);PredicateReceipt("bypassed",true);
+        predicate_hold=PredicateHold::None;
+    } else if(Debugger_LiveEffectiveStopped())return live_stop_token==token;
+    live_stop_token=token;live_stop_started=Debugger_LiveHostNow();live_stop_finished=0;
+    ExecutionFinish("interrupted");
+    live_decided=true;DEBUG_EnterCommonStoppedState();
+    CBreakpoint::DeactivateBreakpoints();DOSBOX_SetLoop(Debugger_LiveIdle);
+    if(provisional_stop) {GFX_FaultLuaTasks();GFX_PumpLuaTasks(false,true);}
+    return true;
+}
+bool Debugger_LocalClaimStop(NativeDebug::Attachment attachment,
+                            NativeDebug::Context context,
+                            const NativeFrontier::Descriptor &seam) {
+    const auto owner=DOSBOX_MachineServiceOwner();
+    if(attachment.serial!=local_driver_attachment.serial ||
+       !native_execution.canEnqueue() || !NativeFrontier::frontiers().ownsHold(seam) ||
+       seam.kind!=NativeFrontier::Kind::LoopStop || seam.decoder_entered ||
+       seam.callback_entered || owner.kind!=MachineService::Kind::ShellExecGuest ||
+       owner.depth!=2 || !DEBUG_AdmitNativeState(attachment,context) ||
+       Debugger_PredicateHeld() || live_error)return false;
+    // Claim ownership only: preserve the actual hit and stopped machine image.
+    live_stop_token=owner.token;live_stop_started=Debugger_LiveHostNow();
+    live_stop_finished=0;
+    return true;
+}
+bool Debugger_LiveCheckpointStop(uint64_t token) {
+    if (!Debugger_LiveOwnsStop(token)) return false;
+    live_decided=true;
+    DEBUG_EnterCommonStoppedState();
+    CBreakpoint::DeactivateBreakpoints();
+    DOSBOX_SetLoop(Debugger_LiveIdle);
+    return true;
+}
+bool Debugger_LiveGenuineStop() {
+    const auto owner=DOSBOX_MachineServiceOwner();
+    if(!Debugger_LuaLiveConfigured() || !owner.token ||
+       (owner.kind!=MachineService::Kind::RootGuest && owner.kind!=MachineService::Kind::ShellExecGuest))return false;
+    if(DOSBOX_GetLoop()==Debugger_LiveIdle)return true;
+    ExecutionFinish("interrupted");
+    live_stop_token=0;live_stop_started=Debugger_LiveHostNow();live_stop_finished=0;
+    CPU_CycleLeft+=CPU_Cycles;CPU_Cycles=0;
+    DEBUG_EnterCommonStoppedState();CBreakpoint::DeactivateBreakpoints();
+    DOSBOX_SetLoop(Debugger_LiveIdle);return true;
+}
+void Debugger_LiveError() {
+    ExecutionFinish("error");
+    live_error=true;live_decided=true;
+    if(!live_stop_started || live_stop_finished)live_stop_started=Debugger_LiveHostNow();
+    live_stop_finished=0;live_stop_token=0;
+    DEBUG_EnterCommonStoppedState();CBreakpoint::DeactivateBreakpoints();
+    DOSBOX_SetLoop(Debugger_LiveIdle);
+}
+void Debugger_LivePhaseCompleted(const DebuggerStopEvent &event) {
+    if (event.type == DebuggerStopType::Error ||
+        event.type == DebuggerStopType::Breakpoint ||
+        event.type == DebuggerStopType::ManualStop) Debugger_LiveError();
+}
+bool Debugger_LiveOwnsStop(uint64_t token) {
+    return !live_error && token && live_stop_token == token &&
+        DOSBOX_MachineServiceOwner().token == token && Debugger_LiveEffectiveStopped();
+}
+// One machine-owner target; no guest loop or Lua call in the CPU hook.
+static DebuggerExecutionTarget execution_target;
+static bool execution_match = false;
+const DebuggerExecutionTarget &Debugger_ExecutionTarget() { return execution_target; }
+static bool ExecutionArmed() { return !strcmp(execution_target.reason,"armed"); }
+static void ExecutionFinish(const char *reason) {
+ if (!ExecutionArmed()) return;
+ bool cleared=false;
+ Debugger_ClearInternalTemporaryBreakpoint(execution_target.breakpoint_id,&cleared);
+ LOG_MSG("Execution target terminal generation=%llu id=%llu reason=%s cleared=%u",
+         (unsigned long long)execution_target.generation,
+         (unsigned long long)execution_target.breakpoint_id,reason,unsigned(cleared));
+ // Freeze at this existing transition, never on a later diagnostic read.
+ // On owner loss these are the *current* owner's hook registers, not the
+ // departed guest's return site. Fault/unsupported decoder state is unknown.
+ const auto terminal_owner=DOSBOX_MachineServiceOwner();
+ execution_target.terminal_owner=terminal_owner.token;
+ execution_target.terminal_owner_kind=unsigned(terminal_owner.kind);
+ execution_target.terminal_owner_depth=terminal_owner.depth;
+ execution_target.terminal_flags_valid=!strcmp(reason,"hit");
+ execution_target.terminal_regs_valid=execution_target.terminal_flags_valid ||
+     (cpudecoder==CPU_Core_Normal_Run && strcmp(reason,"error"));
+ if (execution_target.terminal_regs_valid)
+  execution_target.terminal_regs=execution_target.terminal_flags_valid ?
+      execution_target.regs : Debugger_GetRegisters();
+ execution_target.reason=reason;
+ execution_target.end_ms=Debugger_LiveHostNow();
+ execution_target.tick=PIC_Ticks;
+}
+void Debugger_PredicateResetForRestore() {
+    assert(!Debugger_PredicateHeld());
+    CBreakpoint::DeleteOwned(DebuggerBreakpointOwner::Lua);
+    ExecutionFinish("cancelled");execution_match=false;
+    predicate_selected=false;predicate_hold=PredicateHold::None;
+    predicate_summary.terminal_valid=false;
+    predicate_summary.last=DebuggerPredicateReceipt{};predicate_summary.last_valid=false;
+}
+void Debugger_ExecutionOwnerDeparting(uint64_t token) {
+ // Scope still exists here, including during exception unwinding. Only retire
+ // its exact target; no service, guest execution, or continuation restoration.
+ Debugger_StateOwnerDeparting(token);
+ if (ExecutionArmed() && token && token==execution_target.owner)
+  ExecutionFinish("owner_lost");
+}
+bool Debugger_ExecutionBreakpointEligible(uint64_t id) {
+#if C_DEBUG_LUA
+ if(std::find(native_condition_breakpoints.begin(),native_condition_breakpoints.end(),id)!=native_condition_breakpoints.end() &&
+    native_execution.activeRequest() && DOSBOX_MachineServiceRelation(native_execution.activeRequest()->expected.invocation)!=MachineService::Relation::Current)return false;
+ if(local_driver_target && id==native_execution_breakpoint &&
+    native_execution.activeRequest() &&
+    native_execution.activeRequest()->frontend==NativeDebug::Frontend::Lua &&
+    DOSBOX_MachineServiceRelation(local_driver_target_owner)!=MachineService::Relation::Current)
+     return false;
+#endif
+ return id!=execution_target.breakpoint_id || !ExecutionArmed() ||
+     DOSBOX_MachineServiceRelation(execution_target.owner)==MachineService::Relation::Current;
+}
+void Debugger_ExecutionMaintain(bool channel_closed) {
+ if (!ExecutionArmed()) return;
+ if (channel_closed) ExecutionFinish("channel_closed");
+ else if (DOSBOX_MachineServiceRelation(execution_target.owner)==MachineService::Relation::Indeterminate) ExecutionFinish("owner_indeterminate");
+ else if (DOSBOX_MachineServiceRelation(execution_target.owner)==MachineService::Relation::Absent) ExecutionFinish("owner_lost");
+ else if (cpudecoder != CPU_Core_Normal_Run) ExecutionFinish("unsupported-core");
+ else if (Debugger_LiveHostNow() >= execution_target.deadline_ms) ExecutionFinish("nonarrival");
+}
+const char *Debugger_ExecutionArm(uint16_t cs_value,uint16_t ip_value,uint32_t wall_ms) {
+ Debugger_ExecutionMaintain();
+#if !C_HEAVY_DEBUG
+ return "unsupported-build";
+#else
+ if (cpudecoder != CPU_Core_Normal_Run) return "unsupported-core";
+ const auto owner=DOSBOX_MachineServiceOwner();
+ if (!owner.token || !Debugger_LuaLiveConfigured()) return "owner-unavailable";
+ // Arm is data-only: a clean stop must belong to this machine owner.
+ // Keep genuine/foreign/error stops non-continuable; never resume here.
+ if (live_error || (Debugger_LiveEffectiveStopped() && !Debugger_LiveOwnsStop(owner.token)))
+  return "requires-running-or-owned-stop";
+ if (ExecutionArmed()) return "already-armed";
+ if (!wall_ms || wall_ms>10000) return "invalid-duration";
+ if (execution_target.generation>=uint64_t(INT64_MAX)) return "generation-exhausted";
+ if (SegValue(cs)==cs_value && reg_eip==ip_value) return "already-at-target";
+ const auto address=Debugger_ResolveAddress(cs_value,ip_value);
+ uint64_t id=0;bool created=false;
+ const auto result=Debugger_PrepareRunUntilAddress(address,&id,&created,true);
+ if (result!=DebuggerTempBreakpointResult::Created) return "target-collision-or-invalid";
+ const auto generation=execution_target.generation+1;
+ execution_target={};execution_match=false;
+ execution_target.generation=generation;execution_target.owner=owner.token;
+ execution_target.arm_owner_kind=unsigned(owner.kind);execution_target.arm_owner_depth=owner.depth;
+ execution_target.breakpoint_id=id;execution_target.cs=cs_value;execution_target.ip=ip_value;
+ execution_target.start_ms=Debugger_LiveHostNow();execution_target.deadline_ms=execution_target.start_ms+wall_ms;
+ execution_target.reason="armed";
+ CBreakpoint::FindPhysBreakpoint(cs_value,ip_value,true)->Activate(true);
+ return nullptr;
+#endif
+}
+const char *Debugger_ExecutionCancel(uint64_t generation) {
+ if (!generation || generation!=execution_target.generation ||
+     execution_target.owner!=DOSBOX_MachineServiceOwner().token) return "stale-generation-or-owner";
+ ExecutionFinish("canceled");return nullptr;
+}
+void Debugger_ExecutionRecord(uint64_t id,uint64_t hits) {
+ if (!ExecutionArmed()) return;
+ if (id==execution_target.breakpoint_id && Debugger_ExecutionBreakpointEligible(id)) {
+  execution_match=true;execution_target.hit_count=hits;
+ }
+}
+static bool Debugger_ExecutionStop() {
+ if (!ExecutionArmed()) return false;
+ if (!execution_match) {ExecutionFinish("interrupted");return false;}
+ if (Debugger_LiveHostNow() >= execution_target.deadline_ms) {
+  ExecutionFinish("nonarrival");execution_match=false;return false;
+ }
+ // Normal core has materialized flags before invoking debugCallback.
+ execution_target.regs=Debugger_GetRegisters();
+ ExecutionFinish("hit");execution_match=false;
+ live_stop_token=execution_target.owner;live_stop_started=execution_target.end_ms;
+ live_stop_finished=0;
+ CPU_CycleLeft+=CPU_Cycles;CPU_Cycles=0;
+ DEBUG_EnterCommonStoppedState();CBreakpoint::DeactivateBreakpoints();
+ DOSBOX_SetLoop(Debugger_LiveIdle);return true;
+}
+
+bool Debugger_LiveResume(uint64_t token) {
+    if (!NativeControl::rawEffectAllowed()) return false;
+    if(DEBUG_ContinuationUnavailable() || live_error || !token || DOSBOX_MachineServiceOwner().token!=token)return false;
+    if(!Debugger_LiveEffectiveStopped())return true;
+    // A genuine debugger stop is not our deliberate stop to undo.
+    if(live_stop_token!=token)return false;
+    predicate_summary.terminal_valid=false;
+    live_stop_finished=Debugger_LiveHostNow();live_stop_token=0;live_decided=true;
+    CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs)+reg_eip);
+    debugging=false;debug_running=false;runnormal=false;exitLoop=false;
+    DOSBOX_SetNormalLoop();return true;
+}
+#endif
+
+#if C_DEBUG_LUA
+static void DEBUG_EnableStartupLuaStoppedState(void)
+{
+	/* Use the same debugger-common stopped-state transition as normal debugger
+	 * activation, but intentionally do not call DEBUG_EnableDebugger() or
+	 * DEBUG_Enable_Handler(): those own ncurses stdio and keep the existing
+	 * isatty(0/1/2) gate for interactive debugger startup. This helper is called
+	 * only from the explicit C_DEBUG_LUA -debug-lua-script path before
+	 * DOSBOX_RunMachine(), and Lua still runs only after Debugger_GetStatus()
+	 * reports stopped.
+	 */
+	exitLoop = true;
+	CPU_CycleLeft += CPU_Cycles;
+	CPU_Cycles = 0;
+	DEBUG_EnterCommonStoppedState();
+}
+
+bool DEBUG_RunStartupLuaScriptInStoppedState(const char *script_path)
+{
+	if (script_path == NULL || script_path[0] == '\0')
+		return false;
+
+	DEBUG_EnableStartupLuaStoppedState();
+
+	const DebuggerStatus status = Debugger_GetStatus();
+	if (!status.stopped) {
+		LOG_MSG("Lua debugger: startup script '%s' was requested, but the debugger did not enter a stopped state", script_path);
+		return false;
+	}
+
+	return Debugger_LuaRunScriptInStoppedState(script_path);
+}
+#endif
 
 // INIT
 
@@ -6190,6 +8353,9 @@ void DEBUG_SetupConsole(void) {
 }
 
 void DEBUG_ShutDown(Section * /*sec*/) {
+#if C_DEBUG_LUA
+    Debugger_LuaInteractiveReset();
+#endif
 	TIMER_DelTickHandler(ControlServer_Poll);
 	ControlServer_Stop();
 
@@ -6216,23 +8382,31 @@ void DEBUG_ShutDown(Section * /*sec*/) {
 Bitu debugCallback;
 
 bool DEBUG_IsNativeDebuggerCallback(Bits callback) {
-    return callback > 0 && (Bitu)callback == debugCallback;
+    return callback>0 && (Bitu)callback==debugCallback;
 }
 
 void DEBUG_ReinitCallback(void) {
     /* this is REQUIRED after loading a custom BIOS */
 	debugCallback=CALLBACK_Allocate();
 	CALLBACK_Setup(debugCallback,DEBUG_EnableDebugger,CB_RETF,"debugger");
+    LOG_MSG("Debugger callback entry %04x:%04x",RealSeg(CALLBACK_RealPointer(debugCallback)),RealOff(CALLBACK_RealPointer(debugCallback)));
 }
 
 void DEBUG_Init() {
+    // One hook dispatches to the existing worker owner or the built-in slot.
+    if (!NativeFrontier::frontiers().bind([](void *opaque,const NativeFrontier::Descriptor &seam) {
+        DEBUG_NativeConditionFrontier(opaque,seam);
+#if C_DEBUG_LUA
+        if (control->lua_driver.script!=LuaDriver::Options::Script::None) LocalDriverFrontier(opaque,seam);
+#endif
+    },nullptr)) E_Exit("native debugger frontier already bound");
     LOG(LOG_MISC, LOG_DEBUG)("Initializing debug system");
 
 	Section_prop *section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 	const int mcp_server_port = section != NULL ? section->Get_int("mcp_server") : 0;
 	if (mcp_server_port > 0) {
 		ControlServer_Start(static_cast<uint16_t>(mcp_server_port));
-		TIMER_AddTickHandler(ControlServer_Poll);
+
 	}
 
 	/* Reset code overview and input line */
@@ -6240,6 +8414,7 @@ void DEBUG_Init() {
 	/* Setup callback */
 	debugCallback=CALLBACK_Allocate();
 	CALLBACK_Setup(debugCallback,DEBUG_EnableDebugger,CB_RETF,"debugger");
+    LOG_MSG("Debugger callback entry %04x:%04x",RealSeg(CALLBACK_RealPointer(debugCallback)),RealOff(CALLBACK_RealPointer(debugCallback)));
 
 	/* shutdown function */
 	AddExitFunction(AddExitFunctionFuncPair(DEBUG_ShutDown));
@@ -6496,11 +8671,31 @@ struct TLogInst {
 };
 
 TLogInst logInst[LOGCPUMAX];
+
 #if defined(C_DOSBOX_AGENT)
 static bool agent_trace_active = false;
+static uint64_t agent_trace_owner = 0;
+static NativeDebug::Attachment agent_trace_attachment;
 static uint32_t agent_trace_remaining = 0;
 #endif
 static vector<DEBUG_AgentTraceEvent> agent_trace_events;
+
+// Persistent heavy instrumentation belongs to the sole attached session.
+// Operation logging is already closed before terminal publication. Do not leave
+// these flags or retained guest history armed across replacement attachments.
+static void DEBUG_CleanupSessionInstrumentation() {
+    logHeavy=false;
+    zeroProtect=false;
+    logCount=0;
+    memset(logInst,0,sizeof(logInst));
+#if defined(C_DOSBOX_AGENT)
+    agent_trace_active=false;
+    agent_trace_owner=0;
+    agent_trace_attachment={};
+    agent_trace_remaining=0;
+    agent_trace_events.clear();
+#endif
+}
 
 void DEBUG_HeavyLogInstruction(void) {
 
@@ -6555,25 +8750,50 @@ void DEBUG_HeavyLogInstruction(void) {
 }
 
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
-bool DEBUG_AgentStartTrace(const uint32_t instruction_count)
+bool DEBUG_AgentStartTrace(const uint32_t instruction_count, NativeDebug::Attachment attachment, NativeDebug::Context expected)
 {
+    if (!DEBUG_AdmitNativeObservation(attachment,expected) || !DEBUG_AdmitNativeEffect(attachment)) return false;
 	if (instruction_count == 0 || agent_trace_active)
 		return false;
 	agent_trace_events.clear();
 	agent_trace_events.reserve(instruction_count);
 	agent_trace_remaining = instruction_count;
+    agent_trace_owner = DOSBOX_MachineServiceOwner().token;
+    agent_trace_attachment = attachment;
 	agent_trace_active = true;
 	return true;
 }
 
-bool DEBUG_AgentStopTrace(uint32_t* event_count)
+// Retained samples and cancellation use the captured session resource, not a
+// newly attached frontend or a stopped edit. This remains usable while running.
+static bool DEBUG_AdmitAgentTrace(NativeDebug::Attachment attachment)
+{
+    return native_execution.admits(attachment) &&
+        attachment.serial==agent_trace_attachment.serial &&
+        NativeControl::diagnosticEffectAllowed();
+}
+
+bool DEBUG_AgentStopTrace(uint32_t* event_count, NativeDebug::Attachment attachment)
 {
 	if (event_count == nullptr)
 		return false;
+    *event_count = 0;
+    // Stopping owned instrumentation is supported while the guest runs; it
+    // needs session/resource authority, not a held edit or empty result slot.
+    if (!DEBUG_AdmitAgentTrace(attachment)) return false;
 	agent_trace_active = false;
 	agent_trace_remaining = 0;
+    agent_trace_owner = 0;
 	*event_count = static_cast<uint32_t>(agent_trace_events.size());
 	return true;
+}
+
+void DEBUG_AgentTraceOwnerDeparting(uint64_t token)
+{
+    if (!token || token!=agent_trace_owner) return;
+    agent_trace_active=false;
+    agent_trace_remaining=0;
+    agent_trace_owner=0;
 }
 
 bool DEBUG_AgentTraceIsActive(void)
@@ -6581,10 +8801,11 @@ bool DEBUG_AgentTraceIsActive(void)
 	return agent_trace_active;
 }
 
-void DEBUG_AgentCopyTraceEvents(vector<DEBUG_AgentTraceEvent>* events)
+bool DEBUG_AgentCopyTraceEvents(vector<DEBUG_AgentTraceEvent>* events, NativeDebug::Attachment attachment)
 {
-	if (events != nullptr)
-		*events = agent_trace_events;
+    if (!events || !DEBUG_AdmitAgentTrace(attachment)) return false;
+    *events = agent_trace_events;
+    return true;
 }
 
 static void DEBUG_AgentCaptureTraceEvent(void)
@@ -6609,6 +8830,7 @@ static void DEBUG_AgentCaptureTraceEvent(void)
 	event.gs = inst.s_gs;
 	event.ss = inst.s_ss;
 	event.flags = inst.flags;
+    event.protected_mode = cpu.pmode;
 	event.instruction = inst.dline;
 	event.analysis = inst.res;
 	agent_trace_events.push_back(event);
@@ -6665,6 +8887,9 @@ bool DEBUG_HeavyIsBreakpoint(void) {
 			return true;
 		}
 	}
+#endif
+#if C_DEBUG_LUA
+ Debugger_ExecutionMaintain();
 #endif
 	if (cpuLog) {
 		if (cpuLogCounter>0) {

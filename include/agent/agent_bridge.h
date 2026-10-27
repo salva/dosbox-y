@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include "native_debug_execution.h"
 
 namespace dosbox_agent {
 
@@ -21,6 +22,8 @@ public:
     bool BindToCurrentThread();
     bool IsBoundToCurrentThread() const;
     std::uint64_t Submit(Command command);
+    // Reserved for callbacks which only publish an explicit debugger stop.
+    std::uint64_t SubmitStop(Command command);
     std::uint64_t SubmitAfter(std::uint32_t delay_ms, Command command);
     std::size_t Pump();
     void Shutdown();
@@ -30,14 +33,20 @@ private:
     Impl* impl;
 };
 
-typedef std::function<void(std::uint16_t segment, std::uint32_t instruction_pointer)> DebuggerStopListener;
+typedef std::function<void(std::uint16_t segment, std::uint32_t instruction_pointer, const NativeDebug::Result*)> DebuggerStopListener;
+typedef std::function<void()> TargetExitListener;
 
 EmulationThreadQueue& AGENT_EmulationQueue();
 void AGENT_BridgeAttachToCurrentThread();
 std::size_t AGENT_BridgePump();
+std::size_t AGENT_BridgePumpAtFrontier();
+bool AGENT_BridgeAtFrontier();
 void AGENT_BridgeShutdown();
 void AGENT_SetDebuggerStopListener(DebuggerStopListener listener);
-void AGENT_NotifyDebuggerStopped(std::uint16_t segment, std::uint32_t instruction_pointer);
+void AGENT_NotifyDebuggerStopped(std::uint16_t segment, std::uint32_t instruction_pointer,
+                                 const NativeDebug::Result* terminal = nullptr);
+void AGENT_SetTargetExitListener(TargetExitListener listener);
+void AGENT_NotifyTargetExited();
 bool AGENT_RunQueueSelfTest(std::string* error);
 
 } // namespace dosbox_agent

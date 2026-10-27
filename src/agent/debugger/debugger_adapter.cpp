@@ -7,6 +7,9 @@
 #if C_DEBUG
 #include "cpu.h"
 #include "debug.h"
+#include "../../debug/debug_common.h"
+#include "native_control_owner.h"
+#include "machine_service.h"
 #include "dos_inc.h"
 #include "mem.h"
 #include "paging.h"
@@ -25,13 +28,19 @@ namespace dosbox_agent {
 
 namespace {
 
-bool RequireEmulationThread(std::string* error)
+bool RequireEmulationThread(std::string* error, bool effect = true)
 {
-    if (AGENT_EmulationQueue().IsBoundToCurrentThread())
-        return true;
-    if (error != NULL)
-        *error = "Debugger access was not dispatched on the emulation thread";
-    return false;
+    if (!AGENT_EmulationQueue().IsBoundToCurrentThread()) {
+        if (error != NULL)
+            *error = "Debugger access was not dispatched on the emulation thread";
+        return false;
+    }
+    if (effect && (!NativeControl::rawEffectAllowed() || DEBUG_ContinuationUnavailable())) {
+        if (error != NULL)
+            *error = "Native control unavailable or owned";
+        return false;
+    }
+    return true;
 }
 
 void SetAccessError(MemoryAccessError* access_error,
@@ -218,7 +227,10 @@ bool DebuggerAdapter::IsShellReady() const
 bool DebuggerAdapter::IsReadyForTargetStart() const
 {
 #if C_DEBUG
-    return IsShellReady() && DEBUG_AgentCanStartTarget();
+    // Defer launch until keyboard/idle callbacks restore their suspended state.
+    return IsShellReady() && DEBUG_AgentCanStartTarget() &&
+           AGENT_BridgeAtFrontier() &&
+           DOSBOX_MachineContextAdmission() == MachineService::Denial::None;
 #else
     return false;
 #endif
@@ -233,16 +245,16 @@ std::uint64_t DebuggerAdapter::EntryBreakpointSequence() const
 #endif
 }
 
-bool DebuggerAdapter::Continue(std::string* error) const
+bool DebuggerAdapter::Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const
 {
     if (!RequireAvailable(error) || !RequireEmulationThread(error))
         return false;
 
 #if C_DEBUG
-    DEBUG_AgentClearLastBreakpoint();
-    char command[] = "RUN";
-    if (ParseCommand(command))
+    if (DEBUG_ResumeNativeExecution(NativeDebug::Frontend::Agent,false,false,DEBUG_AttachNativeExecution(NativeDebug::Frontend::Agent,0),conditions)) {
+        DEBUG_AgentClearLastBreakpoint();
         return true;
+    }
 
     if (error != NULL)
         *error = "Debugger rejected RUN";
@@ -331,7 +343,9 @@ bool DebuggerAdapter::StartTargetAtEntry(const std::string& command,
     for (std::vector<std::string>::const_iterator it = arguments.begin(); it != arguments.end(); ++it)
         debugbox_command += " " + *it;
     dos.errorcode = 0;
+    DEBUG_AgentBeginTarget();
     first_shell->DoCommand(&debugbox_command[0]);
+    if (DEBUG_AgentEndTarget()) AGENT_NotifyTargetExited();
     if (dos.errorcode != 0) {
         if (error != NULL)
             *error = "DOS target launch failed with error " + std::to_string(dos.errorcode);
@@ -346,28 +360,43 @@ bool DebuggerAdapter::StartTargetAtEntry(const std::string& command,
 #endif
 }
 
+void DebuggerAdapter::CaptureStoppedContext()
+{
+    observation_attachment_ = DEBUG_AttachNativeExecution(NativeDebug::Frontend::Agent, 0);
+    observation_context_ = DEBUG_NativeExecutionContext();
+}
+
+bool DebuggerAdapter::RequireStoppedObservation(std::string* error) const
+{
+    if (!RequireAvailable(error) || !RequireEmulationThread(error)) return false;
+    if (DEBUG_AdmitNativeObservation(observation_attachment_, observation_context_)) return true;
+    if (error) *error = "Selected native stopped context is no longer available";
+    return false;
+}
+
 bool DebuggerAdapter::GetRegisters(RegisterSnapshot* registers, std::string* error) const
 {
-    if (!RequireAvailable(error) || !RequireEmulationThread(error) || registers == NULL)
+    if (!RequireStoppedObservation(error) || registers == NULL)
         return false;
 
 #if C_DEBUG
-    registers->eax = reg_eax;
-    registers->ebx = reg_ebx;
-    registers->ecx = reg_ecx;
-    registers->edx = reg_edx;
-    registers->esi = reg_esi;
-    registers->edi = reg_edi;
-    registers->ebp = reg_ebp;
-    registers->esp = reg_esp;
-    registers->cs = SegValue(cs);
-    registers->ds = SegValue(ds);
-    registers->es = SegValue(es);
-    registers->fs = SegValue(fs);
-    registers->gs = SegValue(gs);
-    registers->ss = SegValue(ss);
-    registers->instruction_pointer = reg_eip;
-    registers->flags = CPU_InspectFlags();
+    const auto snapshot = Debugger_GetRegisters();
+    registers->eax = snapshot.eax;
+    registers->ebx = snapshot.ebx;
+    registers->ecx = snapshot.ecx;
+    registers->edx = snapshot.edx;
+    registers->esi = snapshot.esi;
+    registers->edi = snapshot.edi;
+    registers->ebp = snapshot.ebp;
+    registers->esp = snapshot.esp;
+    registers->cs = snapshot.cs;
+    registers->ds = snapshot.ds;
+    registers->es = snapshot.es;
+    registers->fs = snapshot.fs;
+    registers->gs = snapshot.gs;
+    registers->ss = snapshot.ss;
+    registers->instruction_pointer = snapshot.eip;
+    registers->flags = snapshot.flags;
     registers->cpu_mode = !cpu.pmode ? "real" : ((reg_flags & FLAG_VM) ? "v86" : "protected");
     return true;
 #else
@@ -398,7 +427,7 @@ bool DebuggerAdapter::ReadMemory(const MemoryAddress& address,
                                  MemoryAccessError* access_error,
                                  std::string* error) const
 {
-    if (!RequireAvailable(error) || !RequireEmulationThread(error) || data == NULL || length == 0)
+    if (!RequireStoppedObservation(error) || data == NULL || length == 0)
         return false;
 
 #if C_DEBUG
@@ -432,10 +461,14 @@ bool DebuggerAdapter::WriteMemory(const MemoryAddress& address,
                                   MemoryAccessError* access_error,
                                   std::string* error) const
 {
-    if (!RequireAvailable(error) || !RequireEmulationThread(error) || after == NULL || data.empty())
+    if (!RequireStoppedObservation(error) || after == NULL || data.empty())
         return false;
 
 #if C_DEBUG
+    if (!DEBUG_AdmitNativeEffect(DEBUG_AttachNativeExecution(NativeDebug::Frontend::Agent,0))) {
+        if (error != NULL) *error = "Selected debugger session refuses memory mutation";
+        return false;
+    }
     if (access_error != NULL)
         *access_error = MemoryAccessError();
     std::vector<std::uint32_t> resolved_addresses;
@@ -481,14 +514,14 @@ bool DebuggerAdapter::CreateBreakpoint(const BreakpointKind kind,
         return false;
     current_value = probe[0];
 
-    std::uintptr_t handle = 0;
+    std::uint64_t handle = 0;
     if (kind == BreakpointKind::Execution) {
         if (address.space != MemorySpace::Segmented) {
             if (error != NULL)
                 *error = "Execution breakpoints currently require segmented addresses";
             return false;
         }
-        if (!DEBUG_AgentCreateExecutionBreakpoint(address.segment, address.offset, once, &handle)) {
+        if (!DEBUG_AgentCreateExecutionBreakpoint(address.segment, address.offset, once, &handle, observation_attachment_, observation_context_)) {
             if (error != NULL)
                 *error = "Debugger rejected the execution breakpoint";
             return false;
@@ -507,7 +540,7 @@ bool DebuggerAdapter::CreateBreakpoint(const BreakpointKind kind,
         }
         const bool protected_mode = address.space == MemorySpace::Segmented && cpu.pmode && !(reg_flags & FLAG_VM);
         const bool linear = address.space == MemorySpace::Linear;
-        if (!DEBUG_AgentCreateMemoryBreakpoint(address.segment, address.offset, protected_mode, linear, &handle)) {
+        if (!DEBUG_AgentCreateMemoryBreakpoint(address.segment, address.offset, protected_mode, linear, &handle, observation_attachment_, observation_context_)) {
             if (error != NULL)
                 *error = "Debugger rejected the memory-change breakpoint";
             return false;
@@ -537,11 +570,11 @@ bool DebuggerAdapter::CreateBreakpoint(const BreakpointKind kind,
 
 bool DebuggerAdapter::DeleteBreakpoint(const NativeBreakpoint& breakpoint, std::string* error) const
 {
-    if (!RequireAvailable(error) || !RequireEmulationThread(error))
+    if (!RequireAvailable(error) || !RequireEmulationThread(error, false))
         return false;
 
 #if C_DEBUG
-    if (breakpoint.handle != 0 && DEBUG_AgentDeleteBreakpoint(breakpoint.handle))
+    if (breakpoint.handle != 0 && DEBUG_AgentDeleteBreakpoint(breakpoint.handle, observation_attachment_, observation_context_))
         return true;
     if (error != NULL)
         *error = "Breakpoint no longer exists in the debugger";
@@ -552,7 +585,7 @@ bool DebuggerAdapter::DeleteBreakpoint(const NativeBreakpoint& breakpoint, std::
 #endif
 }
 
-std::uintptr_t DebuggerAdapter::ConsumeLastBreakpointHandle() const
+std::uint64_t DebuggerAdapter::ConsumeLastBreakpointHandle() const
 {
 #if C_DEBUG
     return DEBUG_AgentConsumeLastBreakpoint();
@@ -575,8 +608,6 @@ bool DebuggerAdapter::ExecuteDiagnosticCommand(const std::string& command,
         return false;
     }
 
-    std::vector<char> mutable_command(command.begin(), command.end());
-    mutable_command.push_back('\0');
     if (!DEBUG_AgentBeginOutputCapture()) {
         if (error != NULL)
             *error = "Debugger output capture is already active";
@@ -584,10 +615,10 @@ bool DebuggerAdapter::ExecuteDiagnosticCommand(const std::string& command,
     }
     bool accepted = false;
     try {
-        accepted = ParseCommand(&mutable_command[0]);
+        accepted = DEBUG_ExecuteSessionCommand(command.c_str(),
+            DEBUG_AttachNativeExecution(NativeDebug::Frontend::Agent,0));
     } catch (...) {
-        // Restore paging/capture ownership before propagating the original
-        // parser failure. Never replay the command or strand the sink.
+        // Preserve capture ownership on exception; effects are not replayed.
         DEBUG_AgentEndOutputCapture();
         throw;
     }
@@ -614,7 +645,7 @@ bool DebuggerAdapter::StartTrace(const std::string& detail,
             *error = "Trace detail must be short, normal, long, or csip";
         return false;
     }
-    if (!DEBUG_AgentStartTrace(instruction_count)) {
+    if (!DEBUG_AgentStartTrace(instruction_count, observation_attachment_, observation_context_)) {
         if (error != NULL)
             *error = "A CPU trace is already active or instruction_count is invalid";
         return false;
@@ -633,12 +664,15 @@ bool DebuggerAdapter::ReadTrace(std::vector<TraceSample>* samples,
                                 bool* active,
                                 std::string* error) const
 {
-    if (!RequireAvailable(error) || !RequireEmulationThread(error) || samples == NULL || active == NULL)
+    if (!RequireAvailable(error) || !RequireEmulationThread(error, false) || samples == NULL || active == NULL)
         return false;
 
 #if C_HEAVY_DEBUG
     std::vector<DEBUG_AgentTraceEvent> native_events;
-    DEBUG_AgentCopyTraceEvents(&native_events);
+    if (!DEBUG_AgentCopyTraceEvents(&native_events, observation_attachment_)) {
+        if (error) *error = "Selected native trace is no longer available";
+        return false;
+    }
     samples->clear();
     samples->reserve(native_events.size());
     for (std::vector<DEBUG_AgentTraceEvent>::const_iterator it = native_events.begin(); it != native_events.end(); ++it) {
@@ -662,7 +696,7 @@ bool DebuggerAdapter::ReadTrace(std::vector<TraceSample>* samples,
         sample.registers.ss = it->ss;
         sample.registers.instruction_pointer = it->instruction_pointer;
         sample.registers.flags = it->flags;
-        sample.registers.cpu_mode = !cpu.pmode ? "real" : ((reg_flags & FLAG_VM) ? "v86" : "protected");
+        sample.registers.cpu_mode = !it->protected_mode ? "real" : ((it->flags & FLAG_VM) ? "v86" : "protected");
         sample.instruction = Trim(it->instruction);
         sample.analysis = Trim(it->analysis);
         samples->push_back(sample);
@@ -680,7 +714,7 @@ bool DebuggerAdapter::ReadTrace(std::vector<TraceSample>* samples,
 
 bool DebuggerAdapter::StopTrace(std::size_t* event_count, std::string* error) const
 {
-    if (!RequireAvailable(error) || !RequireEmulationThread(error) || event_count == NULL)
+    if (!RequireAvailable(error) || !RequireEmulationThread(error, false) || event_count == NULL)
         return false;
 
 #if C_HEAVY_DEBUG
@@ -690,7 +724,7 @@ bool DebuggerAdapter::StopTrace(std::size_t* event_count, std::string* error) co
         return false;
     }
     std::uint32_t native_event_count = 0;
-    if (!DEBUG_AgentStopTrace(&native_event_count)) {
+    if (!DEBUG_AgentStopTrace(&native_event_count, observation_attachment_)) {
         if (error != NULL)
             *error = "Debugger failed to stop the CPU trace";
         return false;

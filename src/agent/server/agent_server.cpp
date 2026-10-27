@@ -3,9 +3,11 @@
 #include "agent/agent_server.h"
 
 #include "agent/agent_bridge.h"
+#include "debug.h"
 #include "agent/debugger_adapter.h"
 #include "agent/debugger_output_parser.h"
 #include "agent/trace_store.h"
+#include "agent/stop_conditions.h"
 #include "../transport/rpc_transport.h"
 
 #include <algorithm>
@@ -475,9 +477,12 @@ public:
 
     struct Operation {
         std::string id;
+        std::uint64_t native_operation = 0;
         SessionState terminal_state = SessionState::Running;
         std::string stop_kind;
         bool complete = false;
+        JsonValue stop_reason;
+        std::uint64_t state_revision=0;
     };
 
     struct CachedResponse {
@@ -528,6 +533,8 @@ public:
         std::shared_ptr<AdapterOperation> registers;
         std::mutex mutex;
         bool registers_submitted = false;
+        std::uint64_t native_operation = 0;
+        std::uint64_t stopped_revision = 0;
     };
 
     struct OutputRecord {
@@ -545,10 +552,12 @@ public:
     };
 
     struct Session {
+        std::uint64_t native_operation = 0;
         std::string id;
         std::string target_command;
         SessionState state = SessionState::Starting;
         std::string last_stop_kind;
+        JsonValue condition_stop;
         std::uint16_t last_stop_segment = 0;
         std::uint32_t last_stop_instruction_pointer = 0;
         std::string last_stop_breakpoint_id;
@@ -579,6 +588,9 @@ public:
     AgentConfig config;
     std::unique_ptr<IRpcTransport> transport;
     std::unique_ptr<Session> session;
+    // Launch effects survive failed projections and transport Stop/Start.
+    // Clear only after confirmed shell return, not on launch/terminate failure.
+    bool target_may_exist = false;
     std::mutex mutex;
     std::condition_variable state_changed;
     std::condition_variable lifecycle_changed;
@@ -599,10 +611,13 @@ public:
     virtual ~AgentRuntime() {}
     virtual bool RequireAvailable(std::string* error) const = 0;
     virtual std::uint64_t Submit(Command command) = 0;
+    virtual std::uint64_t SubmitStop(Command command) { return Submit(std::move(command)); }
     virtual std::uint64_t SubmitAfter(std::uint32_t delay_ms, Command command) = 0;
     virtual bool IsReadyForTargetStart() const = 0;
     virtual std::uint64_t EntryBreakpointSequence() const = 0;
-    virtual bool Continue(std::string* error) const = 0;
+    virtual void CaptureStoppedContext() {}
+    virtual std::uint64_t ExecutionOperation() const { return 0; }
+    virtual bool Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const = 0;
     virtual bool Pause(std::string* error) const = 0;
     virtual bool StartTargetAtEntry(const std::string& command,
                                     const std::vector<std::string>& arguments,
@@ -627,7 +642,7 @@ public:
                                   MemoryAccessError* access_error,
                                   std::string* error) const = 0;
     virtual bool DeleteBreakpoint(const NativeBreakpoint& breakpoint, std::string* error) const = 0;
-    virtual std::uintptr_t ConsumeLastBreakpointHandle() const = 0;
+    virtual std::uint64_t ConsumeLastBreakpointHandle() const = 0;
     virtual bool ExecuteDiagnosticCommand(const std::string& command,
                                           std::string* raw_output,
                                           std::string* error) const = 0;
@@ -638,10 +653,12 @@ public:
 };
 
 class ProductionAgentRuntime final : public AgentRuntime {
+    DebuggerAdapter adapter;
 public:
+    void CaptureStoppedContext() override { adapter.CaptureStoppedContext(); }
+    std::uint64_t ExecutionOperation() const override { return DEBUG_NativeExecutionOperation(); }
     bool RequireAvailable(std::string* error) const override
     {
-        DebuggerAdapter adapter;
         return adapter.RequireAvailable(error);
     }
 
@@ -650,16 +667,21 @@ public:
         return AGENT_EmulationQueue().Submit(std::move(command));
     }
 
+    std::uint64_t SubmitStop(Command command) override
+    {
+        return AGENT_EmulationQueue().SubmitStop(std::move(command));
+    }
+
     std::uint64_t SubmitAfter(const std::uint32_t delay_ms, Command command) override
     {
         return AGENT_EmulationQueue().SubmitAfter(delay_ms, std::move(command));
     }
 
 #define AGENT_RUNTIME_FORWARD(method, signature, args) \
-    signature override { DebuggerAdapter adapter; return adapter.method args; }
+    signature override { return adapter.method args; }
     AGENT_RUNTIME_FORWARD(IsReadyForTargetStart, bool IsReadyForTargetStart() const, ())
     AGENT_RUNTIME_FORWARD(EntryBreakpointSequence, std::uint64_t EntryBreakpointSequence() const, ())
-    AGENT_RUNTIME_FORWARD(Continue, bool Continue(std::string* error) const, (error))
+    AGENT_RUNTIME_FORWARD(Continue, bool Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const, (conditions,error))
     AGENT_RUNTIME_FORWARD(Pause, bool Pause(std::string* error) const, (error))
     AGENT_RUNTIME_FORWARD(StartTargetAtEntry, bool StartTargetAtEntry(const std::string& command, const std::vector<std::string>& arguments, const std::string& workdir, std::string* error) const, (command, arguments, workdir, error))
     AGENT_RUNTIME_FORWARD(GetRegisters, bool GetRegisters(RegisterSnapshot* registers, std::string* error) const, (registers, error))
@@ -668,7 +690,7 @@ public:
     AGENT_RUNTIME_FORWARD(WriteMemory, bool WriteMemory(const MemoryAddress& address, const std::vector<std::uint8_t>& data, std::vector<std::uint8_t>* after, MemoryAccessError* access_error, std::string* error) const, (address, data, after, access_error, error))
     AGENT_RUNTIME_FORWARD(CreateBreakpoint, bool CreateBreakpoint(BreakpointKind kind, const MemoryAddress& address, bool once, NativeBreakpoint* breakpoint, MemoryAccessError* access_error, std::string* error) const, (kind, address, once, breakpoint, access_error, error))
     AGENT_RUNTIME_FORWARD(DeleteBreakpoint, bool DeleteBreakpoint(const NativeBreakpoint& breakpoint, std::string* error) const, (breakpoint, error))
-    AGENT_RUNTIME_FORWARD(ConsumeLastBreakpointHandle, std::uintptr_t ConsumeLastBreakpointHandle() const, ())
+    AGENT_RUNTIME_FORWARD(ConsumeLastBreakpointHandle, std::uint64_t ConsumeLastBreakpointHandle() const, ())
     AGENT_RUNTIME_FORWARD(ExecuteDiagnosticCommand, bool ExecuteDiagnosticCommand(const std::string& command, std::string* raw_output, std::string* error) const, (command, raw_output, error))
     AGENT_RUNTIME_FORWARD(StartTrace, bool StartTrace(const std::string& detail, std::uint32_t instruction_count, std::string* error) const, (detail, instruction_count, error))
     AGENT_RUNTIME_FORWARD(ReadTrace, bool ReadTrace(std::vector<TraceSample>* samples, bool* active, std::string* error) const, (samples, active, error))
@@ -694,11 +716,15 @@ public:
     bool IsReadyForTargetStart() const override { return true; }
     std::uint64_t EntryBreakpointSequence() const override { return 0; }
 
-    bool Continue(std::string*) const override { return true; }
+    std::uint64_t ExecutionOperation() const override { return 1; }
+    bool Continue(const std::vector<NativeDebug::StopCondition>&, std::string*) const override { return true; }
 
     bool Pause(std::string*) const override
     {
-        AGENT_NotifyDebuggerStopped(0, 0x100);
+        NativeDebug::Result terminal;
+        terminal.operation=ExecutionOperation();
+        terminal.terminal=NativeDebug::Terminal::Held;
+        AGENT_NotifyDebuggerStopped(0, 0x100, &terminal);
         return true;
     }
 
@@ -711,7 +737,11 @@ public:
         return true;
     }
 
-    bool TerminateTarget(std::string*) const override { return true; }
+    bool TerminateTarget(std::string*) const override
+    {
+        AGENT_NotifyTargetExited();
+        return true;
+    }
 
 #define AGENT_RUNTIME_UNAVAILABLE(method, signature) \
     signature override { SetUnavailable(error); return false; }
@@ -721,7 +751,7 @@ public:
     AGENT_RUNTIME_UNAVAILABLE(WriteMemory, bool WriteMemory(const MemoryAddress&, const std::vector<std::uint8_t>&, std::vector<std::uint8_t>*, MemoryAccessError*, std::string* error) const)
     AGENT_RUNTIME_UNAVAILABLE(CreateBreakpoint, bool CreateBreakpoint(BreakpointKind, const MemoryAddress&, bool, NativeBreakpoint*, MemoryAccessError*, std::string* error) const)
     AGENT_RUNTIME_UNAVAILABLE(DeleteBreakpoint, bool DeleteBreakpoint(const NativeBreakpoint&, std::string* error) const)
-    std::uintptr_t ConsumeLastBreakpointHandle() const override { return 0; }
+    std::uint64_t ConsumeLastBreakpointHandle() const override { return 0; }
     AGENT_RUNTIME_UNAVAILABLE(ExecuteDiagnosticCommand, bool ExecuteDiagnosticCommand(const std::string&, std::string*, std::string* error) const)
     AGENT_RUNTIME_UNAVAILABLE(StartTrace, bool StartTrace(const std::string&, std::uint32_t, std::string* error) const)
     AGENT_RUNTIME_UNAVAILABLE(ReadTrace, bool ReadTrace(std::vector<TraceSample>*, bool*, std::string* error) const)
@@ -812,24 +842,57 @@ private:
 static std::uint64_t SubmitEmulationCommandWithState(const std::shared_ptr<AgentServer::Impl>& impl,
                                                       const std::shared_ptr<AgentRuntime>& runtime,
                                                       const std::uint64_t generation,
-                                                      EmulationThreadQueue::Command command)
+                                                      EmulationThreadQueue::Command command,
+                                                      bool stop_only = false)
 {
-    return runtime->Submit([impl, runtime, generation, command](const std::uint64_t sequence) {
+    EmulationThreadQueue::Command guarded=[impl, runtime, generation, command](const std::uint64_t sequence) {
         EmulationLease lease(impl, generation);
         if (!lease.IsActive())
             return;
         command(sequence);
-    });
+    };
+    return stop_only ? runtime->SubmitStop(std::move(guarded)) : runtime->Submit(std::move(guarded));
 }
 
 static std::uint64_t SubmitEmulationCommandLocked(const std::shared_ptr<AgentServer::Impl>& impl,
-                                                   EmulationThreadQueue::Command command)
+                                                   EmulationThreadQueue::Command command,
+                                                   bool stop_only = false)
 {
     if (!impl->started || impl->stopping || !impl->runtime)
         return 0;
     return SubmitEmulationCommandWithState(impl, impl->runtime,
                                             impl->lifecycle_generation.load(),
-                                            std::move(command));
+                                            std::move(command), stop_only);
+}
+
+// Bind instrumentation consumption to the submitting selected revision. The
+// queue lifecycle lease alone does not distinguish two stops in one session.
+static std::uint64_t SubmitInstrumentationLocked(
+        const std::shared_ptr<AgentServer::Impl>& impl,
+        const std::shared_ptr<AgentServer::Impl::AdapterOperation>& operation,
+        EmulationThreadQueue::Command command,
+        bool resource_only = false)
+{
+    const auto id=impl->session->id;
+    const auto revision=impl->session->state_revision;
+    const auto state=impl->session->state;
+    return SubmitEmulationCommandLocked(impl,
+        [impl,id,revision,state,operation,command](const std::uint64_t sequence) {
+            bool selected=false;
+            {
+                std::lock_guard<std::mutex> lock(impl->mutex);
+                selected=impl->session && impl->session->id==id &&
+                    impl->session->state_revision==revision && impl->session->state==state;
+            }
+            if (selected) { command(sequence); return; }
+            {
+                std::lock_guard<std::mutex> lock(operation->mutex);
+                operation->success=false;
+                operation->error="Selected instrumentation revision is no longer available";
+                operation->done=true;
+            }
+            operation->completed.notify_all();
+        }, resource_only);
 }
 
 static std::uint64_t SubmitEmulationCommand(const std::shared_ptr<AgentServer::Impl>& impl,
@@ -941,6 +1004,7 @@ static bool ReadOutput(const AgentServer::Impl::Session& session,
 static JsonValue StopReason(const AgentServer::Impl::Session& session)
 {
     JsonValue stop = Object();
+    if (session.condition_stop.type==JsonType::Object) stop=session.condition_stop;
     Add(&stop, "kind", String(session.last_stop_kind));
     if (!session.last_stop_breakpoint_id.empty())
         Add(&stop, "breakpoint_id", String(session.last_stop_breakpoint_id));
@@ -1190,6 +1254,12 @@ static std::string Capabilities(const AgentConfig& config)
 {
     JsonValue result = Object();
     Add(&result, "protocol_version", String("1.0"));
+    JsonValue stops=Object(),kinds=JsonValue::Array();
+    kinds.array.push_back(String("address"));kinds.array.push_back(String("elapsed"));kinds.array.push_back(String("text"));
+    Add(&stops,"kinds",kinds);Add(&stops,"max_conditions",Number(16));
+    Add(&stops,"profile",String("Linux normal-core qualified VGA mode3 80x25; checked at admission"));
+    Add(&stops,"worker_predicate",JsonValue::Bool(false));
+    Add(&result,"stop_conditions",stops);
 #if C_DEBUG
     Add(&result, "debugger", JsonValue::Bool(true));
 #else
@@ -1280,9 +1350,10 @@ bool AgentServer::Start(const AgentConfig& config, std::string* error)
     impl->stopping = false;
     const std::uint64_t generation = ++impl->lifecycle_generation;
     impl->request_path_base = request_path_base;
-    AGENT_SetDebuggerStopListener([state, generation](const std::uint16_t segment, const std::uint32_t instruction_pointer) {
-        OnDebuggerStopped(state, generation, segment, instruction_pointer);
+    AGENT_SetDebuggerStopListener([state, generation](const std::uint16_t segment, const std::uint32_t instruction_pointer, const NativeDebug::Result* terminal) {
+        OnDebuggerStopped(state, generation, segment, instruction_pointer, terminal);
     });
+    AGENT_SetTargetExitListener(TargetExitListener());
 
     if (!impl->transport->Start(config, [state](const std::string& request) {
             return HandleJsonRpcImpl(state, request);
@@ -1292,6 +1363,7 @@ bool AgentServer::Start(const AgentConfig& config, std::string* error)
         impl->started = false;
         impl->stopping = false;
         AGENT_SetDebuggerStopListener(DebuggerStopListener());
+    AGENT_SetTargetExitListener(TargetExitListener());
         return false;
     }
     return true;
@@ -1328,9 +1400,10 @@ bool AgentServer::StartForTest(const AgentConfig& config, std::string* error)
     const std::uint64_t generation = ++impl->lifecycle_generation;
     impl->request_path_base = request_path_base;
     const std::shared_ptr<Impl> state = impl;
-    AGENT_SetDebuggerStopListener([state, generation](const std::uint16_t segment, const std::uint32_t instruction_pointer) {
-        OnDebuggerStopped(state, generation, segment, instruction_pointer);
+    AGENT_SetDebuggerStopListener([state, generation](const std::uint16_t segment, const std::uint32_t instruction_pointer, const NativeDebug::Result* terminal) {
+        OnDebuggerStopped(state, generation, segment, instruction_pointer, terminal);
     });
+    AGENT_SetTargetExitListener(TargetExitListener());
     return true;
 }
 
@@ -1356,6 +1429,7 @@ void AgentServer::Stop()
     // The callback may already have been copied by the emulation thread. It
     // holds shared state and observes stopping, rather than touching this.
     AGENT_SetDebuggerStopListener(DebuggerStopListener());
+    AGENT_SetTargetExitListener(TargetExitListener());
     if (transport)
         transport->Stop();
 
@@ -1477,9 +1551,13 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                     return completed_response;
                 }
             }
-            if (existing->state != Impl::SessionState::Exited && existing->state != Impl::SessionState::Failed)
+            if (impl->target_may_exist ||
+                (existing->state != Impl::SessionState::Exited && existing->state != Impl::SessionState::Failed))
                 return SessionError(parsed.id, kErrorSessionBusy, "Only one session may be active", "SESSION_BUSY", existing);
         }
+        if (impl->target_may_exist)
+            return Error(parsed.id, kErrorSessionBusy,
+                         "Prior target exit is unconfirmed", "SESSION_BUSY");
         if (!ValidateStartParams(parsed.params, impl->config, impl->request_path_base,
                                  &target_command, &target_arguments, &validation_error))
             return InvalidParams(parsed.id, validation_error);
@@ -1588,6 +1666,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                 return SessionError(parsed.id, kErrorRequestIdConflict,
                                     "request id was already used with a different payload", "REQUEST_ID_CONFLICT", session);
         }
+        if (!retrying_deferred_request) deferred=session->deferred_requests.begin();
         const std::string deferred_session_id = session->id;
         const Impl::DeferredRequest pending = deferred->second;
         lock.unlock();
@@ -1634,7 +1713,12 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             Add(&result, "last_stop", StopReason(*session));
         response = AGENT_MakeJsonRpcResult(parsed.id, result);
     } else if (parsed.method == "execution.continue") {
-        if (session->state == Impl::SessionState::Running) {
+        std::vector<NativeDebug::StopCondition> conditions;
+        std::string condition_error;
+        if (!StopFields(parsed.params,{"session_id","stop_any"}) ||
+            !ParseStopConditions(parsed.params.Find("stop_any"),conditions,condition_error)) {
+            response = SessionError(parsed.id,-32602,"Invalid stop_any: "+condition_error,"INVALID_PARAMS",session);
+        } else if (session->state == Impl::SessionState::Running) {
             response = SessionError(parsed.id, kErrorTargetRunning,
                                     "Target is already running", "TARGET_RUNNING", session);
         } else if (session->state == Impl::SessionState::Exited) {
@@ -1650,19 +1734,33 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             session->operations[operation_id] = operation;
             session->state = Impl::SessionState::Running;
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id](const std::uint64_t) {
+            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, conditions](const std::uint64_t) {
                     AgentRuntime& adapter = *impl->runtime;
                     std::string command_error;
-                    if (adapter.Continue(&command_error))
+                    if (adapter.Continue(conditions,&command_error)) {
+                        std::lock_guard<std::mutex> command_lock(impl->mutex);
+                        if (impl->session && impl->session->id==session_id) {
+                            impl->session->native_operation=adapter.ExecutionOperation();
+                            impl->session->operations.at(operation_id).native_operation=
+                                impl->session->native_operation;
+                        }
                         return;
+                    }
 
                     std::lock_guard<std::mutex> command_lock(impl->mutex);
                     if (!impl->session || impl->session->id != session_id ||
                         impl->session->state != Impl::SessionState::Running)
                         return;
-                    impl->session->state = Impl::SessionState::Stopped;
-                    impl->session->operations.erase(operation_id);
+                    impl->session->state = Impl::SessionState::Failed;
+                    auto &rejected=impl->session->operations.at(operation_id);
+                    rejected.terminal_state=Impl::SessionState::Failed;
+                    rejected.stop_kind="fault";
+                    rejected.complete=true;
+                    impl->session->last_stop_kind="fault";
+                    ++impl->session->state_revision;
                     impl->session->failure_message = command_error;
+                    rejected.stop_reason=StopReason(*impl->session);
+                    rejected.state_revision=impl->session->state_revision;
                     impl->state_changed.notify_all();
                 }) == 0) {
                 session->operations.erase(operation_id);
@@ -1686,11 +1784,22 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             operation.id = operation_id;
             operation.terminal_state = Impl::SessionState::Stopped;
             operation.stop_kind = "pause";
+            operation.native_operation = session->native_operation;
             session->operations[operation_id] = operation;
             session->pending_stop_kind = operation.stop_kind;
             const std::string session_id = session->id;
             if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id](const std::uint64_t) {
                         AgentRuntime& adapter = *impl->runtime;
+                        // Continue binds its native operation on the emulation
+                        // thread. Request ingress may precede that binding, so
+                        // bind Pause here, before it can publish a terminal.
+                        {
+                            std::lock_guard<std::mutex> command_lock(impl->mutex);
+                            if (!impl->session || impl->session->id != session_id)
+                                return;
+                            impl->session->operations.at(operation_id).native_operation =
+                                    impl->session->native_operation;
+                        }
                         std::string command_error;
                         if (adapter.Pause(&command_error))
                             return;
@@ -1698,11 +1807,17 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         std::lock_guard<std::mutex> command_lock(impl->mutex);
                         if (!impl->session || impl->session->id != session_id)
                             return;
-                        impl->session->operations.erase(operation_id);
+                        auto &failed=impl->session->operations.at(operation_id);
+                        failed.terminal_state=Impl::SessionState::Failed;
+                        failed.stop_kind="fault";
+                        failed.stop_reason=Object();
+                        Add(&failed.stop_reason,"kind",String("fault"));
+                        failed.state_revision=impl->session->state_revision;
+                        failed.complete=true;
                         impl->session->pending_stop_kind.clear();
                         impl->session->failure_message = command_error;
                         impl->state_changed.notify_all();
-                    }) == 0) {
+                    }, true) == 0) {
                     session->operations.erase(operation_id);
                     session->pending_stop_kind.clear();
                     response = SessionError(parsed.id, kErrorCapabilityUnavailable,
@@ -1749,8 +1864,11 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                     response = AGENT_MakeJsonRpcResult(parsed.id, result);
                 } else {
                     JsonValue result = SessionResult(*session);
+                    if (operation->second.state_revision)
+                        Add(&result,"state_revision",JsonValue::Number(std::to_string(operation->second.state_revision)));
                     Add(&result, "state", String(StateName(operation->second.terminal_state)));
-                    Add(&result, "stop_reason", StopReason(*session));
+                    Add(&result, "stop_reason", operation->second.stop_reason.type==JsonType::Null ?
+                        StopReason(*session) : operation->second.stop_reason);
                     response = AGENT_MakeJsonRpcResult(parsed.id, result);
                 }
             }
@@ -1764,11 +1882,17 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
         } else {
             const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, operation](const std::uint64_t) {
+            const std::uint64_t observation_revision = session->state_revision;
+            if (SubmitEmulationCommandLocked(impl, [impl, operation, session_id, observation_revision](const std::uint64_t) {
+                    std::unique_lock<std::mutex> selected_lock(impl->mutex);
+                    const bool selected = impl->session && impl->session->id == session_id &&
+                        impl->session->state == Impl::SessionState::Stopped &&
+                        impl->session->state_revision == observation_revision;
                     AgentRuntime& adapter = *impl->runtime;
-                    std::string adapter_error;
+                    std::string adapter_error = selected ? "" : "Selected stopped revision is no longer held";
                     RegisterSnapshot registers;
-                    const bool success = adapter.GetRegisters(&registers, &adapter_error);
+                    const bool success = selected && adapter.GetRegisters(&registers, &adapter_error);
+                    selected_lock.unlock();
                     {
                         std::lock_guard<std::mutex> operation_lock(operation->mutex);
                         operation->success = success;
@@ -1792,6 +1916,10 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                 if (!completed) {
                     response = Error(parsed.id, kErrorOperationTimeout,
                                      "Timed out waiting for state.get_registers on the emulation thread", "OPERATION_TIMEOUT");
+                } else if (session->state != Impl::SessionState::Stopped ||
+                           session->state_revision != observation_revision) {
+                    response = Error(parsed.id, kErrorCapabilityUnavailable,
+                                     "Selected stopped revision changed during observation", "COMMAND_REJECTED");
                 } else if (!operation->success) {
                     response = Error(parsed.id, kErrorCapabilityUnavailable,
                                      operation->error.empty() ? "Unable to capture register state" : operation->error,
@@ -1821,12 +1949,18 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
         } else {
             const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, operation, address, length](const std::uint64_t) {
+            const std::uint64_t observation_revision = session->state_revision;
+            if (SubmitEmulationCommandLocked(impl, [impl, operation, address, length, session_id, observation_revision](const std::uint64_t) {
+                    std::unique_lock<std::mutex> selected_lock(impl->mutex);
+                    const bool selected = impl->session && impl->session->id == session_id &&
+                        impl->session->state == Impl::SessionState::Stopped &&
+                        impl->session->state_revision == observation_revision;
                     AgentRuntime& adapter = *impl->runtime;
-                    std::string adapter_error;
+                    std::string adapter_error = selected ? "" : "Selected stopped revision is no longer held";
                     std::vector<std::uint8_t> data;
                     MemoryAccessError access_error;
-                    const bool success = adapter.ReadMemory(address, length, &data, &access_error, &adapter_error);
+                    const bool success = selected && adapter.ReadMemory(address, length, &data, &access_error, &adapter_error);
+                    selected_lock.unlock();
                     {
                         std::lock_guard<std::mutex> operation_lock(operation->mutex);
                         operation->success = success;
@@ -1851,6 +1985,10 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                 if (!completed) {
                     response = Error(parsed.id, kErrorOperationTimeout,
                                      "Timed out waiting for memory.read on the emulation thread", "OPERATION_TIMEOUT");
+                } else if (session->state != Impl::SessionState::Stopped ||
+                           session->state_revision != observation_revision) {
+                    response = Error(parsed.id, kErrorCapabilityUnavailable,
+                                     "Selected stopped revision changed during observation", "COMMAND_REJECTED");
                 } else if (!operation->success) {
                     response = AddressError(parsed.id,
                                             operation->error.empty() ? "Unable to access the requested memory range" : operation->error,
@@ -1870,18 +2008,19 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             JsonValue result = SessionResult(*session);
             Add(&result, "operation_id", String("op-stop-complete"));
             response = AGENT_MakeJsonRpcResult(parsed.id, result);
-        } else if (session->state == Impl::SessionState::Starting ||
-                   session->state == Impl::SessionState::Failed) {
+        } else if (!impl->target_may_exist &&
+                   (session->state == Impl::SessionState::Starting ||
+                    session->state == Impl::SessionState::Failed)) {
             const std::string operation_id = "op-" + std::to_string(session->next_operation++);
             Impl::Operation operation_state;
             operation_state.id = operation_id;
             operation_state.terminal_state = Impl::SessionState::Exited;
-            operation_state.stop_kind = "program_exit";
+            operation_state.stop_kind = "cancelled";
             operation_state.complete = true;
             session->operations[operation_id] = operation_state;
             session->state = Impl::SessionState::Exited;
             session->trace.Stop();
-            session->last_stop_kind = "program_exit";
+            session->last_stop_kind = "cancelled";
             session->last_stop_breakpoint_id.clear();
             session->has_last_stop_breakpoint_address = false;
             ++session->state_revision;
@@ -1918,6 +2057,10 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                             pending->second.complete = true;
                         }
                         ++active.state_revision;
+                        if (pending != active.operations.end()) {
+                            pending->second.stop_reason=StopReason(active);
+                            pending->second.state_revision=active.state_revision;
+                        }
                         impl->state_changed.notify_all();
                         return;
                     }
@@ -1931,6 +2074,8 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         pending->second.stop_kind = "fault";
                         pending->second.complete = true;
                         ++active.state_revision;
+                        pending->second.stop_reason=StopReason(active);
+                        pending->second.state_revision=active.state_revision;
                         impl->state_changed.notify_all();
                     }
                 }) == 0) {
@@ -1992,7 +2137,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
 #endif
             {
                 const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
-                if (SubmitEmulationCommandLocked(impl, [impl, operation, kind, address, once](const std::uint64_t) {
+                if (SubmitInstrumentationLocked(impl, operation, [impl, operation, kind, address, once](const std::uint64_t) {
                         AgentRuntime& adapter = *impl->runtime;
                         std::string adapter_error;
                         MemoryAccessError access_error;
@@ -2089,7 +2234,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             } else {
                 const NativeBreakpoint native = item->second.native;
                 const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
-                if (SubmitEmulationCommandLocked(impl, [impl, operation, native](const std::uint64_t) {
+                if (SubmitInstrumentationLocked(impl, operation, [impl, operation, native](const std::uint64_t) {
                         AgentRuntime& adapter = *impl->runtime;
                         std::string adapter_error;
                         const bool success = adapter.DeleteBreakpoint(native, &adapter_error);
@@ -2168,10 +2313,23 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             const std::shared_ptr<Impl::StepOperation> operation(new Impl::StepOperation());
             operation->dispatch.reset(new Impl::AdapterOperation());
             operation->registers.reset(new Impl::AdapterOperation());
+            const std::uint64_t submitted_revision = session->state_revision;
             const StepMode step_mode = mode == "into" ? StepMode::Into : StepMode::Over;
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, operation, step_mode, session_id](const std::uint64_t) {
+            if (SubmitEmulationCommandLocked(impl, [impl, operation, step_mode, session_id, submitted_revision](const std::uint64_t) {
                 AgentRuntime& adapter = *impl->runtime;
+                {
+                    std::lock_guard<std::mutex> session_lock(impl->mutex);
+                    if (!impl->session || impl->session->id!=session_id ||
+                        impl->session->state!=Impl::SessionState::Stopped ||
+                        impl->session->state_revision!=submitted_revision) {
+                        std::lock_guard<std::mutex> operation_lock(operation->dispatch->mutex);
+                        operation->dispatch->error="Selected step checkpoint is no longer held";
+                        operation->dispatch->done=true;
+                        operation->dispatch->completed.notify_all();
+                        return;
+                    }
+                }
                 std::string adapter_error;
                 bool continued = false;
                 RegisterSnapshot registers;
@@ -2190,6 +2348,8 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                     std::lock_guard<std::mutex> session_lock(impl->mutex);
                     if (impl->session && impl->session->id == session_id &&
                         impl->session->state == Impl::SessionState::Stopped) {
+                        operation->native_operation = adapter.ExecutionOperation();
+                        impl->session->native_operation = operation->native_operation;
                         impl->session->state = Impl::SessionState::Running;
                         impl->session->pending_stop_kind = "step";
                         impl->state_changed.notify_all();
@@ -2226,6 +2386,8 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         }
                         if (!impl->session || impl->session->id != session_id)
                             return true;
+                        if (!operation->stopped_revision)
+                            operation->stopped_revision=impl->session->state_revision;
                     }
 
                     bool submit_registers = false;
@@ -2236,11 +2398,17 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                             submit_registers = true;
                         }
                     }
-                    if (submit_registers && SubmitEmulationCommand(impl, [impl, operation](const std::uint64_t) {
+                    if (submit_registers && SubmitEmulationCommand(impl, [impl, session_id, operation](const std::uint64_t) {
+                            std::lock_guard<std::mutex> session_lock(impl->mutex);
                             AgentRuntime& adapter = *impl->runtime;
                             std::string registers_error;
                             RegisterSnapshot registers;
-                            const bool success = adapter.GetRegisters(&registers, &registers_error);
+                            const bool selected = impl->session && impl->session->id==session_id &&
+                                impl->session->state==Impl::SessionState::Stopped &&
+                                impl->session->state_revision==operation->stopped_revision &&
+                                impl->session->native_operation==operation->native_operation;
+                            const bool success = selected && adapter.GetRegisters(&registers, &registers_error);
+                            if (!selected) registers_error="Selected step checkpoint is no longer held";
                             {
                                 std::lock_guard<std::mutex> registers_lock(operation->registers->mutex);
                                 operation->registers->success = success;
@@ -2261,7 +2429,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                     return operation->registers->completed.wait_for(registers_lock, std::chrono::milliseconds(timeout_ms),
                                                                     [operation]() { return operation->registers->done; });
                 };
-                pending.finish = [impl, session_id, response_id, operation]() {
+                pending.finish = [impl, session_id, response_id, operation, submitted_revision]() {
                     bool dispatch_success = false;
                     bool continued = false;
                     std::string dispatch_error;
@@ -2282,6 +2450,10 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         return Error(response_id, kErrorSessionNotFound, "Session was not found", "SESSION_NOT_FOUND");
                     Impl::Session& active = *impl->session;
                     if (!continued) {
+                        if (active.state!=Impl::SessionState::Stopped ||
+                            active.state_revision!=submitted_revision)
+                            return SessionError(response_id, kErrorCapabilityUnavailable,
+                                "Selected step checkpoint is no longer held", "TARGET_NOT_STOPPED", &active);
                         active.last_stop_kind = "step";
                         active.last_stop_breakpoint_id.clear();
                         active.has_last_stop_breakpoint_address = false;
@@ -2293,9 +2465,11 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         Add(&result, "registers", RegistersResult(dispatch_registers, active));
                         return AGENT_MakeJsonRpcResult(response_id, result);
                     }
-                    if (active.state != Impl::SessionState::Stopped) {
+                    if (active.state != Impl::SessionState::Stopped ||
+                        active.native_operation != operation->native_operation ||
+                        active.state_revision != operation->stopped_revision) {
                         return SessionError(response_id, kErrorCapabilityUnavailable,
-                                            "Target did not stop after execution.step over", "TARGET_NOT_STOPPED", &active);
+                                            "Selected step checkpoint is no longer held", "TARGET_NOT_STOPPED", &active);
                     }
                     bool registers_success = false;
                     std::string registers_error;
@@ -2625,7 +2799,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             response = Error(parsed.id, kErrorCommandRejected, "A CPU trace is already active", "COMMAND_REJECTED");
         } else {
             const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
-            if (SubmitEmulationCommandLocked(impl, [impl, operation, detail, instruction_count](const std::uint64_t) {
+            if (SubmitInstrumentationLocked(impl, operation, [impl, operation, detail, instruction_count](const std::uint64_t) {
                     AgentRuntime& adapter = *impl->runtime;
                     std::string adapter_error;
                     const bool success = adapter.StartTrace(detail, instruction_count, &adapter_error);
@@ -2703,7 +2877,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
         } else {
             const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, operation](const std::uint64_t) {
+            if (SubmitInstrumentationLocked(impl, operation, [impl, operation](const std::uint64_t) {
                     AgentRuntime& adapter = *impl->runtime;
                     std::string adapter_error;
                     std::vector<TraceSample> samples;
@@ -2718,7 +2892,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         operation->done = true;
                     }
                     operation->completed.notify_all();
-                }) == 0) {
+                }, true) == 0) {
                 response = Error(parsed.id, kErrorCommandRejected,
                                  "Emulation-thread bridge is unavailable", "COMMAND_REJECTED");
             } else {
@@ -2767,7 +2941,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             response = Error(parsed.id, kErrorCommandRejected, "No CPU trace has been started", "COMMAND_REJECTED");
         } else {
             const std::shared_ptr<Impl::AdapterOperation> operation(new Impl::AdapterOperation());
-            if (SubmitEmulationCommandLocked(impl, [impl, operation](const std::uint64_t) {
+            if (SubmitInstrumentationLocked(impl, operation, [impl, operation](const std::uint64_t) {
                     AgentRuntime& adapter = *impl->runtime;
                     std::string adapter_error;
                     std::vector<TraceSample> samples;
@@ -2788,7 +2962,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         operation->done = true;
                     }
                     operation->completed.notify_all();
-                }) == 0) {
+                }, true) == 0) {
                     response = Error(parsed.id, kErrorCommandRejected,
                                      "Emulation-thread bridge is unavailable", "COMMAND_REJECTED");
                 } else {
@@ -2903,8 +3077,15 @@ void AgentServer::StartTargetOnEmulationThread(const std::shared_ptr<Impl>& impl
         impl->session->startup_phase = "launching";
         impl->session->startup_entry_breakpoint_baseline = adapter.EntryBreakpointSequence();
         impl->session->startup_entry_breakpoint_created = false;
+        // Before the adapter: false return, timeout or concurrent stop is not
+        // evidence that native launch had no effects.
+        impl->target_may_exist = true;
     }
 
+    const std::uint64_t launch_generation=impl->lifecycle_generation.load();
+    AGENT_SetTargetExitListener([impl, session_id, launch_generation]() {
+        OnTargetExited(impl, launch_generation, session_id);
+    });
     std::string launch_error;
     if (adapter.StartTargetAtEntry(target_command, target_arguments, workdir, &launch_error)) {
         std::lock_guard<std::mutex> command_lock(impl->mutex);
@@ -2930,8 +3111,14 @@ void AgentServer::CompleteTargetTerminationOnEmulationThread(const std::shared_p
                                                              const std::string& session_id,
                                                              const std::string& operation_id)
 {
-    AgentRuntime& adapter = *impl->runtime;
-    if (!adapter.IsReadyForTargetStart()) {
+    // Readiness is not target absence. Only the selected exit callback may
+    // clear the fence and complete termination after native cleanup.
+    {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        if (!impl->session || impl->session->id!=session_id || !impl->target_may_exist)
+            return;
+    }
+    {
         {
             std::lock_guard<std::mutex> command_lock(impl->mutex);
             if (impl->stopping || !impl->session || impl->session->id != session_id)
@@ -2948,6 +3135,8 @@ void AgentServer::CompleteTargetTerminationOnEmulationThread(const std::shared_p
                 pending->second.stop_kind = "fault";
                 pending->second.complete = true;
                 ++active.state_revision;
+                pending->second.stop_reason=StopReason(active);
+                pending->second.state_revision=active.state_revision;
                 impl->state_changed.notify_all();
                 return;
             }
@@ -2970,31 +3159,41 @@ void AgentServer::CompleteTargetTerminationOnEmulationThread(const std::shared_p
                 pending->second.stop_kind = "fault";
                 pending->second.complete = true;
                 ++active.state_revision;
+                pending->second.stop_reason=StopReason(active);
+                pending->second.state_revision=active.state_revision;
                 impl->state_changed.notify_all();
             }
         }
         return;
     }
+}
 
-    std::lock_guard<std::mutex> command_lock(impl->mutex);
-    if (!impl->session || impl->session->id != session_id)
-        return;
-    Impl::Session& active = *impl->session;
-    if (active.operations.find(operation_id) == active.operations.end())
-        return;
-
-    active.state = Impl::SessionState::Exited;
+void AgentServer::OnTargetExited(const std::shared_ptr<Impl>& impl, const std::uint64_t generation,
+                                 const std::string& session_id)
+{
+    EmulationLease lease(impl, generation);
+    if (!lease.IsActive()) return;
+    std::lock_guard<std::mutex> lock(impl->mutex);
+    if (!impl->session || impl->session->id!=session_id ||
+        impl->lifecycle_generation.load()!=generation) return;
+    auto &active=*impl->session;
+    impl->target_may_exist=false;
+    active.state=Impl::SessionState::Exited;
     active.trace.Stop();
-    active.last_stop_kind = "program_exit";
+    active.last_stop_kind="program_exit";
     active.last_stop_breakpoint_id.clear();
-    active.has_last_stop_breakpoint_address = false;
+    active.has_last_stop_breakpoint_address=false;
+    active.pending_stop_kind.clear();
+    const auto exited_operation=active.native_operation;
+    active.native_operation=0;
     ++active.state_revision;
-    for (std::map<std::string, Impl::Operation>::iterator item = active.operations.begin(); item != active.operations.end(); ++item) {
-        if (!item->second.complete) {
-            item->second.terminal_state = Impl::SessionState::Exited;
-            item->second.stop_kind = "program_exit";
-            item->second.complete = true;
-        }
+    for (auto &item:active.operations) if (!item.second.complete &&
+        ((exited_operation && item.second.native_operation==exited_operation) ||
+         item.second.terminal_state==Impl::SessionState::Exited)) {
+        item.second.terminal_state=active.state;
+        item.second.stop_kind="program_exit";item.second.complete=true;
+        item.second.stop_reason=StopReason(active);
+                item.second.state_revision=active.state_revision;
     }
     impl->state_changed.notify_all();
 }
@@ -3002,13 +3201,44 @@ void AgentServer::CompleteTargetTerminationOnEmulationThread(const std::shared_p
 void AgentServer::OnDebuggerStopped(const std::shared_ptr<Impl>& impl,
                                     const std::uint64_t generation,
                                     const std::uint16_t segment,
-                                    const std::uint32_t instruction_pointer)
+                                    const std::uint32_t instruction_pointer,
+                                    const NativeDebug::Result* terminal)
 {
     EmulationLease lease(impl, generation);
     if (!lease.IsActive())
         return;
+    if (terminal) {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        if (!impl->session || impl->session->native_operation!=terminal->operation ||
+            impl->session->state!=Impl::SessionState::Running) return;
+        if (terminal->terminal==NativeDebug::Terminal::ProgramExit) return; // shell cleanup publishes absence
+        if (terminal->failed) {
+            auto &active=*impl->session;
+            active.state=Impl::SessionState::Failed;
+            active.last_stop_kind="fault";
+            active.failure_message="Native execution failed (terminal "+
+                std::to_string(static_cast<unsigned>(terminal->terminal))+")";
+            ++active.state_revision;
+            for (auto &item:active.operations) if (!item.second.complete &&
+                item.second.native_operation==terminal->operation) {
+                item.second.terminal_state=active.state;item.second.stop_kind="fault";
+                item.second.complete=true;
+                item.second.stop_reason=StopReason(active);
+                item.second.state_revision=active.state_revision;
+            }
+            active.pending_stop_kind.clear();
+            impl->state_changed.notify_all();
+            return;
+        }
+    } else {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        // A selected native operation publishes only its immutable terminal,
+        // not the earlier DEBUG_EnableDebugger held-state notification.
+        if (impl->session && impl->session->native_operation &&
+            impl->session->state==Impl::SessionState::Running) return;
+    }
     AgentRuntime& adapter = *impl->runtime;
-    const std::uintptr_t native_breakpoint = adapter.ConsumeLastBreakpointHandle();
+    const std::uint64_t native_breakpoint = adapter.ConsumeLastBreakpointHandle();
     std::vector<TraceSample> trace_samples;
     bool native_trace_active = false;
     std::string trace_error;
@@ -3037,20 +3267,47 @@ void AgentServer::OnDebuggerStopped(const std::shared_ptr<Impl>& impl,
         if (!native_trace_active)
             impl->session->trace.Stop();
     }
+    adapter.CaptureStoppedContext();
     impl->session->state = Impl::SessionState::Stopped;
     impl->session->last_stop_kind = startup ? "startup" :
-            (native_breakpoint != 0 ? "breakpoint" :
+            (terminal && terminal->terminal==NativeDebug::Terminal::Budget ? "budget" :
              (!impl->session->pending_stop_kind.empty() ? impl->session->pending_stop_kind :
-              (trace_completed ? "pause" : "breakpoint")));
+              (trace_completed || terminal ? "pause" : "breakpoint")));
     impl->session->last_stop_segment = segment;
+    impl->session->condition_stop=JsonValue::Null();
+    if (terminal && (!terminal->stop.reason.empty() || !terminal->stop.error.empty())) {
+        const auto &e=terminal->stop;
+        impl->session->last_stop_kind=e.error.empty()?e.reason:e.error;
+        JsonValue evidence=Object();
+        Add(&evidence,"condition_index",Number(e.condition_index));
+        Add(&evidence,"start_tick",Number(e.start_tick));Add(&evidence,"end_tick",Number(e.end_tick));
+        Add(&evidence,"host_elapsed_ms",Number(e.host_elapsed_ms));
+        Add(&evidence,"guest_advanced",JsonValue::Bool(e.guest_advanced));
+        Add(&evidence,"reason",String(e.reason));Add(&evidence,"error",String(e.error));
+        Add(&evidence,"invocation",Number(terminal->end.invocation));
+        Add(&evidence,"cs",Number(terminal->cs));Add(&evidence,"ip",Number(terminal->ip));
+        if (!e.text.cells.empty()) {
+            JsonValue text=Object(),cells=JsonValue::Array();
+            for (auto b:e.text.cells)cells.array.push_back(Number(b));
+            Add(&text,"cells",cells);Add(&text,"tick",Number(e.text.tick));
+            Add(&text,"start",Number(e.text.start));Add(&text,"stride",Number(e.text.stride));
+            Add(&text,"dos_codepage",Number(e.text.dos_codepage));
+            Add(&text,"x",Number(e.text.region.x));Add(&text,"y",Number(e.text.region.y));
+            Add(&text,"width",Number(e.text.region.width));Add(&text,"height",Number(e.text.region.height));
+            Add(&text,"match_x",Number(e.match_x));Add(&text,"match_y",Number(e.match_y));
+            Add(&evidence,"text",text);
+        }
+        impl->session->condition_stop=evidence;
+    }
     impl->session->last_stop_instruction_pointer = instruction_pointer;
     impl->session->last_stop_breakpoint_id.clear();
     impl->session->has_last_stop_breakpoint_address = false;
-    if (!startup && impl->session->last_stop_kind == "breakpoint" && native_breakpoint != 0) {
+    if (!startup && native_breakpoint != 0) {
         for (std::map<std::string, Impl::Breakpoint>::iterator item = impl->session->breakpoints.begin();
              item != impl->session->breakpoints.end(); ++item) {
             if (item->second.native.handle != native_breakpoint)
                 continue;
+            impl->session->last_stop_kind="breakpoint";
             impl->session->last_stop_breakpoint_id = item->second.id;
             impl->session->last_stop_breakpoint_address = item->second.native.address;
             impl->session->has_last_stop_breakpoint_address = true;
@@ -3065,10 +3322,13 @@ void AgentServer::OnDebuggerStopped(const std::shared_ptr<Impl>& impl,
         ++impl->session->state_revision;
     for (std::map<std::string, Impl::Operation>::iterator operation = impl->session->operations.begin();
          operation != impl->session->operations.end(); ++operation) {
-        if (!operation->second.complete) {
+        if (!operation->second.complete && terminal &&
+            operation->second.native_operation==terminal->operation) {
             operation->second.terminal_state = Impl::SessionState::Stopped;
             operation->second.stop_kind = impl->session->last_stop_kind;
             operation->second.complete = true;
+            operation->second.stop_reason=StopReason(*impl->session);
+            operation->second.state_revision=impl->session->state_revision;
         }
     }
     impl->session->pending_stop_kind.clear();

@@ -151,6 +151,9 @@ void DOS_Terminate(uint16_t pspseg,bool tsr,uint8_t exitcode) {
 	real_writew(SegValue(ss),reg_sp+4,0x7202);
 	// Free memory owned by process
 	if (!tsr) DOS_FreeProcessMemory(pspseg);
+#if C_DEBUG && defined(C_DOSBOX_AGENT)
+    if (!tsr) DEBUG_AgentTargetTerminated(pspseg);
+#endif
 	DOS_UpdatePSPName();
 
 	dos.errorcode=0;

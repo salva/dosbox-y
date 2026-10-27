@@ -7,6 +7,7 @@
          (defined(C_SDL2_NET) && C_SDL2_NET))
 
 #include "debug.h"
+#include "native_control_owner.h"
 
 #if defined(C_SDL2_NET) && C_SDL2_NET
 #include <SDL2/SDL_net.h>
@@ -40,16 +41,23 @@ constexpr size_t MAX_RECEIVE_BUFFER = 1024 * 1024;
 
 std::atomic<bool> g_running{false};
 std::atomic<bool> g_connected{false};
+// Socket loss is permanent attachment loss; only the emulator thread retires
+// native work. Reconnect waits for that retirement rather than adopting it.
+std::atomic<uint64_t> g_connection{0}, g_departed{0}, g_retired{0};
+uint64_t g_next_connection=0; // I/O thread, never reused
+uint64_t g_poll_connection=0; // emulator thread
+NativeDebug::Attachment g_native_attachment; // exact current connection, emulator thread
+struct Message { uint64_t connection; std::string text; };
 
 uint16_t g_port = 0;
 
 std::thread g_thread;
 
 std::mutex g_incoming_mutex;
-std::deque<std::string> g_incoming;
+std::deque<Message> g_incoming;
 
 std::mutex g_outgoing_mutex;
-std::deque<std::string> g_outgoing;
+std::deque<Message> g_outgoing;
 
 std::mutex g_capture_mutex;
 bool g_capture_active = false;
@@ -67,6 +75,9 @@ TCPsocket g_socket = nullptr;
 SDLNet_SocketSet g_socket_set = nullptr;
 
 std::string g_receive_buffer;
+
+std::string g_pending_step;
+bool g_pending_resume=false;
 
 struct ControlRequest {
     std::string id;
@@ -166,6 +177,8 @@ std::vector<std::string> EndCapture()
 void CloseConnection()
 {
     g_connected.store(false);
+    const auto connection=g_connection.exchange(0);
+    if (connection) g_departed.store(connection);
 
     if (g_socket) {
         if (g_socket_set)
@@ -185,6 +198,8 @@ void CloseConnection()
 
 bool Connect()
 {
+    if (g_departed.load()!=g_retired.load() || g_next_connection==UINT64_MAX)
+        return false;
     IPaddress address = {};
 
     if (SDLNet_ResolveHost(&address, CONTROL_HOST, g_port) < 0) {
@@ -232,6 +247,7 @@ bool Connect()
 
     g_receive_buffer.clear();
 
+    g_connection.store(++g_next_connection);
     g_connected.store(true);
 
     std::fprintf(stderr,
@@ -278,10 +294,10 @@ void QueueIncoming(std::string message)
     if (g_incoming.size() >= MAX_INCOMING_MESSAGES)
         g_incoming.pop_front();
 
-    g_incoming.emplace_back(std::move(message));
+    g_incoming.push_back({g_connection.load(),std::move(message)});
 }
 
-bool PopIncoming(std::string& message)
+bool PopIncoming(Message& message)
 {
     std::lock_guard<std::mutex> lock(g_incoming_mutex);
 
@@ -349,26 +365,16 @@ bool Receive()
 bool FlushOutgoing()
 {
     for (;;) {
-        std::string message;
-
+        Message message;
         {
             std::lock_guard<std::mutex> lock(g_outgoing_mutex);
-
-            if (g_outgoing.empty())
-                return true;
-
-            message = g_outgoing.front();
+            if (g_outgoing.empty()) return true;
+            message=std::move(g_outgoing.front());
+            g_outgoing.pop_front();
         }
-
-        if (!SendAll(message))
-            return false;
-
-        {
-            std::lock_guard<std::mutex> lock(g_outgoing_mutex);
-
-            if (!g_outgoing.empty())
-                g_outgoing.pop_front();
-        }
+        if (message.connection!=g_connection.load()) continue;
+        // Failed sends may have partial effects; never replay on reconnect.
+        if (!SendAll(message.text)) return false;
     }
 }
 
@@ -528,28 +534,6 @@ void SendErrorResponse(const std::string& id, const std::string& error)
     SendResponse(id.empty() ? "0" : id, false, {error});
 }
 
-bool OutgoingQueueEmpty()
-{
-    std::lock_guard<std::mutex> lock(g_outgoing_mutex);
-    return g_outgoing.empty();
-}
-
-void WaitForOutgoingDrain()
-{
-    constexpr int max_wait_ms = 250;
-    constexpr int sleep_step_ms = 5;
-
-    for (int elapsed_ms = 0;
-         elapsed_ms < max_wait_ms && g_running.load();
-         elapsed_ms += sleep_step_ms) {
-        if (OutgoingQueueEmpty() || !g_connected.load())
-            return;
-
-        std::this_thread::sleep_for(
-                std::chrono::milliseconds(sleep_step_ms));
-    }
-}
-
 void ProcessControlCommand(const std::string& line)
 {
     ControlRequest request;
@@ -565,13 +549,92 @@ void ProcessControlCommand(const std::string& line)
         return;
     }
 
-    if (request.command == "EXEC" &&
-            IsResumeDebuggerCommand(request.payload)) {
-        SendResponse(request.id, true, {"OK"});
-        WaitForOutgoingDrain();
-        DEBUG_ExecuteCommand(request.payload.c_str());
+    if (!NativeControl::rawEffectAllowed() || DEBUG_ContinuationUnavailable()) {
+        SendErrorResponse(request.id, "native control unavailable or owned");
         return;
     }
+
+    // Interrupt delivery must not fall through to Interactive ownership.
+    if (request.command=="EXEC" &&
+        (FirstWordUpper(request.payload)=="INT" || FirstWordUpper(request.payload)=="INTT")) {
+        uint8_t value=0;
+        const auto begin=request.payload.find_first_not_of(" \t");
+        const auto end=request.payload.find_first_of(" \t",begin);
+        NativeDebug::Request interrupt;
+        interrupt.frontend=NativeDebug::Frontend::Bridge;
+        interrupt.attachment=g_native_attachment;
+        interrupt.expected=DEBUG_NativeExecutionContext();
+        if (!DEBUG_AdmitNativeEffect(interrupt.attachment)) {
+            SendErrorResponse(request.id,"native execution admission refused");return;
+        }
+        // Expressions may read registers: admit the held context first.
+        if (!DEBUG_ParseInterruptArgument(end==std::string::npos ? "" : request.payload.c_str()+end,value)) {
+            SendErrorResponse(request.id,"invalid interrupt expression");return;
+        }
+        interrupt.resume=FirstWordUpper(request.payload)=="INT";
+        interrupt.action=interrupt.resume ? NativeDebug::Request::Action::RunInterrupt :
+                                          NativeDebug::Request::Action::TraceInterrupt;
+        interrupt.interrupt=static_cast<uint8_t>(value);
+        const bool accepted=DEBUG_RequestNativeExecution(interrupt)==NativeDebug::Admission::Accepted;
+        g_pending_resume=accepted;
+        SendResponse(request.id,accepted,{accepted ? "OK" : "native execution admission refused"});
+        return;
+    }
+
+    // Match the debugger parser's command-token boundary. Trailing spaces
+    // must not fall through and acquire an Interactive-owned step result.
+    if (request.command=="EXEC" && FirstWordUpper(request.payload)=="STEPIN") {
+        if (!g_pending_step.empty()) {
+            SendErrorResponse(request.id,"native step pending");return;
+        }
+        NativeDebug::Request step;
+        step.frontend=NativeDebug::Frontend::Bridge;
+        step.attachment=g_native_attachment;
+        step.expected=DEBUG_NativeExecutionContext();
+        if (DEBUG_RequestNativeExecution(step)!=NativeDebug::Admission::Accepted) {
+            SendErrorResponse(request.id,"native step admission refused");return;
+        }
+        g_pending_step=request.id;
+        return; // Reply only after native execution and callback unwind.
+    }
+
+    if (request.command == "EXEC" &&
+            IsResumeDebuggerCommand(request.payload)) {
+        // Execution admission returns before guest execution. A refused
+        // request must not be acknowledged as successful.
+        const auto word=FirstWordUpper(request.payload);
+        const bool accepted=DEBUG_ResumeNativeExecution(
+            NativeDebug::Frontend::Bridge,word=="RUNWATCH",word=="VRT",g_native_attachment);
+        g_pending_resume=accepted;
+        SendResponse(request.id,accepted,
+                     {accepted ? "OK" : "native execution admission refused"});
+        return;
+    }
+
+#if C_HEAVY_DEBUG
+    // Logging is execution plus owned instrumentation, not a text-parser effect.
+    if (request.command=="EXEC") {
+        const auto word=FirstWordUpper(request.payload);
+        if (word=="LOG" || word=="LOGS" || word=="LOGL" || word=="LOGC") {
+            NativeDebug::Request log;
+            log.frontend=NativeDebug::Frontend::Bridge;
+            log.attachment=g_native_attachment;
+            log.expected=DEBUG_NativeExecutionContext();
+            if (!DEBUG_AdmitNativeEffect(log.attachment)) {
+                SendErrorResponse(request.id,"native execution admission refused");return;
+            }
+            const auto begin=request.payload.find_first_not_of(" \t");
+            const auto end=request.payload.find_first_of(" \t",begin);
+            DEBUG_ParseLogArgument(end==std::string::npos ? "" : request.payload.c_str()+end,log.log_count);
+            log.resume=true;log.log=true;
+            log.log_type=word=="LOG" ? 1 : word=="LOGL" ? 2 : word=="LOGC" ? 3 : 0;
+            const bool accepted=DEBUG_RequestNativeExecution(log)==NativeDebug::Admission::Accepted;
+            g_pending_resume=accepted;
+            SendResponse(request.id,accepted,{accepted ? "OK" : "native execution admission refused"});
+            return;
+        }
+    }
+#endif
 
     BeginCapture();
 
@@ -580,11 +643,10 @@ void ProcessControlCommand(const std::string& line)
         if (request.command == "BREAK") {
             DEBUG_EnableDebugger();
         } else {
-            ok = DEBUG_ExecuteCommand(request.payload.c_str());
+            ok = DEBUG_ExecuteSessionCommand(request.payload.c_str(),g_native_attachment);
         }
     } catch (...) {
-        // Command effects may already have occurred. Retire this capture and
-        // propagate the original failure; do not replay or publish partial output.
+        // Effects may already have occurred. Retire capture, never replay.
         AbortCapture();
         throw;
     }
@@ -628,7 +690,7 @@ void ControlServer_Start(const uint16_t port)
     g_thread = std::thread(ThreadMain);
 }
 
-void ControlServer_Stop()
+void ControlServer_StopForFatalExit()
 {
     if (!g_running.exchange(false))
         return;
@@ -652,6 +714,16 @@ void ControlServer_Stop()
     EndCapture();
 }
 
+void ControlServer_Stop()
+{
+    ControlServer_StopForFatalExit();
+    if ((!g_native_attachment.serial || DEBUG_DetachNativeExecution(g_native_attachment))) {
+        g_pending_step.clear();g_pending_resume=false;g_native_attachment={};
+        g_poll_connection=0;
+        g_retired.store(g_departed.load());
+    }
+}
+
 bool ControlServer_IsConnected()
 {
     return g_connected.load();
@@ -659,7 +731,8 @@ bool ControlServer_IsConnected()
 
 void ControlServer_Send(std::string message)
 {
-    if (!g_running.load())
+    const auto connection=g_connection.load();
+    if (!g_running.load() || !connection || connection!=g_poll_connection)
         return;
 
     message.push_back('\n');
@@ -669,7 +742,7 @@ void ControlServer_Send(std::string message)
     if (g_outgoing.size() >= MAX_OUTGOING_MESSAGES)
         g_outgoing.pop_front();
 
-    g_outgoing.emplace_back(std::move(message));
+    g_outgoing.push_back({connection,std::move(message)});
 }
 
 void ControlServer_SendEvent(
@@ -682,15 +755,105 @@ void ControlServer_SendEvent(
                        "\nEND event");
 }
 
+void ControlServer_RetireDeparture()
+{
+    const auto departed=g_departed.load();
+    if (departed!=g_retired.load()) {
+        if (!(!g_native_attachment.serial || DEBUG_DetachNativeExecution(g_native_attachment))) return;
+        g_pending_step.clear();g_pending_resume=false;g_native_attachment={};g_poll_connection=0;
+        {
+            std::lock_guard<std::mutex> lock(g_incoming_mutex);
+            g_incoming.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_outgoing_mutex);
+            g_outgoing.clear();
+        }
+        g_retired.store(departed);
+    }
+}
+
 void ControlServer_Poll()
 {
-    std::string command;
+    // Pending work can retire without execution. Active detach refuses until
+    // the callback owner unwinds. Neither state permits command dispatch.
+    ControlServer_RetireDeparture();
+    if (DEBUG_NativeExecutionInFlight()) {
+        // Continuing grants still accept an explicit stop. Never parse an EXEC
+        // mutation or a second execution request on that active grant.
+        if (DEBUG_NativeExecutionPending()) return;
+        g_poll_connection=g_connection.load();
+        Message command;
+        while (PopIncoming(command)) {
+            if (!g_poll_connection || command.connection!=g_poll_connection ||
+                command.connection!=g_connection.load()) continue;
+            ControlRequest request;std::string error;
+            if (!ParseControlRequest(command.text,request,error))
+                SendErrorResponse(request.id,error);
+            else if (request.command=="BREAK" || request.command=="PING")
+                ProcessControlCommand(command.text);
+            else SendErrorResponse(request.id,"native execution active");
+        }
+        return;
+    }
+    g_poll_connection=g_connection.load();
+    if (!g_poll_connection) return;
+    if (!g_native_attachment.serial) {
+        g_native_attachment=DEBUG_AttachNativeExecution(NativeDebug::Frontend::Bridge,g_poll_connection);
+        if (!g_native_attachment.serial) {
+            Message refused;
+            while (PopIncoming(refused)) {
+                if (refused.connection!=g_poll_connection) continue;
+                ControlRequest request;std::string error;
+                ParseControlRequest(refused.text,request,error);
+                SendErrorResponse(request.id,"debugger session already attached");
+            }
+            return;
+        }
+    }
+    if (g_pending_resume) {
+        const auto *result=DEBUG_NativeExecutionResult(g_native_attachment);
+        if (!result) return;
+        const auto completed=*result;
+        if (!DEBUG_ReleaseNativeExecutionResult(g_native_attachment,completed.operation))
+            return;
+        g_pending_resume=false;
+        // RUN/INT/LOG acknowledge admission, not successful execution. Report
+        // the eventual owned terminal via the existing event channel. Retire
+        // before sending: uncertain transport delivery must never replay work
+        // or strand a connected terminal slot.
+        char line[256];
+        std::snprintf(line,sizeof(line),
+            "operation=%llu failed=%u budget_exhausted=%u decoder_calls=%u CS:IP=%04X:%08X",
+            static_cast<unsigned long long>(completed.operation),
+            completed.failed ? 1u : 0u,completed.budget_exhausted ? 1u : 0u,
+            completed.decoder_calls,completed.cs,completed.ip);
+        ControlServer_SendEvent("execution_terminal",line);
+    }
+    if (!g_pending_step.empty()) {
+        const auto *result=DEBUG_NativeExecutionResult(g_native_attachment);
+        if (!result) return;
+        // Copy before retirement invalidates the borrowed terminal. If exact
+        // retirement fails, retain the pending request without repeating replies.
+        const auto completed=*result;
+        if (!DEBUG_ReleaseNativeExecutionResult(g_native_attachment,completed.operation))
+            return;
+        char line[200];
+        std::snprintf(line,sizeof(line),"DEBUG: STEPIN CS:IP=%04X:%04X AX=%04X BX=%04X CX=%04X DX=%04X",
+            completed.cs,completed.ip,completed.ax,completed.bx,completed.cx,completed.dx);
+        SendResponse(g_pending_step,!completed.failed,{line});
+        g_pending_step.clear();g_pending_resume=false;
+    }
+    Message command;
     while (PopIncoming(command)) {
+        if (command.connection!=g_poll_connection ||
+            command.connection!=g_connection.load()) continue;
         std::fprintf(stderr,
                      "[ControlClient] mcp command %s\n",
-                     command.c_str());
+                     command.text.c_str());
 
-        ProcessControlCommand(command);
+        ProcessControlCommand(command.text);
+        if (!g_pending_step.empty() || DEBUG_NativeExecutionPending()) return;
     }
 }
 
@@ -719,10 +882,12 @@ void DEBUG_MCP_CaptureMessage(const char* message)
 
 void ControlServer_Start(uint16_t) {}
 void ControlServer_Stop() {}
+void ControlServer_StopForFatalExit() {}
 bool ControlServer_IsConnected() { return false; }
 void ControlServer_Send(std::string) {}
 void ControlServer_SendEvent(const std::string&, const std::string&) {}
 void ControlServer_Poll() {}
+void ControlServer_RetireDeparture() {}
 bool DEBUG_MCP_IsCapturingOutput() { return false; }
 void DEBUG_MCP_CaptureMessage(const char*) {}
 

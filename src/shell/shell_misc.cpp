@@ -28,6 +28,9 @@
 #include "timer.h"
 #include "bios.h"
 #include "control.h"
+#if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
+#include "agent/agent_bridge.h"
+#endif
 #include "regs.h"
 #include "callback.h"
 #include "support.h"
@@ -496,6 +499,19 @@ void DOS_Shell::InputCommand(char * line) {
 	std::list<std::string>::iterator it_history = l_history.begin(), it_completion = l_completion.begin();
 
 	while (size) {
+#if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
+        // Launch only outside the DOS/BIOS keyboard callback suffix. Other
+        // input devices and redirected files keep their blocking semantics.
+        if (this == first_shell && input_handle == STDIN) {
+            const auto handle = RealHandle(STDIN);
+            if (handle != 0xff && Files[handle] && Files[handle]->IsName("CON")) {
+                while (!DOS_GetSTDINStatus()) {
+                    dosbox_agent::AGENT_BridgePumpAtFrontier();
+                    CALLBACK_Idle();
+                }
+            }
+        }
+#endif
 		dos.echo=false;
 		if (!DOS_ReadFile(input_handle,&c,&n)) {
             LOG(LOG_MISC,LOG_ERROR)("SHELL: Lost the input handle, dropping shell input loop");

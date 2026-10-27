@@ -19,6 +19,14 @@ using Bits=int; using Bitu=unsigned;
 constexpr unsigned CB_MAX=4;
 bool debugger_callback=false;
 bool DEBUG_IsNativeDebuggerCallback(Bits callback){return debugger_callback && callback==2;}
+unsigned decoder_flags_entered=0,decoder_flags_left=0,decoder_entries=0;
+unsigned DEBUG_EnterNativeDecoderFlags(){++decoder_flags_entered;return 17;}
+void DEBUG_LeaveNativeDecoderFlags(unsigned saved){assert(saved==17);++decoder_flags_left;}
+bool DEBUG_NativeDecoderRestoresCore(){return true;}
+void DEBUG_NativeDecoderEntered(){++decoder_entries;}
+unsigned native_dispatches=0,owner_departures=0;
+void DEBUG_MachineOwnerDeparting(uint64_t){++owner_departures;}
+Bits DEBUG_DispatchNativeExecution(){++native_dispatches;return 0;}
 unsigned entries=0;
 bool dosbox_allow_nonrecursive_page_fault=false;
 unsigned last_callback=9;
@@ -105,6 +113,11 @@ int main() {
   }
  }
  assert(entries==4); // Normal and throwing guest callbacks expose entry.
+#if C_DEBUG
+ assert(decoder_entries==4 && decoder_flags_entered==4 && decoder_flags_left==4);
+#else
+ assert(decoder_entries==0 && decoder_flags_entered==0 && decoder_flags_left==0);
+#endif
  debugger_callback=true;fail=false;
  assert(DOSBOX_DispatchCallback(2)==3);
  fail=true;

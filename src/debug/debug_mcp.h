@@ -25,6 +25,10 @@ void ControlServer_Start(uint16_t port);
 //
 void ControlServer_Stop();
 
+// Fatal disposal: contain transport without touching partially installed guest
+// state or publishing a native result. Must run before SDL_Quit.
+void ControlServer_StopForFatalExit();
+
 //
 // Returns true if currently connected.
 //
@@ -47,6 +51,9 @@ void ControlServer_SendEvent(
 //
 //
 void ControlServer_Poll();
+
+// Retire a departed transport without stealing active execution cleanup.
+void ControlServer_RetireDeparture();
 
 // Execute one existing debugger command through ParseCommand().
 bool DEBUG_ExecuteCommand(const char* command);

@@ -30,6 +30,7 @@ public:
     // Authority is the currently entered call-local descriptor, not merely a
     // copied ordinal or a transport phase. It expires on normal/exception exit.
     bool ownsHold(const Descriptor &descriptor) const {return held_==&descriptor;}
+    bool quiescent() const { return !decoders_ && !callbacks_; }
     bool holding() const {return held_!=nullptr;}
     // One selected local adapter, on the existing native thread only. Binding
     // does not widen native stack, lease or execution-slot admission.

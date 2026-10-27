@@ -1,3 +1,88 @@
+## Retained archive output
+
+`python3 tests/original-foundation/state-archive-output.py` uses real minizip
+and the production `StateArchiveOutput` under ASan/UBSan. The state and flagged
+sidecar writers reserve an exclusive sibling file, pass that retained FILE to
+minizip (no pathname reopen), flush/sync/close once, then rename only after
+successful serialization/finalization. Reservation abandonment, failed ZIP write,
+sync failure, publication failure and repeated completed publication are covered.
+An unsuccessful archive does not first remove/truncate its previous destination.
+Temporary cleanup failures report the exact path; no automatic replay occurs.
+
+This is **per-archive** publication, not a two-file transaction. A sidecar can be
+published before the main archive's rename fails; the operation reports failure
+but that sidecar effect remains. File sync is checked, directory-entry crash
+durability is not promised. POSIX is exercised; the Windows replacement path is
+not runtime-qualified. Native input/resources and owner preparation remain
+separate obligations, not established by this output change.
+
+## ZIP64 finalization errors
+
+`python3 tests/original-foundation/zip64-close.py` compiles actual bundled minizip
+with ASan/UBSan and real FILE output. It forces the ZIP64 entry-count boundary
+without a large archive and injects record, locator and ordinary end-record write
+failures. `zipClose` retains each error and closes its native stream exactly once;
+ZIP64 finalization no longer discards the record/locator result or proceeds after
+an earlier error. This is output-error propagation, not atomic destination
+publication, fsync durability or prepared native-resource admission.
+
+## Separate no-Lua production assessment
+
+A fresh out-of-tree configure/build with
+`--enable-debug=heavy --enable-dosbox_agent --enable-sdl2 --disable-opengl --disable-avcodec`
+provides the no-Lua production profile: this tree currently has no configure Lua
+option, `C_DEBUG_LUA` definition or linked Lua evaluator unit. This is not a
+claim that guarded Lua code has compiled. `pkg-config lua5.4` availability alone
+does not enable that code. The selected evaluator sources still need semantic
+porting and build integration.
+
+Run `DOSBOX_TEST_BINARY=<that-build>/src/dosbox-x python3
+tests/stopped-continuation/no-lua-interactive-runtime.py` to check explicit
+unavailability for LUA/LUAFILE/LUARESET followed by real native stepping. It
+reuses the ordinary exclusive-runtime fixture directly (no source rewriting).
+Run the ordinary exclusive-runtime and stopped-save probes against the same
+binary for the bounded Interactive/Bridge ownership and save vertical. Exact
+build/binary/fixture identities and outcomes belong to the delivering card
+status. No-Lua success neither waives production Lua qualification nor qualifies
+all save owners/resources.
+
+## Real stopped save vertical (bounded author qualification)
+
+Set `DOSBOX_TEST_BINARY` to the configured production binary and run
+`python3 tests/original-foundation/stopped-save.py`. Set `DOSBOX_TEST_FLAGGED=1`
+to additionally archive a guest FLAG.TXT, change it between processes and verify
+restoration. Flagged transfers suppress simulated guest disk IRQ/I/O delay;
+archived DOS timestamps are installed before closing restored files so no
+INT 21h timestamp callback executes during stopped restore. This is one local
+file witness, not prepared-resource or atomic publication qualification.
+Requires Xvfb, gdb with
+binary symbols, and a PTY. Each invocation retains its fixture under
+`$SAIVAGE_CARD_WORK_ROOT/stopped-save-vertical/run-*` with configuration,
+tiny COM, archives, layout and receipt. No installed service is used.
+
+Bridge commands `STATEWRITE <host path>` and `STATEREAD <host path>` preserve
+path case and use the original SaveState ZIP/owner engine. Native attachment,
+owned stop, context epoch, lease and semantic frontier admission precede them;
+load retires the prior native checkpoint. Explicit-path loads reject incompatible
+version, program, memory size or machine metadata without a modal dialog or
+force-load bypass. Slots share engine/frontier admission and retain their UI policy.
+This is not yet the complete in-memory/Lua/MCP API.
+
+The fixture completes repeated saves, loads in the same process and a fresh
+process without guest execution, saves again immediately and after host delay,
+then explicitly steps.
+It compares every owner payload across each same-process delay, fresh CPU
+architectural/cycle state through the start of paging caches (extents obtained
+from this exact binary), guest RAM/handles/page identities after the native
+memory descriptor, and complete Pic/IntTimer10 payloads. Expected CS:IP/AX/BX
+after the explicit step are checked. Legacy paging caches and native memory
+descriptor contain process addresses and are not compared as portable state.
+
+This tiny normal-core/no-sound fixture does not qualify malformed owner input,
+audio/output/file resource reconstruction, arbitrary devices, atomic destination
+publication, or all frontends. Broader parity and consumed native resource
+validation remain required; writing an archive is not their substitute.
+
 ## ZIP member integrity before installation
 
 `python3 tests/original-foundation/zip-stream.py` uses real minizip with
@@ -9,8 +94,9 @@ complete valid archive can. The slot loader drains all
 required metadata/component members before metadata/UI mutation or the first
 live component assignment. This closes transport-integrity late discovery only:
 valid-CRC malformed owner records, native resources, semantic save frontiers,
-archive identity and whole-owner preflight remain outstanding. Audio unpause
-still occurs earlier; no full pre-effect refusal guarantee is claimed.
+archive identity and whole-owner preflight remain outstanding. The production
+save/load entry no longer unpauses audio unconditionally; this alone proves no
+full pre-effect refusal or audio/native-resource safety guarantee.
 
 # Original foundation author probes
 
@@ -25,9 +111,11 @@ The probe uses deterministic handlers, not a linked frontend/save qualification;
 these descriptors alone grant neither save admission nor resource readiness.
 
 These candidate probes are **not** foundation acceptance. The pristine baseline
-is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58; candidate production
-now begins shared VGA arithmetic and original PIC/GUS callback seams, not the
-complete debugger/save port.
+is selected upstream130de209abd6e6fb55b5535f85e2af4f6086ed58. The candidate now
+contains the shared native debugger and explicit-path original-engine save
+vertical described above, alongside the VGA and PIC/GUS corrections. The full
+debugger/save port, native resource admission and composed qualification remain
+incomplete; a linked probe does not qualify every feature in this index.
 
 ## Consumed SDL acquisition flags
 
@@ -229,12 +317,15 @@ doubles and checks real/v86 wrapping, protected-mode normal/expand-down limits,
 GDT/LDT routing, refusal and overflow. Its first run failed on an incorrect
 real-mode expected address (0x123c5 instead of wrapped 0x23c5); the corrected
 expectation preserves the existing 16-bit wrapping contract. Live RPC
-context/attachment admission and memory read/write migration remain outstanding.
+context/attachment admission is now present in production RPC; the linked
+rpc-runtime fixture covers bounded stopped reads/writes, not all devices.
 `rpc-read-publication.py` checks publish-last in the actual RPC ReadMemory body:
 translation/read refusal at every position leaves the caller's prior result
-unchanged, while a full read replaces it. This is output publication correctness,
-not proof of side-effect-free guest reads; ordinary read handlers, write probing
-and native session authority remain to be migrated/qualified.
+unchanged, while a full read replaces it. Production RPC now uses the shared
+observational backing readers behind selected native context admission; the
+linked rpc-runtime fixture checks bounded memory reads and running refusal.
+This extracted publication fixture alone is not proof of side-effect-free guest
+reads or qualification of arbitrary paging/device layouts.
 
 ## Shared native dispatch restoration
 
@@ -254,17 +345,20 @@ have explicit kinds; unclassified calls still deny service. Shell EXEC uses a
 named wrapper rather than inferring authority from INT21 or register values.
 `dispatch.py` also exercises the actual coordinator wrappers, zero/nonzero seam,
 request retention under a callback ancestor and expiry on invocation return.
-This does not yet register a frontend evaluator, bind native frontiers, settle
-execution on owner departure, or admit any save operation. Classification alone
-is neither execution nor save authority.
+The production debugger now binds this coordinator to its selected attachment
+and native frontier, settles execution on exact owner departure, and admits
+explicit-path saves through the original engine. This extracted classification
+fixture alone proves none of those consumer joins: classification is neither
+execution nor save authority. Use the linked runtime probes for those claims.
 
 Native frontier scopes now surround actual decoder/callback entry and callback
 wrapper setup/restoration. Normal loop predispatch/zero decoder/completed tick,
 nested entry and zero-handler return expose borrowed descriptors; nonzero
 callback tokens still reach their restoration caller first. Ordinary callbacks
 retain a restricting suffix through NativeReturn; natural shell EXEC uses its
-named ancestry rather than pretending to be an ordinary callback. No emulator
-frontend binds this hook yet, and these seams do not themselves admit saves.
+named ancestry rather than pretending to be an ordinary callback. The production
+debugger binds this hook with selected ownership/context/frontier checks;
+classification alone does not admit saves.
 `callback-frontier.py` extracts the actual INT/ShellExec wrappers to check normal
 setup/restoration, restricting descriptors and exception scope expiry. Upstream
 register restoration on exceptional exit is not invented or claimed. The
@@ -295,8 +389,10 @@ qualification.
 command/sink doubles under ASan/UBSan. Ordinary EXEC and BREAK exceptions end
 capture before propagating the original failure, without replay or a partial
 response; rejection and subsequent requests retain normal capture behavior.
-This does not qualify Bridge connection/attachment retirement, execution admission
-or transport delivery, which still need the full native facade port.
+The linked exclusive-runtime fixture separately checks bounded Bridge connection
+retirement/reconnect, competing attachment refusal and Active BREAK/result
+behavior. The extracted capture fixture alone establishes none of those joins;
+arbitrary transport failures and full native disposal remain unqualified.
 
 ## Breakpoint identity dependency
 
@@ -341,23 +437,25 @@ observer over the current upstream drawer; only the selected ordinary VGA mode3
 80x25 layout is available. This does not qualify live rendering, stopped/context
 admission, text-stop consumer integration or resource lifetimes.
 
-## Native primitives and worker (not yet emulator-integrated)
+## Native primitives and worker (worker not yet emulator-integrated)
 
 `python3 tests/original-foundation/memory-observation.py` compiles the actual
 physical/linear observation bodies with bounded owner doubles under ASan/UBSan.
 The shared APIs reject unsupported spans without exposing partial output and
 avoid faults, TLB fills, page-bit writes and device reads. Physical observation
 is installed low-16MiB RAM/ROM backing only, not an arbitrary bus read or A20
-translation. These APIs do not grant stopped/context authority and are not yet
-consumed by the production debugger; live paging/device qualification remains.
+translation. These APIs do not grant stopped/context authority. Production RPC
+now consumes them behind selected native ownership/context admission; live
+paging/device qualification remains.
 
 `python3 tests/original-foundation/flags-observation.py` compiles the actual CPU
 lazy-flags owner against native headers. It compares observational flags with
 normal materialization across lazy operation types and representative operands,
 including repeat reads and preservation of deferred state. The existing RPC
 register adapter now consumes this owner operation instead of stale `reg_flags`.
-This does not establish register-context admission or integrated RPC lifetime
-correctness; those remain part of the frontend migration.
+The bounded linked RPC fixture covers selected native context admission and
+register reads. The extracted flags fixture does not by itself establish those
+lifetimes; full paging/device and frontend qualification remain outstanding.
 
 Run `python3 tests/original-foundation/native-primitives.py` with g++, pthread,
 pkg-config and Lua 5.4. It compiles actual selected non-save owners and worker
@@ -369,10 +467,11 @@ context, Pending/Active/Terminal, retained result, attachment/owner departure,
 unlimited RUN and finite step budgets. Selected fixtures cover call-local
 frontier authority, classified service, stop arbitration, worker file/code,
 full libraries/require/observations/finalizers and cooperative close.
-These passing primitive/transport checks do not establish machine admission:
-CLI selection, actual frontend integration, semantic save joins and real native
-resource/lifetime qualification are still unfinished. Worker is not yet linked
-into the emulator. No complete usable debugger handoff is claimed.
+The linked Bridge/RPC candidate now exercises CLI selection, native attachment,
+selected stopped observations and the explicit-path original-engine save join.
+Those bounded runtime checks are separate from these primitive tests. Full
+native resource/lifetime admission and remaining frontend joins are unfinished.
+Worker is not yet linked into the emulator. No full-foundation handoff is claimed.
 
 ## Ordinary upstream baseline
 

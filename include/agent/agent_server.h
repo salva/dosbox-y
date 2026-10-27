@@ -2,6 +2,7 @@
 #define DOSBOX_AGENT_SERVER_H
 
 #include "agent/agent_protocol.h"
+#include "native_debug_execution.h"
 
 #include <cstdint>
 #include <memory>
@@ -44,7 +45,10 @@ private:
     static void OnDebuggerStopped(const std::shared_ptr<Impl>& impl,
                                   std::uint64_t generation,
                                   std::uint16_t segment,
-                                  std::uint32_t instruction_pointer);
+                                  std::uint32_t instruction_pointer,
+                                  const NativeDebug::Result* terminal = nullptr);
+    static void OnTargetExited(const std::shared_ptr<Impl>& impl, std::uint64_t generation,
+                               const std::string& session_id);
 
     std::shared_ptr<Impl> impl;
 };
