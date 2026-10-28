@@ -8,7 +8,14 @@ source=source.replace('def run(restore):','''def run(restore):
 source=source.replace('mcp_server={listener.getsockname()[1]}\\n','mcp_server={listener.getsockname()[1]}\\nibm rom basic={w}/BASIC.ROM\\n')
 start=source.index('  if slot_mode:\n   import runpy')
 end=source.index('\n finally:',start)
-source=source[:start]+'''  request('before',f'STATEWRITE {d}/before.sav')
+source=source[:start]+'''  request('loaded',f'STATEWRITE {d}/loaded.sav')
+  # Replace the path after owner initialization. Identity must describe the
+  # installed immutable ROM, not the current host file at capture time.
+  (w/'BASIC.ROM').write_bytes(bytes([0x92])*32768)
+  request('before',f'STATEWRITE {d}/before.sav')
+  with zipfile.ZipFile(d/'loaded.sav') as loaded, zipfile.ZipFile(d/'before.sav') as before:
+   assert loaded.read('Config_Identity')==before.read('Config_Identity')
+   assert loaded.read('Build_Identity')==before.read('Build_Identity')
   if restore:
    mismatch=restore=='changed'
    with zipfile.ZipFile(w/'capture/before.sav') as old, zipfile.ZipFile(d/'before.sav') as new:
