@@ -18,7 +18,6 @@ struct LiveTaskStatus {
 LiveTaskStatus GFX_LuaTaskStatus();
 bool GFX_CheckpointReady();
 // Actual selected windowed SDL surface configuration, distinct from task neutrality.
-bool GFX_CheckpointProfileReady();
 bool GFX_CheckpointRebase(uint64_t host,uint32_t tick);
 LiveGeometry GFX_LuaGeometry();
 bool GFX_InstallLuaTasks(int root,size_t limit);

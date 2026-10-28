@@ -105,6 +105,7 @@ public:
 	virtual bool add_special_file_to_disk(const char* dosname, const char* operation, uint16_t value, bool isdir);
 	void EmptyCache(void) override { dirCache.EmptyCache(); };
 	void MediaChange() override {};
+	bool StateSearchActive() const {return dirCache.HasActiveSearch();}
 	const char* getBasedir() const {return basedir;};
 	struct {
 		uint16_t bytes_sector;

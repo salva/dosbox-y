@@ -862,6 +862,11 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
         LOG_MSG("RunMachine recursion");
 #endif
 
+    // Fresh root admission precedes the first interpreter/callback entry.
+    // The live launch hold must not wait for AUTOEXEC's EXEC to return.
+    if (kind == MachineService::Kind::RootGuest)
+        NativeFrontier::frontiers().reach(NativeFrontier::Kind::LoopStop,
+                                         machine_owner.token());
     do {
         ret=(*loop)();
         if (!ret) NativeFrontier::frontiers().reach(NativeFrontier::Kind::LoopStop,

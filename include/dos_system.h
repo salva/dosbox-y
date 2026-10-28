@@ -231,6 +231,13 @@ public:
 	void        AddEntryDirOverlay	(const char* path, char *sfile, bool checkExist = false);
 	void		DeleteEntry			(const char* path, bool ignoreLastDir = false);
 
+    // dirSearch is the cache's scratch OpenDir cursor; FindFirst copies its
+    // entries into the independently advancing guest enumeration below.
+	bool HasActiveSearch() const {
+        for (unsigned i=0;i<MAX_OPENDIRS;++i)
+            if (dirFindFirst[i]) return true;
+        return false;
+    }
 	void		EmptyCache			(void);
 	void		MediaChange			(void);
 	void		SetLabel			(const char* vname,bool cdrom,bool allowupdate);

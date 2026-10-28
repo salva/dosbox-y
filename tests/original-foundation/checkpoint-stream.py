@@ -6,8 +6,11 @@ root=Path(__file__).resolve().parents[2]
 w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'checkpoint-stream'
 w.mkdir(exist_ok=True)
 source=(root/'src/misc/savestates.cpp').read_text()
-body=source[source.index('bool SaveState::checkpointSave('):source.index('void SaveState::registerComponent(')]
+body=source[source.index('// Both transports use'):source.index('void SaveState::registerComponent(')]
+header=(root/'include/dosbox.h').read_text()
+adapters=header[header.index('    struct Output {'):header.index('    bool saveTo(size_t slot,')]
 (w/'test.cpp').write_text(r'''
+#include <memory>
 #include <map>
 #include <string>
 #include <sstream>
@@ -29,6 +32,7 @@ public:
  std::map<std::string,Entry> components;
  bool checkpointSave(Checkpoint &,size_t);
  bool checkpointLoad(const Checkpoint &);
+'''+adapters+r'''
 };
 '''+body+r'''
 struct Counter:SaveState::Component {

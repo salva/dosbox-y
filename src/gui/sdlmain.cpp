@@ -4890,17 +4890,6 @@ void native_frame(const CaptureFrame::View &view,void *) {
 }
 }
 #endif
-bool GFX_CheckpointProfileReady() {
-#if defined(C_SDL2) && !defined(WIN32)
-    if(!sdl.window || !sdl.surface || sdl.desktop.fullscreen ||
-       sdl.desktop.type!=SCREEN_SURFACE)return false;
-    // Check actual SDL window flags too, not only requested/configured state.
-    const Uint32 flags=SDL_GetWindowFlags(sdl.window);
-    return !(flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP));
-#else
-    return false;
-#endif
-}
 bool GFX_CheckpointReady() {
 #if defined(C_SDL2) && !defined(WIN32)
     return !lua_tasks || lua_tasks->checkpoint_ready();

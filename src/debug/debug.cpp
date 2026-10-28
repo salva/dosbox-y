@@ -8406,6 +8406,11 @@ void DEBUG_Init() {
         DEBUG_NativeConditionFrontier(opaque,seam);
 #if C_DEBUG_LUA
         if (control->lua_driver.script!=LuaDriver::Options::Script::None) LocalDriverFrontier(opaque,seam);
+        else if(seam.kind==NativeFrontier::Kind::LoopStop &&
+                !seam.decoder_entered && !seam.callback_entered) {
+            Debugger_EntryLaunchHold();
+            Debugger_LuaLivePump();
+        }
 #endif
     },nullptr)) E_Exit("native debugger frontier already bound");
     LOG(LOG_MISC, LOG_DEBUG)("Initializing debug system");

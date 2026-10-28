@@ -1117,16 +1117,6 @@ static const char *Debugger_LuaRegisterRangeText(const uint64_t max_value)
 	return "0..0xffffffff";
 }
 
-uint32_t Mixer_MIXQ(void);
-bool XMS_Active(void);
-bool EMS_Active(void);
-bool SB_CheckpointProfileReady();
-bool OPL_CheckpointProfileReady();
-bool PCSPEAKER_CheckpointProfileReady();
-bool GUS_CheckpointAbsent();
-bool TANDYSOUND_CheckpointAbsent();
-bool CMS_CheckpointAbsent();
-bool DISNEY_HasInit();
 
 namespace { static void PredicateGuard(lua_State *L);
 static void PredicateRegistryGuard(lua_State *L);
@@ -2219,31 +2209,36 @@ bool live_checked=false,live_failed=false,live_consumed=false,live_active=false,
 uint64_t live_slices=0,live_start=0,live_end=0;
 uint64_t LiveNow() {return std::chrono::duration_cast<std::chrono::milliseconds>(
     std::chrono::steady_clock::now().time_since_epoch()).count();}
-// One process-local checkpoint. No disk import: host continuations cannot be
-// reconstructed by the serializer. Admission is the same suspended EXEC owner
-// and PSP, with neutral input and immutable directory mounts. Dispose this
-// process before that EXEC returns after any successful restore.
-SaveState::Checkpoint live_checkpoint;
+// Process-local captures cannot reconstruct the suspended native EXEC stack.
+// Bytes may be replaced by id; successful restores still require disposal
+// before their original EXEC owner returns.
+struct LiveCheckpointImage {
+    SaveState::Checkpoint parts;
+    uint64_t owner=0;
+    uint16_t psp=0;
+    std::string program,mounts;
+};
+std::map<std::string,LiveCheckpointImage> live_checkpoints;
 uint64_t checkpoint_owner=0,checkpoint_epoch=0;
-// A small, fixed process-local restore budget bounds both arithmetic and its
-// exact Lua/RCP numeric projection. Spent restores are never checkpoint state.
-constexpr uint64_t checkpoint_restore_limit=16;
 bool checkpoint_restored=false;
-uint16_t checkpoint_psp=0;
-std::string checkpoint_id,checkpoint_program,checkpoint_mounts;
 std::string CheckpointMounts() {
     std::string result;
     for (unsigned i=0;i<DOS_DRIVES;i++) if (Drives[i]) {
         const char *info=Drives[i]->GetInfo();
         if (strcmp(info,"Internal Virtual Drive") &&
-            (strncmp(info,"local directory ",16) || !Drives[i]->readonly || typeid(*Drives[i])!=typeid(localDrive)))
+            (strncmp(info,"local directory ",16) || typeid(*Drives[i])!=typeid(localDrive)))
             return {};
+        // Native directory enumeration cursors are not encoded by the DOS
+        // owner. A mount being read-only does not make those cursors safe.
+        if (typeid(*Drives[i])==typeid(localDrive) &&
+            static_cast<localDrive *>(Drives[i])->StateSearchActive()) {LOG_MSG("Checkpoint active search on drive %u",i); return {}; }
         result+=std::to_string(i)+":"+info+"\n";
     }
-    // The first bounded profile does not reopen external file handles.
-    // System devices have no mounted drive; all guest disk handles deny.
+    // Original DOS owner reopens local files without truncating host content.
+    // Other external native handle kinds have no admitted reconstruction here.
     for (unsigned i=0;i<DOS_FILES;i++)
-        if (Files[i] && Files[i]->GetDrive()<DOS_DRIVES) return {};
+        if (Files[i] && Files[i]->GetDrive()<DOS_DRIVES &&
+            typeid(*Files[i])!=typeid(LocalFile)) return {};
     return result;
 }
 static bool CheckpointInstrumentationAllowed(bool load,DebuggerBreakpointFailure error,
@@ -2299,34 +2294,43 @@ int LiveCheckpoint(lua_State *L) {
     };
     const auto op=field("op"),id=field("id");
     const auto owner=DOSBOX_MachineServiceOwner();
-    auto mounts=CheckpointMounts();
+    const auto found=live_checkpoints.find(id);
+    const LiveCheckpointImage *image=found==live_checkpoints.end()?nullptr:&found->second;
+    // Startup/root can precede DOS drive/file initialization. Inspect native
+    // DOS resources only for the suspended EXEC owner that can be admitted.
+    auto mounts=owner.kind==MachineService::Kind::ShellExecGuest ? CheckpointMounts() : std::string();
     uint32_t bp_count=0;
     DebuggerBreakpointInfo bp[256];
     const auto bp_error=Debugger_BreakpointList(bp,256,&bp_count,true);
     if(!Debugger_LiveOwnsStop(owner.token) || strcmp(Debugger_LiveStopReason(),"deliberate") ||
-       owner.kind!=MachineService::Kind::ShellExecGuest || owner.depth!=2)
-        deny="requires deliberate depth2 EXEC stop";
-    else if(cpudecoder!=CPU_Core_Normal_Run || cpu.pmode || MEM_TotalPages()>4096)
-        deny="requires real-mode normal core <=16MiB";
+       owner.kind!=MachineService::Kind::ShellExecGuest)
+        deny="requires deliberate suspended EXEC stop";
+    else if(cpudecoder!=CPU_Core_Normal_Run)
+        deny="checkpoint requires normal decoder (translated native code is not captured)";
     else if(!CheckpointInstrumentationAllowed(op=="load",bp_error,bp,bp_count))
         deny="instrumentation retained";
     else if(!GFX_CheckpointReady() || !KEYBOARD_CheckpointNeutral() || !Mouse_CheckpointNeutral())
         deny="input/tasks not neutral";
-    else if(mounts.empty())deny="requires immutable directory mounts and no external open files";
-    else if(op=="load" && (live_checkpoint.empty() || id!=checkpoint_id || owner.token!=checkpoint_owner ||
-            dos.psp()!=checkpoint_psp || checkpoint_program!=RunningProgram || mounts!=checkpoint_mounts))
+    else if(mounts.empty())deny="unsupported mount, active directory search, or native file kind";
+    else if(op=="load" && (!image || owner.token!=image->owner ||
+            dos.psp()!=image->psp || image->program!=RunningProgram || mounts!=image->mounts))
         deny="checkpoint owner/PSP/mount mismatch or missing";
-    else if(op=="save" && !live_checkpoint.empty())deny="checkpoint already exists";
-    else if(op=="load" && checkpoint_epoch>=checkpoint_restore_limit)deny="checkpoint restore budget exhausted";
+    else if(op=="load" && checkpoint_epoch>=uint64_t(LUA_MAXINTEGER))
+        deny="checkpoint context counter exhausted";
     if(!deny) {
-    // Prepare retained identity before capture can publish a checkpoint.
-    std::string next_program,next_mounts,next_id;
+    // Allocate metadata/map node before capture. Capture publishes bytes only
+    // on success; a refused replacement retains the previous image.
+    LiveCheckpointImage prepared;
     if(op=="save") {
-        next_program=RunningProgram;next_mounts=mounts;next_id=id;
+        prepared.owner=owner.token;prepared.psp=dos.psp();
+        prepared.program=RunningProgram;prepared.mounts=mounts;
     }
     {
     const auto context=DEBUG_NativeExecutionContext();
-    if(DEBUG_AdmitNativeState(local_attachment,context) &&
+    if(live_active && !live_attachment.serial)
+        live_attachment=DEBUG_AttachNativeExecution(NativeDebug::Frontend::Lua,0);
+    const auto attachment=live_active?live_attachment:local_attachment;
+    if(DEBUG_AdmitNativeState(attachment,context) &&
        NativeControl::owner().acquire({context.invocation,context.checkpoint},owner,
            DOSBOX_MachineServiceRelation(context.invocation),context.checkpoint,true)==NativeControl::Admission::ok) {
     admitted=true;
@@ -2336,13 +2340,13 @@ int LiveCheckpoint(lua_State *L) {
         ~ReleaseCheckpointLease(){NativeControl::owner().release(lease);}
     } release{lease};
     if(op=="save") {
-        ok=SaveState::instance().checkpointSave(live_checkpoint,64u*1024u*1024u);
-        if(ok) {checkpoint_owner=owner.token;checkpoint_psp=dos.psp();checkpoint_program.swap(next_program);
-            checkpoint_mounts.swap(next_mounts);checkpoint_id.swap(next_id);}
+        auto &destination=live_checkpoints[id]; // allocate before capture/publication
+        ok=SaveState::instance().checkpointSave(prepared.parts,64u*1024u*1024u);
+        if(ok) destination=std::move(prepared);
     } else {
-        ok=SaveState::instance().checkpointLoad(live_checkpoint);
+        ok=SaveState::instance().checkpointLoad(image->parts);
         installed=ok;
-        if(ok && !DEBUG_AdvanceNativeStateContext(local_attachment,context,lease))
+        if(ok && !DEBUG_AdvanceNativeStateContext(attachment,context,lease))
             E_Exit("Restored checkpoint cannot retire prior native context");
         if(ok) {
             // Once original component installation succeeds, failure to rebuild
@@ -2353,7 +2357,7 @@ int LiveCheckpoint(lua_State *L) {
                 E_Exit("Restored checkpoint cannot rebase native tasks");
             if(!Debugger_LiveCheckpointStop(owner.token))
                 E_Exit("Restored checkpoint cannot establish native stop");
-            ++checkpoint_epoch; checkpoint_restored=true;
+            ++checkpoint_epoch; checkpoint_owner=owner.token;checkpoint_restored=true;
         }
     }
     }

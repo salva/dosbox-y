@@ -46,9 +46,13 @@ namespace NativeControl {
 static bool native_admitted=true;
 struct Context {unsigned invocation=7,checkpoint=1;};
 static Context DEBUG_NativeExecutionContext(){return {};}
-static bool DEBUG_AdmitNativeState(unsigned,Context){return native_admitted;}
-static bool DEBUG_AdvanceNativeStateContext(unsigned,Context,NativeControl::Lease) {return true;}
-static unsigned local_attachment=1;
+namespace NativeDebug {enum class Frontend {Lua};}
+struct Attachment {unsigned serial=1;};
+static bool DEBUG_AdmitNativeState(Attachment,Context){return native_admitted;}
+static bool DEBUG_AdvanceNativeStateContext(Attachment,Context,NativeControl::Lease) {return true;}
+static Attachment local_attachment,live_attachment;
+static Attachment DEBUG_AttachNativeExecution(NativeDebug::Frontend,unsigned){return {};}
+static bool live_active=false;
 static bool Debugger_LiveOwnsStop(unsigned){return true;}
 static const char *Debugger_LiveStopReason(){return "deliberate";}
 static bool Debugger_PredicateHeld(){return false;}
@@ -61,8 +65,6 @@ static bool GFX_CheckpointRebase(unsigned,unsigned){return true;}
 static unsigned LiveNow(){return 1;}
 static bool Debugger_LiveCheckpointStop(unsigned){return true;}
 static int CPU_Core_Normal_Run=0,cpudecoder=0;
-static struct {bool pmode=false;} cpu;
-static unsigned MEM_TotalPages(){return 4096;}
 struct DebuggerBreakpointInfo {};
 static unsigned Debugger_BreakpointList(DebuggerBreakpointInfo *,unsigned,unsigned *,bool){return 0;}
 static bool CheckpointInstrumentationAllowed(bool,unsigned,DebuggerBreakpointInfo *,unsigned){return true;}
@@ -70,9 +72,7 @@ static std::string CheckpointMounts(){return std::string(1024,'m');}
 static std::string RunningProgram="fixture";
 static struct {unsigned psp(){return 3;}} dos;
 static unsigned PIC_Ticks=4;
-static std::string checkpoint_id,checkpoint_program,checkpoint_mounts;
-static unsigned checkpoint_owner=0,checkpoint_psp=0,checkpoint_epoch=0;
-static const unsigned checkpoint_restore_limit=16;
+static uint64_t checkpoint_owner=0,checkpoint_epoch=0;
 static bool checkpoint_restored=false;
 class SaveState {
 public:
@@ -81,7 +81,11 @@ public:
  bool checkpointSave(Checkpoint &out,size_t){assert(NativeControl::owner().held);out["fixture"]="bytes";return true;}
  bool checkpointLoad(const Checkpoint &){assert(NativeControl::owner().held);return true;}
 };
-static SaveState::Checkpoint live_checkpoint;
+struct LiveCheckpointImage {
+ SaveState::Checkpoint parts;uint64_t owner=0;uint16_t psp=0;
+ std::string program,mounts;
+};
+static std::map<std::string,LiveCheckpointImage> live_checkpoints;
 [[noreturn]] static void E_Exit(const char *) {throw std::runtime_error("fatal");}
 '''
 main = r'''
@@ -111,10 +115,10 @@ int main() {
  lua_State *L=lua_newstate(allocator,nullptr);assert(L);
  native_admitted=false;
  invoke(L,"save",false,"checkpoint native ownership unavailable");
- assert(!NativeControl::owner().releases && live_checkpoint.empty());
+ assert(!NativeControl::owner().releases && live_checkpoints.empty());
  native_admitted=true;NativeControl::owner().available=false;
  invoke(L,"save",false,"checkpoint native ownership unavailable");
- assert(!NativeControl::owner().releases && live_checkpoint.empty());
+ assert(!NativeControl::owner().releases && live_checkpoints.empty());
  NativeControl::owner().available=true;
  invoke(L,"save",true);assert(NativeControl::owner().releases==1);
  invoke(L,"load",true);assert(NativeControl::owner().releases==2 && checkpoint_restored && checkpoint_epoch==1);
@@ -125,12 +129,12 @@ int main() {
  lua_pushliteral(L,"fixture");lua_setfield(L,-2,"id");
  // Inject failure only after native save, at allocating its result table.
  // The checkpoint remains retained, and the exact lease is already released.
- live_checkpoint.clear();checkpoint_id.clear();
+ live_checkpoints.clear();
  const unsigned releases=NativeControl::owner().releases;
  const int result=lua_pcall(L,1,1,0);
  fail_allocation=false;
  assert(result==LUA_ERRMEM && allocation_failed && !NativeControl::owner().held);
- assert(!live_checkpoint.empty() && checkpoint_id=="fixture");
+ assert(!live_checkpoints.empty() && live_checkpoints.count("fixture")==1);
  assert(NativeControl::owner().releases==releases+1);
  lua_close(L);
  allocation_failed=false;

@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <string>
 #include <cstring>
+#include <memory>
 #include <fstream>
 #include "SDL.h"
 #include "menu.h"
@@ -375,49 +376,94 @@ SaveState& SaveState::instance() {
 
 static bool save_state_frontier();
 
+// Both transports use this single original-engine traversal. Member integrity
+// is checked before the first owner; semantic owner prevalidation remains R4.
+bool SaveState::capture(Output &output) const {
+    for (const auto &entry : components) {
+        auto *stream = output.open(entry.first);
+        if (!stream) return false;
+        entry.second.comp.getBytes(*stream);
+        const bool complete = bool(*stream);
+        if (!output.close() || !complete) return false;
+    }
+    return true;
+}
+bool SaveState::install(Input &input) const {
+    for (const auto &entry : components)
+        if (!input.verify(entry.first)) return false;
+#if C_DEBUG && C_DEBUG_LUA
+    if (!Debugger_LuaPrepareRestore()) return false;
+#endif
+    bool started = false;
+    try {
+        for (const auto &entry : components) {
+            auto *stream = input.open(entry.first);
+            if (!stream) {
+                if (started) E_Exit("State member unavailable after installation started");
+                return false;
+            }
+            started = true;
+            entry.second.comp.setBytes(*stream);
+            if (!*stream || stream->peek()!=std::char_traits<char>::eof())
+                E_Exit("State component %s failed during installation",entry.first.c_str());
+            if (!input.close()) E_Exit("State member settlement failed after installation");
+        }
+    } catch (const std::exception &) {
+        if (started) E_Exit("State installation failed after live state may have changed");
+        return false;
+    } catch (const SaveState::Error &) {
+        if (started) E_Exit("State installation failed after live state may have changed");
+        return false;
+    }
+    return true;
+}
+struct SaveState::MemoryOutput final : Output {
+    Checkpoint pending;
+    size_t remaining;
+    std::string name;
+    std::unique_ptr<StateCheckpointStream> buffer;
+    std::unique_ptr<std::ostream> stream;
+    explicit MemoryOutput(size_t limit) : remaining(limit) {}
+    std::ostream *open(const std::string &member) override {
+        name=member;
+        buffer.reset(new StateCheckpointStream(remaining));
+        stream.reset(new std::ostream(buffer.get()));
+        return stream.get();
+    }
+    bool close() override {
+        if (buffer->failed()) return false;
+        auto bytes=buffer->take();remaining-=bytes.size();
+        pending.emplace(name,std::move(bytes));
+        stream.reset();buffer.reset();return true;
+    }
+};
+struct SaveState::MemoryInput final : Input {
+    const Checkpoint &parts;
+    std::unique_ptr<std::istringstream> stream;
+    explicit MemoryInput(const Checkpoint &data) : parts(data) {}
+    bool verify(const std::string &name) override {return parts.count(name);}
+    std::istream *open(const std::string &name) override {
+        stream.reset(new std::istringstream(parts.at(name),std::ios::in|std::ios::binary));
+        return stream.get();
+    }
+    bool close() override {stream.reset();return true;}
+};
+
 bool SaveState::checkpointSave(Checkpoint &parts, size_t limit) {
     if (!save_state_frontier()) return false;
     try {
-        Checkpoint pending;
-        size_t remaining=limit;
-        for (const auto &entry : components) {
-            StateCheckpointStream buffer(remaining);
-            std::ostream stream(&buffer);
-            entry.second.comp.getBytes(stream);
-            if (!stream || buffer.failed()) return false;
-            std::string bytes=buffer.take();
-            remaining-=bytes.size();
-            pending.emplace(entry.first,std::move(bytes));
-        }
-        parts.swap(pending);
+        MemoryOutput output(limit);
+        if (!capture(output)) return false;
+        parts.swap(output.pending);
         return true;
     } catch (const std::exception &) { return false; }
       catch (const SaveState::Error &) { return false; }
 }
 
 bool SaveState::checkpointLoad(const Checkpoint &parts) {
-    if (!save_state_frontier()) return false;
-    if (parts.size()!=components.size()) return false;
-    for (const auto &entry : components)
-        if (!parts.count(entry.first)) return false;
-#if C_DEBUG && C_DEBUG_LUA
-    if (!Debugger_LuaPrepareRestore()) return false;
-#endif
-    // Only internally captured streams reach this method. A failure after the
-    // first consumer is fatal: the sequential original engine has no rollback.
-    try {
-        for (const auto &entry : components) {
-            std::istringstream stream(parts.at(entry.first),std::ios::in|std::ios::binary);
-            entry.second.comp.setBytes(stream);
-            if (!stream || stream.peek()!=std::char_traits<char>::eof())
-                E_Exit("Checkpoint component %s failed during installation",entry.first.c_str());
-        }
-    } catch (const std::exception &) {
-        E_Exit("Checkpoint installation failed after live state may have changed");
-    } catch (const SaveState::Error &) {
-        E_Exit("Checkpoint installation failed after live state may have changed");
-    }
-    return true;
+    if (!save_state_frontier() || parts.size()!=components.size()) return false;
+    MemoryInput input(parts);
+    return install(input);
 }
 
 void SaveState::registerComponent(const std::string& uniqueName, Component& comp) {
@@ -472,6 +518,52 @@ int zipOutOpenFile(zipFile zf,const char *zfname,zip_fileinfo &zi,const bool com
 		-MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY,
 		NULL/*password*/,0/*crcFile*/,1/*zip64*/);
 }
+
+struct SaveState::ArchiveOutput final : Output {
+    zipFile archive;
+    bool compress;
+    const StateArchive::Budget *budget;
+    StateArchive::Effects *effects;
+    std::unique_ptr<zip_ostreambuf> buffer;
+    std::unique_ptr<std::ostream> stream;
+    ArchiveOutput(zipFile file,bool compression,const StateArchive::Budget *clock,StateArchive::Effects *facts)
+        : archive(file),compress(compression),budget(clock),effects(facts) {}
+    std::ostream *open(const std::string &name) override {
+        if (budget && budget->expired()) {
+            if (effects) effects->timed_out=true;
+            return nullptr;
+        }
+        zip_fileinfo zi;zipSetCurrentTime(zi);
+        if (zipOutOpenFile(archive,name.c_str(),zi,compress)!=ZIP_OK) return nullptr;
+        buffer.reset(new zip_ostreambuf(archive));
+        stream.reset(new std::ostream(buffer.get()));
+        return stream.get();
+    }
+    bool close() override {
+        const bool ok=buffer->close()==ZIP_OK;
+        stream.reset();buffer.reset();return ok;
+    }
+};
+struct SaveState::ArchiveInput final : Input {
+    unzFile archive;
+    std::unique_ptr<zip_istreambuf> buffer;
+    std::unique_ptr<std::istream> stream;
+    explicit ArchiveInput(unzFile file) : archive(file) {}
+    bool verify(const std::string &name) override {
+        return zip_verify_member(archive,name.c_str())==UNZ_OK;
+    }
+    std::istream *open(const std::string &name) override {
+        if (unzLocateFile(archive,name.c_str(),1)!=UNZ_OK ||
+            unzOpenCurrentFile(archive)!=UNZ_OK) return nullptr;
+        buffer.reset(new zip_istreambuf(archive));
+        stream.reset(new std::istream(buffer.get()));
+        return stream.get();
+    }
+    bool close() override {
+        const bool ok=buffer->close()==UNZ_OK;
+        stream.reset();buffer.reset();return ok;
+    }
+};
 
 static bool save_state_frontier() {
     // No decoder, BIOS/DOS callback or idle-wrapper restoration suffix can
@@ -639,20 +731,10 @@ bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive
 		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
 		if (save_err) goto done;
 	}
-	for (CompEntry::iterator i = components.begin(); i != components.end(); ++i) {
-        if (expired()) { save_err = true; goto done; }
-		zip_fileinfo zi; zipSetCurrentTime(zi);
-		if ((errclose=zipOutOpenFile(zf,i->first.c_str(),zi,compresssaveparts)) != ZIP_OK) { save_err = true; goto done; }
-		zip_ostreambuf zos(zf); std::ostream ss(&zos);
-
-		i->second.comp.getBytes(ss);
-
-		// Serialization can fail before minizip itself reports a close error.
-		// Closing a valid ZIP member does not certify a complete owner payload.
-		if (!ss) save_err = true;
-		if ((errclose=zos.close()) != ZIP_OK) save_err = true;
-		if (save_err) goto done;
-	}
+	{
+        ArchiveOutput members(zf,compresssaveparts,budget,effects);
+        if (!capture(members)) save_err=true;
+    }
 
 done:
 	if (zf != NULL) {
@@ -751,9 +833,6 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 		                         "Memory_Size", "Machine_Type", "Time_Stamp", "Save_Remark"};
 		for (const char *name : metadata) {
 			if ((err=zip_verify_member(zf, name)) != UNZ_OK) { load_err=true; goto done; }
-		}
-		for (CompEntry::const_iterator i = components.begin(); i != components.end(); ++i) {
-			if ((err=zip_verify_member(zf, i->first.c_str())) != UNZ_OK) { load_err=true; goto done; }
 		}
 	}
 
@@ -874,21 +953,11 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
 	}
 
-	for (CompEntry::const_iterator i = components.begin(); i != components.end(); ++i) {
-		if ((err=unzLocateFile(zf,i->first.c_str(),1/*case sensitive*/)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzOpenCurrentFile(zf)) != UNZ_OK) { load_err=true; goto done; }
-		zip_istreambuf zis(zf); std::istream ss(&zis);
-
-		installation_started=true;
-		i->second.comp.setBytes(ss);
-		// A component may already have installed live state. A short stream
-		// is not a pre-effect refusal and this sequential loader cannot roll
-		// back; never resume the guest or report a successful load.
-		if (!ss) E_Exit("Save-state component %s failed during installation", i->first.c_str());
-
-		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
-	}
+	{
+        ArchiveInput members(zf);
+        if (!install(members)) load_err=true;
+        else installation_started=true;
+    }
 
 done:
 	if (zf != NULL) {

@@ -394,6 +394,25 @@ public:
     void registerComponent(const std::string& uniqueName, Component& comp); //comp must have global lifetime!
 
 private:
+    // Thin storage adapters own member streams and settlement. The engine alone
+    // traverses components, invokes codecs and defines fatal install boundaries.
+    struct Output {
+        virtual ~Output() = default;
+        virtual std::ostream *open(const std::string &) = 0;
+        virtual bool close() = 0;
+    };
+    struct Input {
+        virtual ~Input() = default;
+        virtual bool verify(const std::string &) = 0;
+        virtual std::istream *open(const std::string &) = 0;
+        virtual bool close() = 0;
+    };
+    struct MemoryOutput;
+    struct MemoryInput;
+    struct ArchiveOutput;
+    struct ArchiveInput;
+    bool capture(Output &) const;
+    bool install(Input &) const;
     bool saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects = nullptr,
                 const StateArchive::Budget *budget = nullptr);
     bool loadFrom(size_t slot, const std::string *source) const;
