@@ -76,6 +76,7 @@ bool Debugger_LuaInteractiveReset();
 #endif
 
 #if C_DEBUG_LUA
+void Debugger_LuaStateInstalled();
 bool Debugger_LuaCheckpointOwnerMustDispose(uint64_t token);
 void Debugger_LuaCheckpointOwnerDeparting(uint64_t token);
 bool Debugger_LuaCheckpointPoisoned(uint64_t token);

@@ -41,6 +41,52 @@
 #include "state_archive_output.h"
 #include "state_checkpoint_stream.h"
 #include <sstream>
+#include <state_build_identity.h>
+#include "../hardware/capture_sha256.h"
+
+// Strict resolved property identity, sourced from existing configuration owners.
+// Launch scripts and transport/presentation settings are not machine inputs.
+extern std::string GetDOSBoxXPath(bool withexe);
+static std::string state_build_identity() {
+    // Bind to the actual linked executable as well as configured source inputs.
+    // Failure is a refusal, never a fallback to informational VERSION metadata.
+    std::ifstream executable(GetDOSBoxXPath(true),std::ios::binary);
+    if (!executable) return {};
+    CapturePNG::SHA256 hash;
+    char data[32768];
+    while (executable) {
+        executable.read(data,sizeof(data));
+        hash.update(reinterpret_cast<const uint8_t *>(data),size_t(executable.gcount()));
+    }
+    if (!executable.eof()) return {};
+    hash.update(reinterpret_cast<const uint8_t *>(STATE_BUILD_ID),strlen(STATE_BUILD_ID));
+    char hex[65]; hash.finish(hex); return hex;
+}
+static std::string state_config_identity() {
+    CapturePNG::SHA256 hash;
+    const auto field = [&](const std::string &s) {
+        const std::string size = std::to_string(s.size()) + ":";
+        hash.update(reinterpret_cast<const uint8_t *>(size.data()), size.size());
+        hash.update(reinterpret_cast<const uint8_t *>(s.data()), s.size());
+    };
+    for (int i=0; auto *section=control->GetSection(i); ++i) {
+        auto *properties=dynamic_cast<Section_prop *>(section);
+        if (!properties) continue; // autoexec is launch policy, not machine ABI
+        const std::string name=section->GetName();
+        if (name=="sdl") continue;
+        field(name);
+        for (int j=0; auto *property=properties->Get_prop(j); ++j) {
+            if (name=="dosbox" && (property->propname=="mcp_server" ||
+                property->propname=="captures" || property->propname=="saves" ||
+                property->propname=="compresssaveparts")) continue;
+            field(property->propname);
+            field(property->GetValue().ToString());
+        }
+    }
+    char hex[65]; hash.finish(hex); return hex;
+}
+static const char state_archive_revision[] = "DOSBox-X original-state revision 2";
+
 #include "vs/zlib/contrib/minizip/zip.c"
 #include "vs/zlib/contrib/minizip/unzip.c"
 #include "vs/zlib/contrib/minizip/ioapi.c"
@@ -376,9 +422,23 @@ SaveState& SaveState::instance() {
 
 static bool save_state_frontier();
 
+static std::map<std::string,std::string> state_identity() {
+    return {{"Archive_Revision",state_archive_revision},
+            {"Build_Identity",state_build_identity()},
+            {"Config_Identity",state_config_identity()}};
+}
+
 // Both transports use this single original-engine traversal. Member integrity
 // is checked before the first owner; semantic owner prevalidation remains R4.
 bool SaveState::capture(Output &output) const {
+    for (const auto &item : state_identity()) {
+        if (item.second.empty()) return false;
+        auto *stream=output.open(item.first);
+        if (!stream) return false;
+        *stream << item.second;
+        const bool complete=bool(*stream);
+        if (!output.close() || !complete) return false;
+    }
     for (const auto &entry : components) {
         auto *stream = output.open(entry.first);
         if (!stream) return false;
@@ -389,6 +449,16 @@ bool SaveState::capture(Output &output) const {
     return true;
 }
 bool SaveState::install(Input &input) const {
+    for (const auto &item : state_identity()) {
+        if (item.second.empty() || !input.verify(item.first)) return false;
+        auto *stream=input.open(item.first);
+        if (!stream) return false;
+        std::string actual(item.second.size(),'\0');
+        stream->read(&actual[0],actual.size());
+        const bool match=bool(*stream) && actual==item.second &&
+            stream->peek()==std::char_traits<char>::eof();
+        if (!input.close() || !match) return false;
+    }
     for (const auto &entry : components)
         if (!input.verify(entry.first)) return false;
 #if C_DEBUG && C_DEBUG_LUA
@@ -415,6 +485,9 @@ bool SaveState::install(Input &input) const {
         if (started) E_Exit("State installation failed after live state may have changed");
         return false;
     }
+#if C_DEBUG
+    DEBUG_StateInstalled();
+#endif
     return true;
 }
 struct SaveState::MemoryOutput final : Output {
@@ -461,7 +534,7 @@ bool SaveState::checkpointSave(Checkpoint &parts, size_t limit) {
 }
 
 bool SaveState::checkpointLoad(const Checkpoint &parts) {
-    if (!save_state_frontier() || parts.size()!=components.size()) return false;
+    if (!save_state_frontier() || parts.size()!=components.size()+state_identity().size()) return false;
     MemoryInput input(parts);
     return install(input);
 }
@@ -578,7 +651,26 @@ static bool save_state_frontier() {
     }
     return true;
 }
-void SaveState::save(size_t slot) { (void)saveTo(slot, nullptr); }
+void SaveState::save(size_t slot) {
+    std::string remark = auto_save_state ? "Auto-save" : "";
+#if !defined(HX_DOS)
+    if (!auto_save_state && !noremark_save_state) {
+        const bool fs=GFX_IsFullscreen();
+        if (fs) GFX_SwitchFullScreen();
+        MAPPER_ReleaseAllKeys(); GFX_LosingFocus(); GFX_ReleaseMouse();
+        const char *text=tinyfd_inputBox("Save state", "Optional remark (30 characters maximum)", " ");
+        if (text) remark=std::string(text).substr(0,30);
+        MAPPER_ReleaseAllKeys(); GFX_LosingFocus();
+        if (fs && !GFX_IsFullscreen()) GFX_SwitchFullScreen();
+        if (!text) return;
+    }
+#endif
+#if C_DEBUG
+    if (!DEBUG_NativeStateSlot(slot,false,remark)) LOG_MSG("Slot save refused or failed");
+#else
+    if (!saveTo(slot,nullptr,nullptr,nullptr,remark)) LOG_MSG("Slot save refused or failed");
+#endif
+}
 bool SaveState::saveFile(const std::string &path) { return saveTo(0, &path); }
 bool SaveState::saveFile(const std::string &path, StateArchive::Effects &effects,
                          const StateArchive::Budget *budget) {
@@ -586,7 +678,7 @@ bool SaveState::saveFile(const std::string &path, StateArchive::Effects &effects
     return saveTo(0, &path, &effects, budget);
 }
 bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects,
-                       const StateArchive::Budget *budget) {
+                       const StateArchive::Budget *budget, const std::string &remark) {
     const auto expired = [&]() {
         if (!budget || !budget->expired()) return false;
         if (effects) effects->timed_out = true;
@@ -598,41 +690,11 @@ bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive
 	bool save_err=false;
 	if((MEM_TotalPages()*4096/1024/1024)>1024) {
 		LOG_MSG("Stopped. 1 GB is the maximum memory size for saving/loading states.");
-		if (destination) LOG_MSG("Unsupported memory size for saving states.");
-		else notifyError("Unsupported memory size for saving states.", false);
+		LOG_MSG("Unsupported memory size for saving states.");
 		return false;
 	}
 	bool compresssaveparts = static_cast<Section_prop *>(control->GetSection("dosbox"))->Get_bool("compresssaveparts");
-	const char *save_remark = "";
-#if !defined(HX_DOS)
-	if (auto_save_state)
-		save_remark = "Auto-save";
-	else if (!destination && !noremark_save_state) {
-		/* NTS: tinyfd_inputBox() returns a string from an internal statically declared char array.
-		 *      It is not necessary to free the return string, but it is important to understand that
-		 *      the next call to tinyfd_inputBox() will obliterate the previously returned string.
-		 *      See src/libs/tinyfiledialogs/tinyfiledialogs.c line 5069 --J.C. */
-		/* NTS: The code was originally written to declare save_remark as char* default assigned to string
-		 *      constant "", but GCC (rightfully so) complains you're pointing char* at something that
-		 *      is stored const by the compiler. "save_remark" is not modified past this point, so it
-		 *      has been changed to const char* and the return value of tinyfd_inputBox() is given to
-		 *      a local temporary char* string where the modification can be made, and *then* assigned
-		 *      to the const char* string for the rest of this function. */
-		bool fs=GFX_IsFullscreen();
-		if (fs) GFX_SwitchFullScreen();
-		MAPPER_ReleaseAllKeys();
-		GFX_LosingFocus();
-		GFX_ReleaseMouse();
-		char *new_remark = tinyfd_inputBox("Save state", "Please enter remark for the state (optional; 30 characters maximum). Click the Cancel button to cancel the saving.", " ");
-		MAPPER_ReleaseAllKeys();
-		GFX_LosingFocus();
-		if (fs&&!GFX_IsFullscreen()) GFX_SwitchFullScreen();
-		if (new_remark==NULL) return false;
-		new_remark=trim(new_remark);
-		if (strlen(new_remark)>30) new_remark[30]=0;
-		save_remark = new_remark;
-	}
-#endif
+	const char *save_remark = remark.c_str();
 	int errclose;
 	std::string path;
 	bool Get_Custom_SaveDir(std::string& savedir);
@@ -660,6 +722,7 @@ bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive
 		    zf = zipOpen2_64(save.c_str(),APPEND_STATUS_CREATE,&global_comment,&ffunc);
 	}
 	if (zf == NULL) { save_err = true; goto done; }
+
 
 	{
 		zip_fileinfo zi; zipSetCurrentTime(zi);
@@ -749,8 +812,7 @@ done:
     if (!save_err && !output.publish()) save_err = true;
 
 	if (save_err) {
-        if (destination) LOG_MSG("%s", MSG_Get("SAVE_FAILED"));
-        else notifyError(MSG_Get("SAVE_FAILED"));
+        LOG_MSG("%s", MSG_Get("SAVE_FAILED"));
     }
 	else
 		LOG_MSG("[%s]: Saved. (Slot %d)", getTime().c_str(), (int)slot+1);
@@ -774,19 +836,24 @@ bool loadstateconfirm(int ind) {
 	return ret;
 }
 
-void SaveState::load(size_t slot) const { (void)loadFrom(slot, nullptr); }
+void SaveState::load(size_t slot) const {
+#if C_DEBUG
+    if (!DEBUG_NativeStateSlot(slot,true,"")) LOG_MSG("Slot load refused or failed");
+#else
+    (void)loadFrom(slot,nullptr);
+#endif
+}
 bool SaveState::loadFile(const std::string &path) const { return loadFrom(0, &path); }
 bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw (Error)
     // Explicit native operations must return a refusal, never enter modal UI
-    // or let force-load bypass incompatible metadata. Slot UI keeps its policy.
+    // or let force-load bypass incompatible metadata, including slot callers.
     if (!save_state_frontier()) { LOG_MSG("Load refused: unsafe native continuation"); return false; }
 	//	if (isEmpty(slot)) return;
 	bool load_err=false;
 	bool installation_started=false;
 	if((MEM_TotalPages()*4096/1024/1024)>1024) {
 		LOG_MSG("Stopped. 1 GB is the maximum memory size for saving/loading states.");
-		if (source) LOG_MSG("Unsupported memory size for loading states.");
-		else notifyError("Unsupported memory size for loading states.", false);
+		LOG_MSG("Unsupported memory size for loading states.");
 		return false;
 	}
 	std::string path;
@@ -806,8 +873,7 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 	check_slot.open(save.c_str(), std::ifstream::in);
 	if(check_slot.fail()) {
 		LOG_MSG("No saved slot - %d (%s)",(int)slot+1,save.c_str());
-        if (source) LOG_MSG("The selected save file is currently empty or unavailable.");
-        else notifyError(use_save_file&&savefilename.size()?"The selected save file is currently empty.":"The selected save slot is an empty slot.", false);
+        LOG_MSG("The selected save file is currently empty or unavailable.");
 		load_err=true;
 		return false;
 	}
@@ -826,6 +892,7 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 		zf = unzOpen2_64(save.c_str(),&ffunc);
 	}
 	if (zf == NULL) { load_err=true; goto done; }
+
 
 	// Integrity only; owner semantic/resource validation remains separate.
 	{
@@ -852,7 +919,7 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 		if (strcasecmp(buffer,emulatorversion.c_str())) {
 			loadstate_detail_saved = strlen(buffer) ? std::string(buffer) : std::string("(none)");
 			loadstate_detail_current = emulatorversion;
-			if(source || (!force_load_state&&!loadstateconfirm(0))) {
+			if (true) {
 				LOG_MSG("Aborted. Check your DOSBox-X version: %s",buffer);
 				load_err=true;
 				goto done;
@@ -875,21 +942,10 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 			buffer[length]='\0';
 			loadstate_detail_saved = length ? std::string(buffer) : std::string("(none)");
 			loadstate_detail_current = RunningProgram.empty() ? std::string("(none)") : RunningProgram;
-			if(source || (!force_load_state&&!loadstateconfirm(1))) {
+			if (true) {
 				LOG_MSG("Aborted. Check your program name: %s",buffer);
 				load_err=true;
 				goto done;
-			}
-			if (length<9) {
-				static char pname[9];
-				if (length) {
-					strncpy(pname,buffer,length);
-					pname[length]=0;
-				} else
-					strcpy(pname, "DOSBOX-X");
-				RunningProgram=pname;
-				void GFX_SetTitle(int32_t cycles, int frameskip, Bits timing, bool paused);
-				GFX_SetTitle(-1,-1,-1,false);
 			}
 		}
 
@@ -918,7 +974,7 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 				snprintf(tmp,sizeof(tmp),"%d MB",current_mb);
 				loadstate_detail_current = tmp;
 			}
-			if(source || (!force_load_state&&!loadstateconfirm(2))) {
+			if (true) {
 				LOG_MSG("Aborted. Check your memory size: %s pages", buffer);
 				load_err=true;
 				goto done;
@@ -943,7 +999,7 @@ bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw
 			buffer[length]='\0';
 			loadstate_detail_saved = length ? std::string(buffer) : std::string("(none)");
 			loadstate_detail_current = std::string(str);
-			if(source || (!force_load_state&&!loadstateconfirm(3))) {
+			if (true) {
 				LOG_MSG("Aborted. Check your machine type: %s",buffer);
 				load_err=true;
 				goto done;

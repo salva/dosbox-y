@@ -91,6 +91,8 @@ bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeD
                                     NativeControl::Lease held);
 // Synchronous original-engine operation under the selected native stop/lease.
 // A successful restore retires the supplied context before returning.
+void DEBUG_StateInstalled();
+bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark);
 bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
                            const std::string &path, bool load,
                            StateArchive::Effects *effects = nullptr,

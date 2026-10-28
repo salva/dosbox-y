@@ -1,6 +1,6 @@
 # Main Makefile for DOSBox-X
 
-EXTRA_DIST = autogen.sh
+EXTRA_DIST = autogen.sh scripts/state-build-identity.py
 SUBDIRS = src include
 
 if MACOSX

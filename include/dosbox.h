@@ -394,6 +394,7 @@ public:
     void registerComponent(const std::string& uniqueName, Component& comp); //comp must have global lifetime!
 
 private:
+    friend bool DEBUG_NativeStateSlot(size_t, bool, const std::string &);
     // Thin storage adapters own member streams and settlement. The engine alone
     // traverses components, invokes codecs and defines fatal install boundaries.
     struct Output {
@@ -414,7 +415,7 @@ private:
     bool capture(Output &) const;
     bool install(Input &) const;
     bool saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects = nullptr,
-                const StateArchive::Budget *budget = nullptr);
+                const StateArchive::Budget *budget = nullptr, const std::string &remark = "");
     bool loadFrom(size_t slot, const std::string *source) const;
     SaveState() {}
     SaveState(const SaveState&);

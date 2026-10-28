@@ -2357,7 +2357,7 @@ int LiveCheckpoint(lua_State *L) {
                 E_Exit("Restored checkpoint cannot rebase native tasks");
             if(!Debugger_LiveCheckpointStop(owner.token))
                 E_Exit("Restored checkpoint cannot establish native stop");
-            ++checkpoint_epoch; checkpoint_owner=owner.token;checkpoint_restored=true;
+            // Common original-owner installation marked the restored owner.
         }
     }
     }
@@ -3134,6 +3134,11 @@ bool Debugger_LuaPredicateChannelHealthy() {
         Debugger_LiveError();
     }
     return healthy;
+}
+void Debugger_LuaStateInstalled() {
+    ++checkpoint_epoch;
+    checkpoint_owner=DOSBOX_MachineServiceOwner().token;
+    checkpoint_restored=true;
 }
 bool Debugger_LuaCheckpointOwnerMustDispose(uint64_t token) {
     return (checkpoint_restored && token==checkpoint_owner) || (token && token==lean_loaded_owner);

@@ -1392,8 +1392,16 @@ void CBreakpoint::RetireMachineOwner(uint64_t token)
 
 static void DEBUG_ExecutionOwnerDeparting(uint64_t token);
 static bool checkpoint_owner_disposed=false;
+static uint64_t archive_restored_owner=0;
+void DEBUG_StateInstalled() {
+    archive_restored_owner=DOSBOX_MachineServiceOwner().token;
+#if C_DEBUG_LUA
+    Debugger_LuaStateInstalled();
+#endif
+}
 void DEBUG_MachineOwnerReturning(uint64_t token)
 {
+    if (token && token==archive_restored_owner) throw 1;
 #if C_DEBUG_LUA
     // Throw before Scope destruction: never throw from the departure callback.
     // A restored guest cannot return into its suspended native EXEC caller.
@@ -1405,6 +1413,10 @@ void DEBUG_MachineOwnerDeparting(uint64_t token)
 {
     // Native resources retire on exact machine unwind, irrespective of the
     // structured-RPC projection (including Failed). Never pump the server here.
+    if (token && token==archive_restored_owner) {
+        checkpoint_owner_disposed=true;
+        archive_restored_owner=0;
+    }
     CBreakpoint::RetireMachineOwner(token);
     DEBUG_ExecutionOwnerDeparting(token);
 #if C_HEAVY_DEBUG && defined(C_DOSBOX_AGENT)
@@ -5617,6 +5629,23 @@ bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeD
                                     NativeControl::Lease held) {
     return DEBUG_AdmitNativeState(attachment,expected,&held) &&
         native_execution.checkpointChanged(expected);
+}
+bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark) {
+    const auto attachment=DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0);
+    const auto expected=DEBUG_NativeExecutionContext();
+    if (!DEBUG_AdmitNativeState(attachment,expected)) return false;
+    const auto current=DOSBOX_MachineServiceOwner();
+    if (NativeControl::owner().acquire({expected.invocation,expected.checkpoint},current,
+        DOSBOX_MachineServiceRelation(expected.invocation),expected.checkpoint,true)!=NativeControl::Admission::ok)
+        return false;
+    const auto lease=NativeControl::owner().lease();
+    struct Release { NativeControl::Lease lease;
+        ~Release(){NativeControl::owner().release(lease);} } release{lease};
+    const bool success=load ? SaveState::instance().loadFrom(slot,nullptr) :
+        SaveState::instance().saveTo(slot,nullptr,nullptr,nullptr,remark);
+    if (success && load && !DEBUG_AdvanceNativeStateContext(attachment,expected,lease))
+        E_Exit("Restored slot cannot retire prior native context");
+    return success;
 }
 bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
                            const std::string &path, bool load, StateArchive::Effects *effects,

@@ -19,6 +19,9 @@ adapters=header[header.index('    struct Output {'):header.index('    bool saveT
 #include <cstdio>
 #include "src/misc/state_checkpoint_stream.h"
 #define C_DEBUG 0
+static std::map<std::string,std::string> state_identity() {
+ return {{"Archive_Revision","test-revision"},{"Build_Identity","test-build"},{"Config_Identity","test-config"}};
+}
 static bool frontier_ready=true;
 static bool save_state_frontier() {return frontier_ready;}
 struct Fatal {};
@@ -43,18 +46,24 @@ struct Counter:SaveState::Component {
 int main() {
  StateCheckpointStream buffer(2);std::ostream out(&buffer);
  out<<'a'<<'b'<<'c';assert(!out);assert(buffer.failed());out.clear();out<<'x';assert(!out);assert(buffer.take()=="ab");
+ const size_t capacity=8+std::string("test-revisiontest-buildtest-config").size();
  SaveState state;Counter a,b;
  state.components.emplace("a",SaveState::Entry{a});state.components.emplace("b",SaveState::Entry{b});
  SaveState::Checkpoint parts={{"prior","unchanged"}};
- frontier_ready=false;assert(!state.checkpointSave(parts,8));assert(parts.at("prior")=="unchanged");
+ frontier_ready=false;assert(!state.checkpointSave(parts,capacity));assert(parts.at("prior")=="unchanged");
  SaveState::Checkpoint valid={{"a",std::string(sizeof(int),'x')},{"b",std::string(sizeof(int),'x')}};
  assert(!state.checkpointLoad(valid));assert(!a.installs && !b.installs);frontier_ready=true;
- assert(!state.checkpointSave(parts,7));assert(parts.at("prior")=="unchanged");
- b.clear_failure=true;assert(!state.checkpointSave(parts,7));assert(parts.at("prior")=="unchanged");b.clear_failure=false;
- b.fatal_capture=true;bool escaped=false;try {state.checkpointSave(parts,8);}catch(int){escaped=true;}
+ assert(!state.checkpointSave(parts,capacity-1));assert(parts.at("prior")=="unchanged");
+ b.clear_failure=true;assert(!state.checkpointSave(parts,capacity-1));assert(parts.at("prior")=="unchanged");b.clear_failure=false;
+ b.fatal_capture=true;bool escaped=false;try {state.checkpointSave(parts,capacity);}catch(int){escaped=true;}
  assert(escaped && parts.at("prior")=="unchanged");b.fatal_capture=false;
- b.fail=true;assert(!state.checkpointSave(parts,8));assert(parts.at("prior")=="unchanged");
- b.fail=false;assert(state.checkpointSave(parts,8));assert(parts.size()==2);
+ b.fail=true;assert(!state.checkpointSave(parts,capacity));assert(parts.at("prior")=="unchanged");
+ b.fail=false;assert(state.checkpointSave(parts,capacity));assert(parts.size()==5);
+ auto count_before=a.installs;
+ for (const auto &identity:state_identity()) {
+  auto wrong=parts;wrong[identity.first]="mismatch";
+  assert(!state.checkpointLoad(wrong));assert(a.installs==count_before);
+ }
  a.value=1;b.value=2;assert(state.checkpointLoad(parts));assert(a.value==42 && b.value==42);
  auto missing=parts;missing.erase("b");auto count=a.installs;
  assert(!state.checkpointLoad(missing));assert(a.installs==count);

@@ -5,6 +5,7 @@ root.mkdir(exist_ok=True)
 w = pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root))
 binary = pathlib.Path(os.environ.get('DOSBOX_TEST_BINARY','src/dosbox-x')).resolve()
 (w/'TINY.COM').write_bytes(bytes.fromhex('90 40 eb fc'))
+slot_mode=bool(os.environ.get('DOSBOX_TEST_SLOT'))
 file_state = bool(os.environ.get('DOSBOX_TEST_FILE_STATE'))
 if file_state:
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('file-state.asm')),'-o',str(w/'TINY.COM')],check=True)
@@ -28,15 +29,18 @@ layout = subprocess.check_output(['gdb','-batch','-ex','p '+size_expr,'-ex','p s
 cpu_prefix, memory_descriptor = map(int,re.findall(r'\$\d+ = (\d+)',layout))
 print(w, flush=True)
 def run(restore):
- d=w/('fatal' if restore == 'fatal' else 'restore' if restore else 'capture');d.mkdir()
+ d=w/(restore if isinstance(restore,str) else 'restore' if restore else 'capture');d.mkdir()
  listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(20)
  flag_command = 'flagsave FLAG.TXT\n' if flagged else ''
  conf=d/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[autoexec]\nmount c {w}\nc:\n{flag_command}debugbox TINY.COM\n')
+ if slot_mode: conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nsaveremark=false\n'))
  xr,xw=os.pipe();xlog=open(d/'xvfb.log','wb');x=subprocess.Popen(['Xvfb','-displayfd',str(xw),'-screen','0','1024x768x24'],pass_fds=(xw,),stdout=xlog,stderr=xlog);os.close(xw)
  with os.fdopen(xr) as pipe: display=pipe.readline().strip()
  master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',50,160,0,0));os.set_blocking(master,False)
  log=open(d/'pty.log','wb');wire=open(d/'wire.log','wb')
- argv=[str(binary),'-conf',str(conf)]
+ if restore == 'config': conf.write_text(conf.read_text().replace('cycles=fixed 3000','cycles=fixed 3001'))
+ consumer = pathlib.Path(os.environ['DOSBOX_TEST_OTHER_BINARY']) if restore == 'build' else binary
+ argv=[str(consumer),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
  if os.environ.get('DOSBOX_SAVE_BACKTRACE'):
   argv=['gdb','-batch','-ex','break '+os.environ['DOSBOX_SAVE_BACKTRACE'],'-ex','run','-ex','bt','-ex','continue','--args']+argv
  p=subprocess.Popen(argv,stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,DISPLAY=':'+display,TERM='xterm',SDL_AUDIODRIVER='dummy'));os.close(slave)
@@ -72,6 +76,53 @@ def run(restore):
  try:
   conn,_=listener.accept();conn.setblocking(False)
   time.sleep(2);drain()
+  if slot_mode:
+   import runpy, shutil
+   sendkey=runpy.run_path(str(pathlib.Path(__file__).with_name('slot-keys.py')))['key']
+   # Bridge departure is required before the Interactive slot owns admission.
+   request('pre-slot',f'STATEWRITE {d}/before-slot.sav')
+   address=listener.getsockname();listener.close();conn.close();conn=None
+   time.sleep(2);drain()
+   sendkey(':'+display,'s')
+   deadline=time.monotonic()+15
+   while not (d/'1.sav').exists() and time.monotonic()<deadline: time.sleep(.1);drain()
+   assert (d/'1.sav').exists(),(d/'pty.log').read_bytes()[-3000:]
+   time.sleep(1);drain()
+   shutil.copyfile(d/'1.sav',d/'slot-before.sav')
+   sendkey(':'+display,'l');time.sleep(2);drain()
+   text=(d/'pty.log').read_bytes()
+   assert b'Loading state from slot' in text and b'Slot load refused' not in text,text[-4000:]
+   # Capture installed state through a second slot save, still stopped.
+   sendkey(':'+display,'s');time.sleep(2);drain()
+   with zipfile.ZipFile(d/'slot-before.sav') as before, zipfile.ZipFile(d/'1.sav') as after:
+    for name in ('Archive_Revision','Build_Identity','Config_Identity'):
+     assert before.read(name)==after.read(name),('slot restore changed held state',name)
+    assert before.read('CPU')[:cpu_prefix]==after.read('CPU')[:cpu_prefix]
+    assert before.read('Memory')[memory_descriptor:]==after.read('Memory')[memory_descriptor:]
+   shutil.copyfile(d/'1.sav',d/'refusal-before.sav')
+   # Corrupt identity with valid ZIP CRC: slot ingress must refuse, no dialog.
+   bad=d/'bad.sav'
+   with zipfile.ZipFile(d/'1.sav') as original, zipfile.ZipFile(bad,'w') as changed:
+    for name in original.namelist(): changed.writestr(name,b'bad-revision' if name=='Archive_Revision' else original.read(name))
+   shutil.copyfile(bad,d/'1.sav')
+   sendkey(':'+display,'l');time.sleep(2);drain()
+   assert b'Slot load refused or failed' in (d/'pty.log').read_bytes()
+   sendkey(':'+display,'s');time.sleep(2);drain()
+   with zipfile.ZipFile(d/'refusal-before.sav') as before, zipfile.ZipFile(d/'1.sav') as after:
+    for name in before.namelist():
+     # Mapper key/focus presentation legitimately changes keyboard input state.
+     if name not in ('Time_Stamp','Keyboard'): assert before.read(name)==after.read(name),('slot refusal changed owner',name)
+   return
+  if restore in ('config','build'):
+   request('before',f'STATEWRITE {d}/before.sav')
+   request('identity-refusal',f'STATEREAD {w}/first.sav',expect_failure=True)
+   request('after',f'STATEWRITE {d}/after.sav')
+   with zipfile.ZipFile(d/'before.sav') as before, zipfile.ZipFile(d/'after.sav') as after, zipfile.ZipFile(w/'first.sav') as producer:
+    field = 'Build_Identity' if restore == 'build' else 'Config_Identity'
+    assert before.read(field) != producer.read(field), 'not a real producer/consumer mismatch'
+    for name in before.namelist():
+     if name != 'Time_Stamp': assert before.read(name) == after.read(name), ('identity refusal changed owner',name)
+   return
   if restore == 'fatal':
    # Valid transport, invalid consumed owner: preceding owners may have effects.
    bad = w/'short-pic.sav'
@@ -114,7 +165,7 @@ def run(restore):
    request('before-refusals',f'STATEWRITE {w}/before-refusals.sav')
    request('missing-path',f'STATEREAD {w}/absent.sav',expect_failure=True)
    request('invalid-destination',f'STATEWRITE {w}/absent-directory/state.sav',expect_failure=True)
-   for field in ('DOSBox-X_Version', 'Program_Name', 'Memory_Size', 'Machine_Type'):
+   for field in ('Archive_Revision', 'Build_Identity', 'Config_Identity', 'DOSBox-X_Version', 'Program_Name', 'Memory_Size', 'Machine_Type'):
     bad = w / (field + '.sav')
     with zipfile.ZipFile(w/'first.sav') as original, zipfile.ZipFile(bad, 'w') as changed:
      for name in original.namelist():
@@ -190,9 +241,14 @@ def run(restore):
   except subprocess.TimeoutExpired:p.kill();p.wait()
   drain();os.close(master);log.close();wire.close();listener.close();x.terminate();x.wait(timeout=5);xlog.close()
 run(False)
+if slot_mode:
+ print('slot mapper probe completed',flush=True)
+ raise SystemExit(0)
 if flagged:
  (w/'FLAG.TXT').write_bytes(b'changed between processes\r\n')
 run(True)
+run('config')
+if os.environ.get('DOSBOX_TEST_OTHER_BINARY'): run('build')
 run('fatal')
 # Same-process host delay must not change any owner payload. Fresh-process
 # archives contain process-local addresses in legacy owners; do not mistake
@@ -217,5 +273,5 @@ with zipfile.ZipFile(w/'restored.sav') as restored, zipfile.ZipFile(w/'restored-
   assert first.read(name) == restored.read(name), name
  assert first.read('CPU')[:cpu_prefix] == restored.read('CPU')[:cpu_prefix], 'CPU architectural/cycle state'
  assert first.read('Memory')[memory_descriptor:] == restored.read('Memory')[memory_descriptor:], 'guest RAM/handles/page identities'
-(w/'receipt.json').write_text(json.dumps({'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(), 'cpu_prefix':cpu_prefix, 'memory_descriptor':memory_descriptor, 'changed_flagged_content_preserved':flagged, 'real_dos_file_cursor_error_directory_witness':file_state, 'probe_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(), 'checks':['valid-CRC truncated Pic causes connection EOF, E_Exit and nonzero process disposal (exit cleanup quality unqualified)','missing source and invalid destination return ERR without modal UI','four explicit metadata and missing/CRC-corrupt owner refusals without changed owner payloads','repeated completed saves','fresh stopped restore/re-save','host delay payload equality before/after restore','fresh CPU architectural/cycle prefix equality','fresh guest RAM/handle/page identity equality','fresh Pic/IntTimer10 equality','explicit one-step CS:IP/AX/BX']},indent=2))
+(w/'receipt.json').write_text(json.dumps({'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(), 'cpu_prefix':cpu_prefix, 'memory_descriptor':memory_descriptor, 'changed_flagged_content_preserved':flagged, 'real_dos_file_cursor_error_directory_witness':file_state, 'probe_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(), 'checks':['valid-CRC truncated Pic causes connection EOF, E_Exit and nonzero process disposal (exit cleanup quality unqualified)','missing source and invalid destination return ERR without modal UI','seven revision/build/config/legacy metadata and missing/CRC-corrupt owner refusals without changed owner payloads','repeated completed saves','fresh stopped restore/re-save','host delay payload equality before/after restore','fresh CPU architectural/cycle prefix equality','fresh guest RAM/handle/page identity equality','fresh Pic/IntTimer10 equality','explicit one-step CS:IP/AX/BX']},indent=2))
 print('stopped save and consumed-owner fatal-disposal probe completed (exit cleanup/device/resource qualification remains)',flush=True)
