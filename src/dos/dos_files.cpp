@@ -3081,9 +3081,8 @@ void POD_Load_DOS_Files( std::istream& stream )
 				continue;
 			}
 
-			// Detach any live pre-restore file object from this slot before loading
-			// the saved entry. Closing/deleting the current object here can crash
-			// during same-session restore for active protected-mode titles.
+			// Retire local host handles without guest timestamp callbacks or old
+			// metadata. Other owner families retain their existing detach policy.
 			if( Files[lcv] && Files[lcv]->GetName() != NULL ) {
 				// invalid file state - abort
 				if( strcmp( Files[lcv]->GetName(), "NUL" ) == 0 ||
@@ -3093,7 +3092,13 @@ void POD_Load_DOS_Files( std::istream& stream )
 				    strcmp( Files[lcv]->GetName(), "AUX" ) == 0 ||
 				    strcmp( Files[lcv]->GetName(), "EMMXXXX0" ) == 0 )
 					E_Exit("Save-state DOS system file slot mismatch");
-				Files[lcv]=nullptr;
+				if (auto *local = dynamic_cast<LocalFile *>(Files[lcv])) {
+					const bool closed = local->CloseForStateRestore();
+					delete local;
+					Files[lcv] = nullptr;
+					if (!closed)
+						E_Exit("Cannot retire pre-restore DOS host file");
+				} else Files[lcv]=nullptr;
 			}
 
 			// ignore NULL file

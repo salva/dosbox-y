@@ -3101,6 +3101,13 @@ bool LocalFile::Seek(uint32_t * pos,uint32_t type) {
 	return true;
 }
 
+bool LocalFile::CloseForStateRestore() {
+    const bool success = !fhandle || fclose(fhandle) == 0;
+    fhandle = nullptr;
+    open = false;
+    return success;
+}
+
 bool LocalFile::Close() {
     bool success = true;
     if (!newtime && fhandle && last_action == WRITE && !UpdateLocalDateTime())

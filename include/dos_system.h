@@ -183,6 +183,8 @@ public:
 	bool Write(const uint8_t * data,uint16_t * size) override;
 	bool Seek(uint32_t * pos,uint32_t type) override;
 	bool Close() override;
+    // Consume a superseded host handle without guest callbacks or old metadata.
+    bool CloseForStateRestore();
 	bool LockFile(uint8_t mode, uint32_t pos, uint16_t size) override;
 	uint16_t GetInformation(void) override;
 	bool UpdateDateTimeFromHost(void) override;

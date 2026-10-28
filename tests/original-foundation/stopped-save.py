@@ -5,7 +5,11 @@ root.mkdir(exist_ok=True)
 w = pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root))
 binary = pathlib.Path(os.environ.get('DOSBOX_TEST_BINARY','src/dosbox-x')).resolve()
 (w/'TINY.COM').write_bytes(bytes.fromhex('90 40 eb fc'))
-flagged = bool(os.environ.get('DOSBOX_TEST_FLAGGED'))
+file_state = bool(os.environ.get('DOSBOX_TEST_FILE_STATE'))
+if file_state:
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('file-state.asm')),'-o',str(w/'TINY.COM')],check=True)
+ for name in ('ONE.DAT', 'TWO.DAT'): (w/name).write_bytes(b'directory witness')
+flagged = file_state or bool(os.environ.get('DOSBOX_TEST_FLAGGED'))
 if flagged:
  (w/'FLAG.TXT').write_bytes(b'captured flagged guest file\r\n')
 # Obtain native wire extents from this exact binary, not guessed pointer offsets.
@@ -93,6 +97,10 @@ def run(restore):
    assert b'terminate called' not in fatal_log, fatal_log[-2000:]
    assert b'State completed' not in buf and b'END fatal' not in buf, buf
    return
+  if file_state:
+   request('checkpoint-bp','BP 0814:0180')
+   request('setup-run','RUN')
+   time.sleep(1);drain()
   if restore:
    request('ready','SR BX 5678')
    unknown = request('unknown-command','NOT_A_DEBUGGER_COMMAND',expect_failure=True)
@@ -135,7 +143,8 @@ def run(restore):
    request('after-refusals',f'STATEWRITE {w}/after-refusals.sav')
    request('load',f'STATEREAD {w}/first.sav')
    if flagged:
-    assert (w/'FLAG.TXT').read_bytes() == b'captured flagged guest file\r\n'
+    assert (w/'FLAG.TXT').read_bytes() == b'changed between processes\r\n'
+    assert not list(w.glob('*.zip')), 'machine save unexpectedly created flagged sidecar'
    request('again',f'STATEWRITE {w}/restored.sav')
    time.sleep(.4)
    request('held',f'STATEWRITE {w}/restored-held.sav')
@@ -144,12 +153,29 @@ def run(restore):
    request('first',f'STATEWRITE {w}/first.sav')
    time.sleep(.4)
    request('second',f'STATEWRITE {w}/second.sav')
+   if flagged:
+    (w/'FLAG.TXT').write_bytes(b'changed between processes\r\n')
    request('same-load',f'STATEREAD {w}/first.sav')
+   if flagged:
+    assert (w/'FLAG.TXT').read_bytes() == b'changed between processes\r\n'
    request('same-again',f'STATEWRITE {w}/same-restored.sav')
    time.sleep(.4)
    request('same-held',f'STATEWRITE {w}/same-restored-held.sav')
-  step = request('step','STEPIN')
-  assert b'CS:IP=0814:0101 AX=1234 BX=0000' in step, step
+  if file_state:
+   request('done-bp','BP 0814:0200')
+   request('witness-run','RUN')
+   time.sleep(1);drain()
+   request('witness-save',f'STATEWRITE {d}/witness.sav')
+   with zipfile.ZipFile(d/'witness.sav') as archive:
+    ram=archive.read('Memory');mark=ram.index(b'R3-FILE-WITNESS!')+len(b'R3-FILE-WITNESS!')
+    result,count,cursor,error,search_error=struct.unpack_from('<5H',ram,mark)
+    assert (result,count,cursor,error,search_error)==(0x1234,4,7,5,18), (result,count,cursor,error,search_error)
+    assert ram[mark+10:mark+14]==b'nged', ram[mark+10:mark+14]
+    assert ram[mark+14:mark+27].split(b'\0')[0] in (b'ONE.DAT',b'TWO.DAT')
+   assert (w/'FLAG.TXT').read_bytes()==b'changed between processes\r\n'
+  else:
+   step = request('step','STEPIN')
+   assert b'CS:IP=0814:0101 AX=1234 BX=0000' in step, step
  finally:
   if conn:conn.close()
   if p.poll() is None:p.terminate()

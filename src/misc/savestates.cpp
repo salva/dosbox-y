@@ -461,8 +461,6 @@ void zipSetCurrentTime(zip_fileinfo &zi) {
 #define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
 #endif
 
-int flagged_backup(char *zip);
-int flagged_restore(char* zip);
 
 int zipOutOpenFile(zipFile zf,const char *zfname,zip_fileinfo &zi,const bool compress) {
 	const int opt_compress_level = compress ? 9 : 0;
@@ -663,10 +661,8 @@ done:
 	}
 
     if (expired()) save_err = true;
-	if (!save_err && !dos_kernel_disabled && flagged_backup((char *)save.c_str()) != 0)
-        save_err = true;
-    // A failed serializer/ZIP close/sidecar must not replace the prior state.
-    // Sidecar publication is separate; failure here can leave a newer sidecar.
+    // Machine archives preserve DOS bookkeeping, not external file contents.
+    // Flag registration does not enroll host files in content rollback.
     if (expired()) save_err = true;
     if (!save_err && !output.publish()) save_err = true;
 
@@ -905,8 +901,6 @@ done:
 	// already have changed; do not publish restore completion or resume.
 	if (load_err && installation_started)
 		E_Exit("Save-state installation failed after live state may have changed");
-	if (!load_err && !dos_kernel_disabled && flagged_restore((char *)save.c_str()) != 0)
-        E_Exit("Save-state flagged file restoration failed after live state changed");
 	if (!load_err) LOG_MSG("[%s]: Loaded. (Slot %d)", getTime().c_str(), (int)slot+1);
     return !load_err;
 }
