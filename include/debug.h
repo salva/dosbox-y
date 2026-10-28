@@ -109,6 +109,7 @@ void DEBUG_AgentTargetTerminated(uint16_t psp);
 bool DEBUG_AgentEndTarget(void);
 bool DEBUG_AgentCanStartTarget(void);
 void DEBUG_MachineOwnerDeparting(uint64_t token);
+void DEBUG_MachineOwnerReturning(uint64_t token);
 // Complete decoder callbacks after debugger request/evaluator unwind.
 Bits DEBUG_DispatchNativeExecution(void);
 bool DEBUG_DeferPredicateInstruction(void);

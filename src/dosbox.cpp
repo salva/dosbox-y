@@ -884,6 +884,9 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
         if (!ret) ret = (Bitu)DEBUG_DispatchNativeExecution();
 #endif
     } while (!ret);
+#if C_DEBUG
+    DEBUG_MachineOwnerReturning(machine_owner.token());
+#endif
 
 #ifdef DEBUG_RECURSION
     if (--runmachine_recursion < 0)

@@ -1391,6 +1391,15 @@ void CBreakpoint::RetireMachineOwner(uint64_t token)
 }
 
 static void DEBUG_ExecutionOwnerDeparting(uint64_t token);
+static bool checkpoint_owner_disposed=false;
+void DEBUG_MachineOwnerReturning(uint64_t token)
+{
+#if C_DEBUG_LUA
+    // Throw before Scope destruction: never throw from the departure callback.
+    // A restored guest cannot return into its suspended native EXEC caller.
+    if (Debugger_LuaCheckpointOwnerMustDispose(token)) throw 1;
+#endif
+}
 void DEBUG_AgentTraceOwnerDeparting(uint64_t token);
 void DEBUG_MachineOwnerDeparting(uint64_t token)
 {
@@ -1403,6 +1412,10 @@ void DEBUG_MachineOwnerDeparting(uint64_t token)
 #endif
 #if C_DEBUG_LUA
     Debugger_ExecutionOwnerDeparting(token);
+    if (Debugger_LuaCheckpointOwnerMustDispose(token)) {
+        checkpoint_owner_disposed=true;
+        Debugger_LuaCheckpointOwnerDeparting(token);
+    }
 #endif
 }
 
@@ -6359,7 +6372,7 @@ void DEBUG_CloseLocalLuaDriver() {
     LocalDriverRetire();
 }
 int DEBUG_LocalLuaDriverExitStatus() {
-    return local_driver_fatal || (local_driver_started && !local_driver_result.completed) ? 1 : 0;
+    return checkpoint_owner_disposed || local_driver_fatal || (local_driver_started && !local_driver_result.completed) ? 1 : 0;
 }
 void DEBUG_LocalLuaDriverShellReturned() {
     if(local_driver_selected_departed) {

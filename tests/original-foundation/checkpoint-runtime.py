@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Real production live checkpoint consumer; private process/display and bounded I/O."""
-import os,pathlib,tempfile,subprocess,pty,fcntl,termios,struct,time,select
+import os,pathlib,tempfile,subprocess,pty,fcntl,termios,struct,time,select,sys
 root=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'checkpoint-runtime'
 root.mkdir(exist_ok=True)
 w=pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root))
-(w/'TINY.COM').write_bytes(bytes.fromhex('40 eb fd'))
-(w/'fixture.conf').write_text(f'[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[dos]\nlfn=false\n[autoexec]\nmount c {w}\nc:\nTINY.COM\n')
+mode=os.environ.get('DOSBOX_TEST_CHECKPOINT_DEPARTURE','')
+assert mode in ('','control','restore','closed')
+(w/'TINY.COM').write_bytes(bytes.fromhex('b9 ff ff 40 e2 fd b8 00 4c cd 21' if mode else '40 eb fd'))
+(w/'fixture.conf').write_text(f'[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[dos]\nlfn=false\n[autoexec]\nmount c {w}\nc:\nTINY.COM\n'+('echo RETURNED>RETURN.TXT\nexit\n' if mode else ''))
 (w/'dispatcher.lua').write_text('''return {
 live_dispatch=function(line) local f,e=load(line,'=fixture'); if not f then return 'ERROR '..e end; local ok,r=pcall(f); return (ok and '' or 'ERROR ')..tostring(r) end,
 live_finish=function(result) return result end
@@ -49,6 +51,28 @@ try:
   assert time.monotonic()<end
   time.sleep(.05)
  assert call('dbg.live.stop(); return true')=='true'
+ if mode:
+  if mode!='control':
+   assert call("close_witness=setmetatable({}, {__gc=function() local f=assert(io.open('CLOSED.TXT','w')); f:write('CLOSED'); f:close() end}); return true")=='true'
+   assert call("assert(dbg.live.checkpoint{op='save',id='a'}.ok); assert(dbg.live.checkpoint{op='load',id='a'}.ok); return true")=='true'
+   assert call('return dbg.live.status().checkpoint_dispose_before_return')=='true'
+  # A natural return may close the carrier before a resume reply is read.
+  os.write(wi,b"dbg.live.resume(); return 'resumed'\n")
+  if mode=='closed':os.close(wi);wi=-1
+  end=time.monotonic()+12
+  while p.poll() is None:
+   drain();assert time.monotonic()<end,('natural departure timeout',w);time.sleep(.02)
+  drain()
+  marker=w/'RETURN.TXT'
+  if mode=='control':
+   assert p.returncode==0 and marker.read_text().strip()=='RETURNED',(p.returncode,w)
+  else:
+   assert p.returncode==1 and not marker.exists(),(p.returncode,w)
+   assert 'restored owner disposed before native return' in (w/'pty.log').read_text(errors='replace'),w
+   assert (w/'CLOSED.TXT').read_text()=='CLOSED',w
+   assert 'persistent state closed' in (w/'pty.log').read_text(errors='replace'),w
+  print('natural departure '+mode+' PASS exit='+str(p.returncode),flush=True)
+  sys.exit(0)
  assert call("local r=dbg.live.checkpoint{op='load',id='missing'}; assert(not r.ok); return r.error")=='checkpoint owner/PSP/mount mismatch or missing'
  assert call("local r=dbg.live.checkpoint{op='save',id='a'}; assert(r.ok,r.error); return r.ok")=='true'
  saved=call("return dbg.reg('AX')")
@@ -72,5 +96,6 @@ finally:
  try:p.wait(timeout=5)
  except subprocess.TimeoutExpired:p.kill();p.wait()
  drain();x.terminate();x.wait(timeout=5)
- for fd in (wi,ro,master):os.close(fd)
+ for fd in (wi,ro,master):
+  if fd>=0:os.close(fd)
  log.close();wire.close();xl.close()

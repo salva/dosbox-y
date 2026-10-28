@@ -3139,6 +3139,24 @@ bool Debugger_LuaCheckpointOwnerMustDispose(uint64_t token) {
     return (checkpoint_restored && token==checkpoint_owner) || (token && token==lean_loaded_owner);
 }
 bool Debugger_LuaCheckpointPoisoned(uint64_t token) {return token && token==lean_poison_owner;}
+void Debugger_LuaCheckpointOwnerDeparting(uint64_t token) {
+    if(!Debugger_LuaCheckpointOwnerMustDispose(token))return;
+    // Native execution has retired. No guest or transport dispatch at this fence.
+    assert(!live_active && !predicate_active && !predicate_closing);
+    LeanSettle("checkpoint_owner_departed");
+    live_failed=true;live_have_line=false;
+    live_dispatch_thread=nullptr;live_dispatch_ref=LUA_NOREF;live_phase_operation=0;
+    PredicateReleaseRegistrations();
+    if(live_lua) {
+        predicate_closing=true;lua_close(live_lua);predicate_closing=false;
+        live_lua=nullptr;predicate_state=nullptr;
+    }
+    close_pending=false;
+    if(DEBUG_DetachNativeExecution(live_attachment)){live_attachment={};local_attachment={};}
+    live_checkpoints.clear();
+    fprintf(stderr,"Lua checkpoint: restored owner disposed before native return (epoch=%llu); persistent state closed\n",
+            (unsigned long long)checkpoint_epoch);
+}
 // Called only after the installing service has unwound, before frame disposal.
 // No guest loop/device/input servicing occurs in this bounded host-only phase.
 bool Debugger_LuaCheckpointDrainPending(uint64_t token) {
