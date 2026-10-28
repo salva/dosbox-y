@@ -12,20 +12,12 @@ org 100h
     mov dx, 3
     int 21h
     jc fail
-    mov dx, dta
-    mov ah, 1ah
-    int 21h
-    mov dx, pattern
-    xor cx, cx
-    mov ah, 4eh
-    int 21h
-    jc fail
     jmp checkpoint
 fail:
     mov word [result], 0ffffh
     jmp done
  times 80h-($-$$) db 90h
-checkpoint: ; IP 0180, held with open file at offset 3 and an active search
+checkpoint: ; IP 0180, held with open file at offset 3
     mov bx, [handle]
     mov dx, payload
     mov cx, 4
@@ -48,6 +40,20 @@ checkpoint: ; IP 0180, held with open file at offset 3 and an active search
     int 21h
     jnc fail
     mov [error], ax
+    ; Start a new enumeration of the current host directory after restore.
+    ; Persisting an already active native search is separate parent owner work.
+    mov dx, dta
+    mov ah, 1ah
+    int 21h
+    mov dx, pattern
+    xor cx, cx
+    mov ah, 4eh
+    int 21h
+    jc fail
+    mov si, dta+30
+    mov di, firstname
+    mov cx, 13
+    rep movsb
     mov ah, 4fh
     int 21h
     jc fail
@@ -62,8 +68,8 @@ checkpoint: ; IP 0180, held with open file at offset 3 and an active search
     mov [search_error], ax
     mov word [result], 1234h
     jmp done
- times 100h-($-$$) db 90h
-done: jmp done ; IP 0200
+ times 108h-($-$) db 90h
+done: jmp done ; IP 0208
  times 110h-($-$) db 0
  db 'R3-FILE-WITNESS!'
 result: dw 0
@@ -73,6 +79,7 @@ error: dw 0
 search_error: dw 0
 payload: times 4 db 0
 nextname: times 13 db 0
+firstname: times 13 db 0
 handle: dw 0
 filename: db 'FLAG.TXT',0
 pattern: db '*.DAT',0

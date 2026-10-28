@@ -144,7 +144,7 @@ def run(restore):
    request('load',f'STATEREAD {w}/first.sav')
    if flagged:
     assert (w/'FLAG.TXT').read_bytes() == b'changed between processes\r\n'
-    assert not list(w.glob('*.zip')), 'machine save unexpectedly created flagged sidecar'
+    assert not (w/'first.dat').exists(), 'machine save unexpectedly created flagged sidecar'
    request('again',f'STATEWRITE {w}/restored.sav')
    time.sleep(.4)
    request('held',f'STATEWRITE {w}/restored-held.sav')
@@ -162,7 +162,7 @@ def run(restore):
    time.sleep(.4)
    request('same-held',f'STATEWRITE {w}/same-restored-held.sav')
   if file_state:
-   request('done-bp','BP 0814:0200')
+   request('done-bp','BP 0814:0208')
    request('witness-run','RUN')
    time.sleep(1);drain()
    request('witness-save',f'STATEWRITE {d}/witness.sav')
@@ -171,7 +171,8 @@ def run(restore):
     result,count,cursor,error,search_error=struct.unpack_from('<5H',ram,mark)
     assert (result,count,cursor,error,search_error)==(0x1234,4,7,5,18), (result,count,cursor,error,search_error)
     assert ram[mark+10:mark+14]==b'nged', ram[mark+10:mark+14]
-    assert ram[mark+14:mark+27].split(b'\0')[0] in (b'ONE.DAT',b'TWO.DAT')
+    names = {ram[mark+14:mark+27].split(b'\0')[0],ram[mark+27:mark+40].split(b'\0')[0]}
+    assert names == {b'ONE.DAT',b'TWO.DAT'},names
    assert (w/'FLAG.TXT').read_bytes()==b'changed between processes\r\n'
   else:
    step = request('step','STEPIN')
@@ -210,5 +211,5 @@ with zipfile.ZipFile(w/'restored.sav') as restored, zipfile.ZipFile(w/'restored-
   assert first.read(name) == restored.read(name), name
  assert first.read('CPU')[:cpu_prefix] == restored.read('CPU')[:cpu_prefix], 'CPU architectural/cycle state'
  assert first.read('Memory')[memory_descriptor:] == restored.read('Memory')[memory_descriptor:], 'guest RAM/handles/page identities'
-(w/'receipt.json').write_text(json.dumps({'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(), 'cpu_prefix':cpu_prefix, 'memory_descriptor':memory_descriptor, 'flagged_file_restore':flagged, 'probe_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(), 'checks':['valid-CRC truncated Pic causes connection EOF, E_Exit and nonzero process disposal (exit cleanup quality unqualified)','missing source and invalid destination return ERR without modal UI','four explicit metadata and missing/CRC-corrupt owner refusals without changed owner payloads','repeated completed saves','fresh stopped restore/re-save','host delay payload equality before/after restore','fresh CPU architectural/cycle prefix equality','fresh guest RAM/handle/page identity equality','fresh Pic/IntTimer10 equality','explicit one-step CS:IP/AX/BX']},indent=2))
+(w/'receipt.json').write_text(json.dumps({'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(), 'cpu_prefix':cpu_prefix, 'memory_descriptor':memory_descriptor, 'changed_flagged_content_preserved':flagged, 'real_dos_file_cursor_error_directory_witness':file_state, 'probe_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(), 'checks':['valid-CRC truncated Pic causes connection EOF, E_Exit and nonzero process disposal (exit cleanup quality unqualified)','missing source and invalid destination return ERR without modal UI','four explicit metadata and missing/CRC-corrupt owner refusals without changed owner payloads','repeated completed saves','fresh stopped restore/re-save','host delay payload equality before/after restore','fresh CPU architectural/cycle prefix equality','fresh guest RAM/handle/page identity equality','fresh Pic/IntTimer10 equality','explicit one-step CS:IP/AX/BX']},indent=2))
 print('stopped save and consumed-owner fatal-disposal probe completed (exit cleanup/device/resource qualification remains)',flush=True)
