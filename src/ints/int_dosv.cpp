@@ -1609,6 +1609,11 @@ void IME_SetFontSize(int size)
 #endif
 
 void JFONT_Init() {
+    // This owner can resolve additional host font data lazily (system glyphs,
+    // BDF/PCF fallback) after capture. Observed glyphs are not the identity of
+    // that provider. Until the owner can freeze its complete source, refuse
+    // state admission rather than certify a partial identity.
+    STATE_MachineInputsUnavailable();
 #if defined(LINUX) && C_X11
 	setlocale(LC_CTYPE,"");
 #endif

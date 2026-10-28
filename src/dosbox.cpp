@@ -1072,10 +1072,12 @@ void STATE_RecordMachineFile(const std::string &owner, FILE *file) {
     if (fseek(file,position,SEEK_SET)) machine_inputs_valid=false;
 }
 void STATE_RecordMachinePath(const std::string &owner, const std::string &path) {
-    FILE *file=fopen(path.c_str(),"rb");
-    if (!file) { STATE_MachineInputsUnavailable(); return; }
-    STATE_RecordMachineFile(owner,file);
-    fclose(file);
+    // Path-loading libraries do not expose the immutable bytes they consumed
+    // (and may read lazily). A later reopen cannot certify that input.
+    // Fail state admission rather than publish an unproven identity.
+    STATE_MachineInputsUnavailable();
+    (void)owner;
+    (void)path;
 }
 std::string STATE_MachineInputsIdentity() {
     if (!machine_inputs_valid) return {};
