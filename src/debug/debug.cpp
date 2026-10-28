@@ -5606,7 +5606,8 @@ bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeD
         native_execution.checkpointChanged(expected);
 }
 bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
-                           const std::string &path, bool load, StateArchive::Effects *effects) {
+                           const std::string &path, bool load, StateArchive::Effects *effects,
+                           const StateArchive::Budget *budget) {
     if (effects) *effects = {};
     if (path.empty() || path.find('\0') != std::string::npos ||
         !DEBUG_AdmitNativeState(attachment, expected)) return false;
@@ -5620,7 +5621,7 @@ bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Cont
         ~Release() { NativeControl::owner().release(lease); }
     } release{lease};
     const bool success = load ? SaveState::instance().loadFile(path) :
-        (effects ? SaveState::instance().saveFile(path, *effects) : SaveState::instance().saveFile(path));
+        (effects ? SaveState::instance().saveFile(path, *effects, budget) : SaveState::instance().saveFile(path));
     if (success && load && !DEBUG_AdvanceNativeStateContext(attachment, expected, lease))
         E_Exit("Restored state cannot retire prior native context");
     return success;

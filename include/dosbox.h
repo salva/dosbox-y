@@ -355,7 +355,7 @@ void ApplyPreventCapMenu(void);
 
 
 
-namespace StateArchive { struct Effects; }
+namespace StateArchive { struct Effects; class Budget; }
 class SaveState
 {
 public:
@@ -366,7 +366,8 @@ public:
 
     // Explicit-path callers use the same owner serializers and archive engine.
     bool saveFile(const std::string &path);
-    bool saveFile(const std::string &path, StateArchive::Effects &effects);
+    bool saveFile(const std::string &path, StateArchive::Effects &effects,
+                  const StateArchive::Budget *budget = nullptr);
     bool loadFile(const std::string &path) const;
 
     // Process-local captures reuse the registered component streams. Native
@@ -393,7 +394,8 @@ public:
     void registerComponent(const std::string& uniqueName, Component& comp); //comp must have global lifetime!
 
 private:
-    bool saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects = nullptr);
+    bool saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects = nullptr,
+                const StateArchive::Budget *budget = nullptr);
     bool loadFrom(size_t slot, const std::string *source) const;
     SaveState() {}
     SaveState(const SaveState&);

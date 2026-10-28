@@ -19,7 +19,9 @@ namespace SaveState {using Error=std::string;}
 static bool admitted=true,success=true,fail_cleanup=false,publish=false,lose_authority=false;
 static int failure=0;
 static bool DEBUG_AdmitNativeState(NativeDebug::Attachment,NativeDebug::Context) {return admitted;}
-static bool DEBUG_NativeStateFile(NativeDebug::Attachment,NativeDebug::Context,const std::string &,bool,StateArchive::Effects *e) {
+static bool DEBUG_NativeStateFile(NativeDebug::Attachment,NativeDebug::Context,const std::string &,bool,StateArchive::Effects *e,const StateArchive::Budget *budget) {
+ assert(budget);
+ if(budget->expired()){e->timed_out=true;return false;}
  if(lose_authority)admitted=false;
  e->published=publish;e->cleanup_attempted=fail_cleanup;e->cleanup_failed=fail_cleanup;
  if(failure==1)throw std::runtime_error("serializer");
@@ -31,6 +33,8 @@ static bool DEBUG_NativeStateFile(NativeDebug::Attachment,NativeDebug::Context,c
 main=r'''
 int main() {
  LuaDriver::SaveEffects e;
+ Debugger_LocalDriverSave({}, {}, "out",0,e);
+ assert(e.valid && !e.completed && e.retired && e.usable && e.code=="timeout");
  Debugger_LocalDriverSave({}, {}, "out",1,e);
  assert(e.valid && e.completed && e.retired && e.usable && e.code=="saved");
  lose_authority=true;publish=true;

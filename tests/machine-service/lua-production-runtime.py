@@ -33,6 +33,9 @@ local before=d.read(c,2068*16+256,4);assert(before)
 local s=d.step();assert(s.context);assert(d.save('SAVE_PATH',30000).effects.completed)
 f:write('\\nPASS\\n');f:close()
 '''.replace('RESULT_PATH',str(w/'result.txt')).replace('SAVE_PATH',str(w/'restored.sav'))
+if os.environ.get('LUA_TEST_TIMEOUT'):
+ script=script.replace("local saved=d.save('"+str(w/'one.sav')+"',30000)", "local saved=d.save('"+str(w/'one.sav')+"',1)")
+ script=script.replace('assert(saved.effects and saved.effects.completed and saved.effects.retired)', "assert(saved.effects and not saved.effects.completed and saved.effects.retired and saved.error=='timeout');assert(not io.open('"+str(w/'one.sav')+"','rb'))")
 if os.environ.get('LUA_TEST_ERROR'):
  script += "\nerror('production-error-marker')\n"
 (w/'worker.lua').write_text(script)

@@ -93,7 +93,8 @@ bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeD
 // A successful restore retires the supplied context before returning.
 bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
                            const std::string &path, bool load,
-                           StateArchive::Effects *effects = nullptr);
+                           StateArchive::Effects *effects = nullptr,
+                           const StateArchive::Budget *budget = nullptr);
 bool DEBUG_AdmitNativeObservation(NativeDebug::Attachment attachment, NativeDebug::Context expected);
 // Only the state job may present its exact held lease.
 bool DEBUG_AdmitNativeState(NativeDebug::Attachment attachment, NativeDebug::Context expected,

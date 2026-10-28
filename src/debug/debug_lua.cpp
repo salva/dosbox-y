@@ -3352,10 +3352,9 @@ void Debugger_LocalDriverStateReady(NativeDebug::Attachment attachment,
 void Debugger_LocalDriverSave(NativeDebug::Attachment attachment,
                              NativeDebug::Context context,const std::string &path,
                              uint32_t timeout,LuaDriver::SaveEffects &effects) {
-    // The timeout is a caller budget, not permission to interrupt an owner
-    // serializer after effects. This synchronous original-engine operation
-    // settles on this held frame; it never runs a second guest/progress loop.
-    (void)timeout;
+    // Cooperative budget at original owner boundaries; individual blocking I/O
+    // and serializers must settle before close, without a competing pump.
+    const StateArchive::Budget budget(timeout);
     effects = {};
     effects.valid = true;
     StateArchive::Effects archive;
@@ -3363,7 +3362,7 @@ void Debugger_LocalDriverSave(NativeDebug::Attachment attachment,
     // response allocation failure must not erase the only copied effect facts.
     effects.code.reserve(sizeof("save_refused_or_failed")-1);
     try {
-        effects.completed = DEBUG_NativeStateFile(attachment,context,path,false,&archive);
+        effects.completed = DEBUG_NativeStateFile(attachment,context,path,false,&archive,&budget);
     } catch (const std::exception &) {
         // Save does not install guest state. The shared helper unwinds its
         // lease and ZIP/FILE owners before these terminal facts are copied.
@@ -3378,7 +3377,8 @@ void Debugger_LocalDriverSave(NativeDebug::Attachment attachment,
     effects.retired = true;
     effects.usable = !archive.cleanup_failed &&
         DEBUG_AdmitNativeState(attachment,context);
-    effects.code = effects.completed ? "saved" : "save_refused_or_failed";
+    effects.code = effects.completed ? "saved" :
+        (archive.timed_out ? "timeout" : "save_refused_or_failed");
 }
 const char *Debugger_LocalDriverLoad(NativeDebug::Attachment attachment,
                                     NativeDebug::Context context,const std::string &archive) {

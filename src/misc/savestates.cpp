@@ -490,11 +490,19 @@ static bool save_state_frontier() {
 }
 void SaveState::save(size_t slot) { (void)saveTo(slot, nullptr); }
 bool SaveState::saveFile(const std::string &path) { return saveTo(0, &path); }
-bool SaveState::saveFile(const std::string &path, StateArchive::Effects &effects) {
+bool SaveState::saveFile(const std::string &path, StateArchive::Effects &effects,
+                         const StateArchive::Budget *budget) {
     effects = {};
-    return saveTo(0, &path, &effects);
+    return saveTo(0, &path, &effects, budget);
 }
-bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects) {
+bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive::Effects *effects,
+                       const StateArchive::Budget *budget) {
+    const auto expired = [&]() {
+        if (!budget || !budget->expired()) return false;
+        if (effects) effects->timed_out = true;
+        return true;
+    };
+    if (expired()) return false;
     if (!save_state_frontier()) { LOG_MSG("Save refused: unsafe native continuation"); return false; }
 	if (slot >= SLOT_COUNT*MAX_PAGE) return false;
 	bool save_err=false;
@@ -551,6 +559,7 @@ bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive
 	std::string save=destination ? *destination : (use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav");
     LOG_MSG("Saving state to slot: %d (%s)", (int)slot + 1, save.c_str());
 
+    if (expired()) return false;
     StateArchiveOutput output(save, effects);
 	zipFile zf = nullptr;
     StateArchiveZip archive(zf);
@@ -633,6 +642,7 @@ bool SaveState::saveTo(size_t slot, const std::string *destination, StateArchive
 		if (save_err) goto done;
 	}
 	for (CompEntry::iterator i = components.begin(); i != components.end(); ++i) {
+        if (expired()) { save_err = true; goto done; }
 		zip_fileinfo zi; zipSetCurrentTime(zi);
 		if ((errclose=zipOutOpenFile(zf,i->first.c_str(),zi,compresssaveparts)) != ZIP_OK) { save_err = true; goto done; }
 		zip_ostreambuf zos(zf); std::ostream ss(&zos);
@@ -652,10 +662,12 @@ done:
 		if (errclose != ZIP_OK) save_err = true;
 	}
 
+    if (expired()) save_err = true;
 	if (!save_err && !dos_kernel_disabled && flagged_backup((char *)save.c_str()) != 0)
         save_err = true;
     // A failed serializer/ZIP close/sidecar must not replace the prior state.
     // Sidecar publication is separate; failure here can leave a newer sidecar.
+    if (expired()) save_err = true;
     if (!save_err && !output.publish()) save_err = true;
 
 	if (save_err) {
