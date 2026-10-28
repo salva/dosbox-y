@@ -1,6 +1,7 @@
 ; Real DOS handle/cursor/search witness for machine-file-state.py
 bits 16
 org 100h
+start:
     mov dx, filename
     mov ax, 3d00h
     int 21h
@@ -68,9 +69,9 @@ checkpoint: ; IP 0180, held with open file at offset 3
     mov [search_error], ax
     mov word [result], 1234h
     jmp done
- times 108h-($-$) db 90h
+ times 108h-($-start) db 90h
 done: jmp done ; IP 0208
- times 110h-($-$) db 0
+ times 110h-($-start) db 0
  db 'R3-FILE-WITNESS!'
 result: dw 0
 count: dw 0

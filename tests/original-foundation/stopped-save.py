@@ -49,7 +49,7 @@ def run(restore):
    log.write(data);log.flush()
  def request(ident,command,expect_failure=False):
   nonlocal buf
-  text=f'REQ {ident} EXEC {command}\n'.encode();conn.sendall(text);wire.write(text);wire.flush()
+  text=(f'REQ {ident} BREAK\n' if command=='BREAK' else f'REQ {ident} EXEC {command}\n').encode();conn.sendall(text);wire.write(text);wire.flush()
   marker=f'END {ident}\n'.encode();end=time.monotonic()+120
   while marker not in buf and time.monotonic()<end:
    drain()
@@ -60,6 +60,9 @@ def run(restore):
   assert marker in buf,buf
   out,buf=buf.split(marker,1);wire.write(out+marker);wire.flush();print(out.decode(),flush=True)
   expected = f'BEGIN {ident} {"ERR" if expect_failure else "OK"}\n'.encode()
+  while out.startswith(b'BEGIN event '):
+   event,out=out.split(b'END event\n',1)
+   assert b'execution_terminal' in event and b'failed=0' in event,event
   assert out.startswith(expected), out
   if command.startswith(('STATEWRITE ', 'STATEREAD ')):
    assert b'Debugger command not recognized' not in out, out
@@ -164,7 +167,10 @@ def run(restore):
   if file_state:
    request('done-bp','BP 0814:0208')
    request('witness-run','RUN')
-   time.sleep(1);drain()
+   time.sleep(4);drain()
+   # Capture the held terminal; BREAK also diagnoses a fixture that failed to
+   # reach its completion breakpoint rather than claiming an active save.
+   request('hold','BREAK')
    request('witness-save',f'STATEWRITE {d}/witness.sav')
    with zipfile.ZipFile(d/'witness.sav') as archive:
     ram=archive.read('Memory');mark=ram.index(b'R3-FILE-WITNESS!')+len(b'R3-FILE-WITNESS!')
