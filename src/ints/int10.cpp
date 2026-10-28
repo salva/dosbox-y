@@ -18,6 +18,7 @@
 
 #include <assert.h>
 
+#include "state_machine_inputs.h"
 #include "dosbox.h"
 #include "control.h"
 #include "logging.h"
@@ -1494,6 +1495,7 @@ bool Load_FONT_ROM(void) {
         return false;
     }
 
+    STATE_RecordMachineFile("PC98 font ROM",fp);
     // prepare
     memset(vga.draw.font,0,sizeof(vga.draw.font));
 
@@ -1587,6 +1589,7 @@ void Load_Anex86_Font(const char *fontname, bool &sbcs_ok, bool &dbcs_ok) {
         return;
     }
 
+    STATE_RecordMachineFile("PC98 bitmap font",fp);
     if (fread(tmp,14,1,fp) != 1) goto fail; // BITMAPFILEHEADER
     if (memcmp(tmp,"BM",2) != 0) goto fail; // must be "BM"
     bmp_ofs = host_readd((HostPt)(tmp+10)); // bOffBits

@@ -108,6 +108,13 @@ def run(restore):
    sendkey(':'+display,'l');time.sleep(2);drain()
    assert b'Slot load refused or failed' in (d/'pty.log').read_bytes()
    sendkey(':'+display,'s');time.sleep(2);drain()
+   deadline=time.monotonic()+15
+   while time.monotonic()<deadline:
+    try:
+     with zipfile.ZipFile(d/'1.sav') as saved:
+      if saved.read('Archive_Revision')!=b'bad-revision': break
+    except (zipfile.BadZipFile,KeyError): pass
+    time.sleep(.1);drain()
    with zipfile.ZipFile(d/'refusal-before.sav') as before, zipfile.ZipFile(d/'1.sav') as after:
     for name in before.namelist():
      # Mapper key/focus presentation legitimately changes keyboard input state.

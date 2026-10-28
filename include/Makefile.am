@@ -1,4 +1,5 @@
 noinst_HEADERS =  \
+state_machine_inputs.h \
 capture_frame.h \
 state_file_io.h \
 state_archive_effects.h \

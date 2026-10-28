@@ -1,4 +1,5 @@
 
+#include "state_machine_inputs.h"
 #include "dosbox.h"
 #include "logging.h"
 #include "setup.h"
@@ -373,6 +374,7 @@ bool LoadSoundBIOS(void) {
     if (!fp) fp = fopen("sound.rom","rb");
     if (!fp) return false;
 
+    STATE_RecordMachineFile("PC98 sound ROM",fp);
     if (fread(MemBase+0xCC000,0x4000,1,fp) != 1) {
         LOG_MSG("PC-98 SOUND.ROM failed to read 16k");
         fclose(fp);

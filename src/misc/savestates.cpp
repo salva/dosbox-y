@@ -18,6 +18,7 @@
 #include "mixer.h"
 #include "build_timestamp.h"
 #include "machine_service.h"
+#include "state_machine_inputs.h"
 #include "native_frontier.h"
 #if C_DEBUG && C_DEBUG_LUA
 #include "../debug/debug_lua.h"
@@ -63,6 +64,7 @@ static std::string state_build_identity() {
     char hex[65]; hash.finish(hex); return hex;
 }
 static std::string state_config_identity() {
+    if (STATE_MachineInputsIdentity().empty()) return {};
     CapturePNG::SHA256 hash;
     const auto field = [&](const std::string &s) {
         const std::string size = std::to_string(s.size()) + ":";
@@ -83,6 +85,7 @@ static std::string state_config_identity() {
             field(property->GetValue().ToString());
         }
     }
+    field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }
 static const char state_archive_revision[] = "DOSBox-X original-state revision 2";

@@ -1,3 +1,4 @@
+#include "state_machine_inputs.h"
 /*
  *  Copyright (C) 2002-2021  The DOSBox Team
  *
@@ -268,10 +269,12 @@ public:
 		}
 
 		/* Load a SoundFont */
-		sfont_id = fluid_synth_sfload(synth_soft, sf.c_str(), 0);
+		std::string resolved_sf=sf;
+		sfont_id = fluid_synth_sfload(synth_soft, resolved_sf.c_str(), 0);
 		if (sfont_id == -1) {
 			extern std::string capturedir;
 			std::string str = capturedir + std::string(PATH_SEP) + sf;
+            resolved_sf=str;
 			sfont_id = fluid_synth_sfload(synth_soft, str.c_str(), 0);
 		}
 
@@ -281,6 +284,7 @@ public:
 			delete_fluid_settings(settings);
 			return false;
 		}
+        STATE_RecordMachinePath("SYNTH SoundFont",resolved_sf);
 		sffile=sf;
 		fsinfo="Sound font: "+sf;
 
@@ -483,7 +487,8 @@ public:
                 soundfont.clear();
 				soundfont_id = -1;
 			}
-			else {
+            else {
+                STATE_RecordMachinePath("FluidSynth SoundFont",soundfont);
 				sffile=soundfont;
 				fsinfo="Sound font: "+soundfont;
 				LOG_MSG("MIDI:fluidsynth: Loaded SoundFont: %s", soundfont.c_str());

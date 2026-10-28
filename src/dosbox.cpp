@@ -1047,6 +1047,46 @@ void DOSBOX_InitTickLoop() {
     DOSBOX_SetLoop(&Normal_Loop);
 }
 
+#include "state_machine_inputs.h"
+#include "hardware/capture_sha256.h"
+#include <map>
+// Resolved roles replace their prior digest; no path discovery or second codec.
+static std::map<std::string,std::string> machine_inputs;
+void STATE_RecordMachineInput(const std::string &owner, const void *bytes, size_t size) {
+    CapturePNG::SHA256 hash;
+    hash.update(static_cast<const uint8_t *>(bytes),size);
+    char digest[65]; hash.finish(digest);
+    machine_inputs[owner]=std::to_string(size)+":"+digest;
+}
+static bool machine_inputs_valid=true;
+void STATE_MachineInputsUnavailable() { machine_inputs_valid=false; }
+void STATE_RecordMachineFile(const std::string &owner, FILE *file) {
+    const long position=ftell(file);
+    if (position<0 || fseek(file,0,SEEK_SET)) { machine_inputs_valid=false; return; }
+    CapturePNG::SHA256 hash;
+    uint8_t bytes[8192]; size_t count;
+    while ((count=fread(bytes,1,sizeof(bytes),file))) hash.update(bytes,count);
+    if (ferror(file)) machine_inputs_valid=false;
+    char digest[65]; hash.finish(digest);
+    STATE_RecordMachineInput(owner,digest,64);
+    if (fseek(file,position,SEEK_SET)) machine_inputs_valid=false;
+}
+void STATE_RecordMachinePath(const std::string &owner, const std::string &path) {
+    FILE *file=fopen(path.c_str(),"rb");
+    if (!file) { STATE_MachineInputsUnavailable(); return; }
+    STATE_RecordMachineFile(owner,file);
+    fclose(file);
+}
+std::string STATE_MachineInputsIdentity() {
+    if (!machine_inputs_valid) return {};
+    CapturePNG::SHA256 hash;
+    for (const auto &input:machine_inputs) {
+        const std::string field=std::to_string(input.first.size())+":"+input.first+input.second;
+        hash.update(reinterpret_cast<const uint8_t *>(field.data()),field.size());
+    }
+    char digest[65]; hash.finish(digest); return digest;
+}
+
 void Init_VGABIOS() {
     long rom_sz = 0;
     FILE *rom_fp = NULL;
@@ -1187,6 +1227,7 @@ void Init_VGABIOS() {
 
     if (rom_fp != NULL && rom_sz != 0) {
         fseek(rom_fp,0,SEEK_SET);
+        STATE_RecordMachineFile("VGA BIOS",rom_fp);
         fread((char*)MemBase+0xC0000,rom_sz,1,rom_fp);
     }
     else {

@@ -11051,8 +11051,11 @@ fresh_boot:
          * freed resources. */
         control = NULL; /* any deref past this point and you deserve to segfault */
     }
-#if C_DEBUG && C_DEBUG_LUA
+#if C_DEBUG
+    if (DEBUG_MachineOwnerExitStatus()) return 1;
+#if C_DEBUG_LUA
     if (DEBUG_LocalLuaDriverExitStatus()) return 1;
+#endif
 #endif
     return saved_opt_test&&testerr?1:0;
 }

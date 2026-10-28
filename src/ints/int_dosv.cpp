@@ -16,6 +16,7 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+#include "state_machine_inputs.h"
 #include "dosbox.h"
 #include "logging.h"
 #include "regs.h"
@@ -682,6 +683,7 @@ bool LoadFontxFile(const char *fname, int height, bool dbcs) {
 		return false;
 #endif
 	}
+    STATE_RecordMachineFile(std::string("FONTX2/")+std::to_string(height)+(dbcs?"/dbcs":"/sbcs"),mfile);
 	if (getfontx2header(mfile, &head) != 0) {
         if (!dbcs) {
             fseek(mfile, 0L, SEEK_END);
@@ -916,6 +918,12 @@ bool CheckLinuxSymbol(Bitu code, uint8_t *buff, int width, int height)
 bool GetWindowsFont(Bitu code, uint8_t *buff, int width, int height)
 {
     if (!getsysfont) return false;
+    uint8_t *const resolved_glyph=buff;
+    const auto record_glyph=[&]() {
+        STATE_RecordMachineInput("system glyph/"+std::to_string(code)+"/"+
+            std::to_string(width)+"/"+std::to_string(height),resolved_glyph,
+            ((width+7)/8)*height);
+    };
 #if defined(LINUX) && C_X11
 	XRectangle ir, lr;
 	XImage *image;
@@ -936,6 +944,7 @@ bool GetWindowsFont(Bitu code, uint8_t *buff, int width, int height)
 	} else if(code == 0x817c && (IS_JDOSV || dos.loaded_codepage == 932)) {
 		wtext[0] = 0x2212;
 	} else if(CheckLinuxSymbol(code, buff, width, height)) {
+        record_glyph();
 		return true;
 	} else {
 		char src[4];
@@ -1015,6 +1024,7 @@ bool GetWindowsFont(Bitu code, uint8_t *buff, int width, int height)
 			}
 		}
 		XDestroyImage(image);
+        record_glyph();
 		return true;
 	}
 #endif
@@ -1075,6 +1085,7 @@ bool GetWindowsFont(Bitu code, uint8_t *buff, int width, int height)
 			ReleaseDC(NULL, hdc);
 			return false;
 		}
+        record_glyph();
 		return true;
 	}
 #endif
@@ -1209,6 +1220,7 @@ uint8_t *GetDbcsFont(Bitu code)
                         if (!mfile && config_path.size()) mfile=fopen((config_path + fname).c_str(),"rb");
                         if (!mfile && res_path.size()) mfile=fopen((res_path + fname).c_str(),"rb");
                         if (!mfile) return jfont_dbcs;
+                        STATE_RecordMachineFile("DOSV fallback font/16",mfile);
                         if (readBDF(mfile, 16) || readPCF(mfile, 16)) {
                            fclose(mfile);
                            if (jfont_cache_dbcs_16[oldcode] != 0) return &jfont_dbcs_16[oldcode * 32];
@@ -1308,6 +1320,7 @@ uint8_t *GetDbcs14Font(Bitu code, bool &is14)
                         if (!mfile && config_path.size()) mfile=fopen((config_path + fname).c_str(),"rb");
                         if (!mfile && res_path.size()) mfile=fopen((res_path + fname).c_str(),"rb");
                         if (!mfile) return jfont_dbcs;
+                        STATE_RecordMachineFile("DOSV fallback font/24",mfile);
                         if (readBDF(mfile, 14) || readPCF(mfile, 14)) {
                            fclose(mfile);
                            if (jfont_cache_dbcs_14[oldcode] != 0) return &jfont_dbcs_14[oldcode * 28];

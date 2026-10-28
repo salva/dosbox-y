@@ -5,6 +5,7 @@
 #include "mixer.h"
 #include "control.h"
 #include "cross.h"
+#include "state_machine_inputs.h"
 
 #define MT32EMU_API_TYPE 3
 #define MT32EMU_EXPORTS_TYPE 1
@@ -90,6 +91,7 @@ private:
 		} else {
 			roms = "CM32L_CONTROL.ROM and ";
 		}
+        STATE_RecordMachinePath("MT32 control ROM",pathName);
 		strcpy(pathName, romDir.c_str());
 		strcat(pathName, "CM32L_PCM.ROM");
 		if (model==2 || MT32EMU_RC_ADDED_PCM_ROM != service->addROMFile(pathName)) {
@@ -103,6 +105,7 @@ private:
 		} else {
 			roms += "CM32L_PCM.ROM";
 		}
+        STATE_RecordMachinePath("MT32 PCM ROM",pathName);
 		mt32info="ROM directory: "+romDir+"\n  ROM pair: "+roms;
 		LOG_MSG("MT32: Found ROM pair in %s: %s", romDir.c_str(), roms.c_str());
 		return true;

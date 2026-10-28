@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include "control.h"
+#include "state_machine_inputs.h"
 #include "dosbox.h"
 #include "mem.h"
 #include "cpu.h"
@@ -13257,6 +13258,7 @@ void ROMBIOS_Init() {
 			    FILE *fp = fopen(ibm_rom_basic.c_str(),"rb");
 			    if (fp != NULL) {
 				    fread(GetMemBase()+ibm_rom_basic_base,ibm_rom_basic_size,1u,fp);
+                    STATE_RecordMachineInput("IBM ROM BASIC",GetMemBase()+ibm_rom_basic_base,ibm_rom_basic_size);
 				    fclose(fp);
 			    }
 		    }
@@ -13327,6 +13329,7 @@ void ROMBIOS_Init() {
                      *      depends on it. */
                     assert(GetMemBase() != NULL);
                     assert((base+(Bitu)st.st_size) <= 0x100000ul);
+                    STATE_RecordMachineFile("BIOS hook/"+std::to_string(base),fp);
                     size_t readResult = fread(GetMemBase()+base,(size_t)st.st_size,1u,fp);
                     fclose(fp);
                     if (readResult != 1) {
@@ -13366,6 +13369,7 @@ void ROMBIOS_Init() {
                      *      depends on it. */
                     assert(GetMemBase() != NULL);
                     assert((base+(Bitu)st.st_size) <= 0x100000ul);
+                    STATE_RecordMachineFile("BIOS hook/"+std::to_string(base),fp);
                     size_t readResult = fread(GetMemBase()+base,(size_t)st.st_size,1u,fp);
                     fclose(fp);
                     if (readResult != 1) {

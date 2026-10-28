@@ -1392,6 +1392,7 @@ void CBreakpoint::RetireMachineOwner(uint64_t token)
 
 static void DEBUG_ExecutionOwnerDeparting(uint64_t token);
 static bool checkpoint_owner_disposed=false;
+int DEBUG_MachineOwnerExitStatus() { return checkpoint_owner_disposed ? 1 : 0; }
 static uint64_t archive_restored_owner=0;
 void DEBUG_StateInstalled() {
     archive_restored_owner=DOSBOX_MachineServiceOwner().token;
