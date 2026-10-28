@@ -1052,6 +1052,9 @@ void DOSBOX_InitTickLoop() {
 #include <map>
 // Resolved roles replace their prior digest; no path discovery or second codec.
 static std::map<std::string,std::string> machine_inputs;
+void STATE_RetireMachineInput(const std::string &owner) {
+    machine_inputs.erase(owner);
+}
 void STATE_RecordMachineInput(const std::string &owner, const void *bytes, size_t size) {
     CapturePNG::SHA256 hash;
     hash.update(static_cast<const uint8_t *>(bytes),size);
@@ -1227,10 +1230,14 @@ void Init_VGABIOS() {
     VGA_BIOS_SEG = 0xC000;
     VGA_BIOS_SEG_END = (VGA_BIOS_SEG + (VGA_BIOS_Size >> 4));
 
+    STATE_RetireMachineInput("VGA BIOS");
     if (rom_fp != NULL && rom_sz != 0) {
         fseek(rom_fp,0,SEEK_SET);
-        STATE_RecordMachineFile("VGA BIOS",rom_fp);
-        fread((char*)MemBase+0xC0000,rom_sz,1,rom_fp);
+        const size_t loaded = fread((char*)MemBase+0xC0000,1,rom_sz,rom_fp);
+        // Bind the bytes actually installed, not a separate pass over a host
+        // stream that can change between observation and consumption.
+        STATE_RecordMachineInput("VGA BIOS",MemBase+0xC0000,loaded);
+        if (loaded != (size_t)rom_sz) STATE_MachineInputsUnavailable();
     }
     else {
         /* clear for VGA BIOS (FIXME: Why does Project Angel like our BIOS when we memset() here, but don't like it if we memset() in the INT 10 ROM setup routine?) */

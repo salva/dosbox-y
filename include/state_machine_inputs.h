@@ -8,6 +8,7 @@
 void STATE_RecordMachinePath(const std::string &owner, const std::string &path);
 void STATE_RecordMachineFile(const std::string &owner, FILE *file);
 void STATE_RecordMachineInput(const std::string &owner, const void *bytes, size_t size);
+void STATE_RetireMachineInput(const std::string &owner);
 void STATE_MachineInputsUnavailable();
 std::string STATE_MachineInputsIdentity();
 #endif

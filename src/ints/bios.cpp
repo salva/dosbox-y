@@ -13146,6 +13146,9 @@ extern uint16_t j3_font_offset;
 
 /* NTS: Do not use callbacks! This function is called before CALLBACK_Init() */
 void ROMBIOS_Init() {
+    STATE_RetireMachineInput("IBM ROM BASIC");
+    STATE_RetireMachineInput("BIOS hook/"+std::to_string(bios_user_reset_vector_blob));
+    STATE_RetireMachineInput("BIOS hook/"+std::to_string(bios_user_boot_hook));
     Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
     Bitu oi;
 
@@ -13257,8 +13260,9 @@ void ROMBIOS_Init() {
 
 			    FILE *fp = fopen(ibm_rom_basic.c_str(),"rb");
 			    if (fp != NULL) {
-				    fread(GetMemBase()+ibm_rom_basic_base,ibm_rom_basic_size,1u,fp);
-                    STATE_RecordMachineInput("IBM ROM BASIC",GetMemBase()+ibm_rom_basic_base,ibm_rom_basic_size);
+                    const size_t loaded = fread(GetMemBase()+ibm_rom_basic_base,1u,ibm_rom_basic_size,fp);
+                    STATE_RecordMachineInput("IBM ROM BASIC",GetMemBase()+ibm_rom_basic_base,loaded);
+                    if (loaded != ibm_rom_basic_size) STATE_MachineInputsUnavailable();
 				    fclose(fp);
 			    }
 		    }
@@ -13329,14 +13333,15 @@ void ROMBIOS_Init() {
                      *      depends on it. */
                     assert(GetMemBase() != NULL);
                     assert((base+(Bitu)st.st_size) <= 0x100000ul);
-                    STATE_RecordMachineFile("BIOS hook/"+std::to_string(base),fp);
                     size_t readResult = fread(GetMemBase()+base,(size_t)st.st_size,1u,fp);
                     fclose(fp);
                     if (readResult != 1) {
+                        STATE_MachineInputsUnavailable();
                         LOG(LOG_IO, LOG_ERROR) ("Reading error in ROMBIOS_Init\n");
                         return;
                     }
 
+                    STATE_RecordMachineInput("BIOS hook/"+std::to_string(base),GetMemBase()+base,(size_t)st.st_size);
                     LOG_MSG("User reset vector binary '%s' loaded at 0x%lx",path.c_str(),(unsigned long)base);
                     bios_user_reset_vector_blob = base;
                 }
@@ -13369,14 +13374,15 @@ void ROMBIOS_Init() {
                      *      depends on it. */
                     assert(GetMemBase() != NULL);
                     assert((base+(Bitu)st.st_size) <= 0x100000ul);
-                    STATE_RecordMachineFile("BIOS hook/"+std::to_string(base),fp);
                     size_t readResult = fread(GetMemBase()+base,(size_t)st.st_size,1u,fp);
                     fclose(fp);
                     if (readResult != 1) {
+                        STATE_MachineInputsUnavailable();
                         LOG(LOG_IO, LOG_ERROR) ("Reading error in ROMBIOS_Init\n");
                         return;
                     }
 
+                    STATE_RecordMachineInput("BIOS hook/"+std::to_string(base),GetMemBase()+base,(size_t)st.st_size);
                     LOG_MSG("User boot hook binary '%s' loaded at 0x%lx",path.c_str(),(unsigned long)base);
                     bios_user_boot_hook = base;
                 }
