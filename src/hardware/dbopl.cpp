@@ -1619,7 +1619,8 @@ void Handler::LoadState( std::istream& stream )
 
 	// error checking
 	READ_POD( &pod_name, pod_name );
-	if( strcmp( pod_name, "DBOPL" ) ) {
+	const char expected[32] = "DBOPL";
+	if( !stream || memcmp( pod_name, expected, sizeof(expected) ) ) {
 		stream.clear( std::istream::failbit | std::istream::badbit );
 		return;
 	}
@@ -1658,6 +1659,26 @@ void Handler::LoadState( std::istream& stream )
 	READ_POD( &volhandler_idx, volhandler_idx );
 	READ_POD( &wavebase_idx, wavebase_idx );
 	READ_POD( &synthhandler_idx, synthhandler_idx );
+	if (!stream) return;
+
+	// Resolve archive roles only after checking every table subscript/span.
+	// Unknown roles must not leave raw producer pointers as native fallbacks.
+	for (int channel = 0; channel < 18; ++channel) {
+		if (synthhandler_idx[channel] > 9) {
+			stream.setstate(std::ios::failbit);
+			return;
+		}
+		for (int op = 0; op < 2; ++op) {
+			const Bitu offset = wavebase_idx[channel][op];
+			const Bitu mask = chip.chan[channel].op[op].waveMask;
+			if (volhandler_idx[channel][op] >= 5 ||
+			    offset % sizeof(WaveTable[0]) || offset >= sizeof(WaveTable) ||
+			    mask >= (sizeof(WaveTable) - offset) / sizeof(WaveTable[0])) {
+				stream.setstate(std::ios::failbit);
+				return;
+			}
+		}
+	}
 
 	//***************************************************
 	//***************************************************
