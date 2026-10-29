@@ -1,6 +1,7 @@
 # DOSBox-X AppImage
 
-This AppImage contains both the SDL1 and SDL2 versions of DOSBox-X.
+This AppImage contains the SDL2 version of DOSBox-X only. SDL1 source remains in
+the repository, but it is not built, tested or included in CI artifacts.
 
 ## Requirements
 
@@ -22,29 +23,14 @@ Run the SDL2 version:
 ./dosbox-x_*nightly_amd64.AppImage
 ```
 
-The SDL2 version is used by default.
-
-To run the SDL1 version:
-
-```bash
-./dosbox-x_*nightly_amd64.AppImage --sdl1
-```
-
-The `--sdl1` option is handled by the AppImage launcher and is not passed to DOSBox-X.
-
-All other options are passed directly to the selected DOSBox-X executable. For example:
+Options other than `--appimage-help` are passed directly to the SDL2 executable.
+For example:
 
 ```bash
 ./dosbox-x_*nightly_amd64.AppImage -fullscreen
 ```
 
 runs the SDL2 version with the `-fullscreen` option.
-
-The following runs the SDL1 version with the same DOSBox-X option:
-
-```bash
-./dosbox-x_*nightly_amd64.AppImage --sdl1 -fullscreen
-```
 
 ## AppImage-specific options
 
@@ -56,7 +42,6 @@ To display the AppImage launcher help:
 
 This displays:
 
-* `--sdl1` — Run the SDL1 version.
 * `--appimage-help` — Display AppImage-specific help.
 
 The normal DOSBox-X `--help` option is passed to DOSBox-X:
@@ -67,6 +52,6 @@ The normal DOSBox-X `--help` option is passed to DOSBox-X:
 
 ## DOSBox-X options
 
-Except for the AppImage-specific `--sdl1` and `--appimage-help` options, command-line options are passed directly to DOSBox-X.
+Except for the AppImage-specific `--appimage-help` option, command-line options are passed directly to DOSBox-X.
 
 For more information about DOSBox-X options and configuration, see the included reference configuration files.

@@ -22,15 +22,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '14'
-      - name: Build minimal
-        if: false
-        run: |
-          echo "timestamp=`git show -s --format=%at | xargs -I# date -d @# +%Y%m%d%H%M%S`" >> $GITHUB_ENV
-          ./build --disable-freetype --disable-libfluidsynth --disable-mt32 --disable-screenshots
       - name: Install libraries
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y nasm fluidsynth libfluidsynth-dev libpcap-dev libslirp-dev libsdl-net1.2-dev libsdl2-net-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libpng-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev libavcodec-extra dpkg-dev
+          sudo apt-get install -y nasm fluidsynth libfluidsynth-dev libpcap-dev libslirp-dev libsdl2-net-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libpng-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev libavcodec-extra dpkg-dev
           mkdir src/bin
       - name: Update build info
         shell: bash
@@ -58,12 +53,6 @@ jobs:
           else
             echo "osfree=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Build Linux SDL1
-        run: |
-          top=`pwd`
-          ./build-debug --enable-avcodec
-          strip -s $top/src/dosbox-x
-          cp $top/src/dosbox-x $top/src/bin/dosbox-x-sdl1
       - name: Build Linux SDL2
         run: |
           top=`pwd`
@@ -74,8 +63,7 @@ jobs:
         if: steps.osfree.outputs.osfree != 'true'
         run: |
           top=`pwd`
-          chmod +x $top/src/bin/dosbox-x-sdl1 $top/src/bin/dosbox-x-sdl2
-          $top/src/bin/dosbox-x-sdl1 -tests
+          chmod +x $top/src/bin/dosbox-x-sdl2
           $top/src/bin/dosbox-x-sdl2 -tests
       - name: Create deb package
         run: |
@@ -88,7 +76,6 @@ jobs:
           mkdir -p "$pkg/usr/share/dosbox-x/glshaders"
           mkdir -p "$pkg/usr/share/dosbox-x/languages"
 
-          cp "$top/src/bin/dosbox-x-sdl1" "$pkg/usr/bin/dosbox-x-sdl1"
           cp "$top/src/bin/dosbox-x-sdl2" "$pkg/usr/bin/dosbox-x-sdl2"
           ln -s dosbox-x-sdl2 "$pkg/usr/bin/dosbox-x"
           cp "$top/CHANGELOG" "$pkg/usr/share/dosbox-x/CHANGELOG.txt"
@@ -132,7 +119,6 @@ jobs:
 
           dpkg-shlibdeps \
             -T"$top/debian/substvars" \
-            "$pkg/usr/bin/dosbox-x-sdl1" \
             "$pkg/usr/bin/dosbox-x-sdl2"
 
           deps=$(sed -n 's/^shlibs:Depends=//p' "$top/debian/substvars")
@@ -187,7 +173,7 @@ jobs:
       - name: Install libraries
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y nasm fluidsynth libfluidsynth-dev libpcap-dev libslirp-dev libsdl-net1.2-dev libsdl2-net-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libpng-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev libavcodec-extra dpkg-dev
+          sudo apt-get install -y nasm fluidsynth libfluidsynth-dev libpcap-dev libslirp-dev libsdl2-net-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libpng-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev libavcodec-extra dpkg-dev
           mkdir src/bin
       - name: Update build info
         shell: bash
@@ -215,12 +201,6 @@ jobs:
           else
             echo "osfree=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Build Linux SDL1
-        run: |
-          top=`pwd`
-          CC=clang CXX=clang++ ./build-debug --enable-avcodec
-          strip -s $top/src/dosbox-x
-          cp $top/src/dosbox-x $top/src/bin/dosbox-x-sdl1
       - name: Build Linux SDL2
         run: |
           top=`pwd`
@@ -231,8 +211,7 @@ jobs:
         if: steps.osfree.outputs.osfree != 'true'
         run: |
           top=`pwd`
-          chmod +x $top/src/bin/dosbox-x-sdl1 $top/src/bin/dosbox-x-sdl2
-          $top/src/bin/dosbox-x-sdl1 -tests
+          chmod +x $top/src/bin/dosbox-x-sdl2
           $top/src/bin/dosbox-x-sdl2 -tests
       - name: Create deb package
         run: |
@@ -245,7 +224,6 @@ jobs:
           mkdir -p "$pkg/usr/share/dosbox-x/glshaders"
           mkdir -p "$pkg/usr/share/dosbox-x/languages"
 
-          cp "$top/src/bin/dosbox-x-sdl1" "$pkg/usr/bin/dosbox-x-sdl1"
           cp "$top/src/bin/dosbox-x-sdl2" "$pkg/usr/bin/dosbox-x-sdl2"
           ln -s dosbox-x-sdl2 "$pkg/usr/bin/dosbox-x"
           cp "$top/CHANGELOG" "$pkg/usr/share/dosbox-x/CHANGELOG.txt"
@@ -289,7 +267,6 @@ jobs:
 
           dpkg-shlibdeps \
             -T"$top/debian/substvars" \
-            "$pkg/usr/bin/dosbox-x-sdl1" \
             "$pkg/usr/bin/dosbox-x-sdl2"
 
           deps=$(sed -n 's/^shlibs:Depends=//p' "$top/debian/substvars")
@@ -373,12 +350,6 @@ jobs:
           else
             echo "osfree=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Build Linux SDL1
-        run: |
-          top=`pwd`
-          ./build-debug --enable-avcodec
-          strip -s $top/src/dosbox-x
-          cp $top/src/dosbox-x $top/src/bin/dosbox-x-sdl1
       - name: Build Linux SDL2
         run: |
           top="${{ github.workspace }}"
@@ -406,8 +377,7 @@ jobs:
         if: steps.osfree.outputs.osfree != 'true'
         run: |
           top=`pwd`
-          chmod +x $top/src/bin/dosbox-x-sdl1 $top/src/bin/dosbox-x-sdl2
-          $top/src/bin/dosbox-x-sdl1 -tests
+          chmod +x $top/src/bin/dosbox-x-sdl2
           $top/src/bin/dosbox-x-sdl2 -tests
       - name: Create deb package
         run: |
@@ -419,9 +389,7 @@ jobs:
           mkdir -p "$pkg/usr/share/dosbox-x/drivez"
           mkdir -p "$pkg/usr/share/dosbox-x/glshaders"
           mkdir -p "$pkg/usr/share/dosbox-x/languages"
-          strip $top/src/bin/dosbox-x-sdl1
           strip $top/src/bin/dosbox-x-sdl2
-          cp "$top/src/bin/dosbox-x-sdl1" "$pkg/usr/bin/dosbox-x-sdl1"
           cp "$top/src/bin/dosbox-x-sdl2" "$pkg/usr/bin/dosbox-x-sdl2"
           ln -s dosbox-x-sdl2 "$pkg/usr/bin/dosbox-x"
           cp "$top/CHANGELOG" "$pkg/usr/share/dosbox-x/CHANGELOG.txt"
@@ -465,7 +433,6 @@ jobs:
 
           dpkg-shlibdeps \
             -T"$top/debian/substvars" \
-            "$pkg/usr/bin/dosbox-x-sdl1" \
             "$pkg/usr/bin/dosbox-x-sdl2"
 
           deps=$(sed -n 's/^shlibs:Depends=//p' "$top/debian/substvars")
@@ -514,7 +481,6 @@ jobs:
           mkdir -p "$appdir/usr/share/dosbox-x/drivez"
           mkdir -p "$appdir/usr/share/dosbox-x/glshaders"
           mkdir -p "$appdir/usr/share/dosbox-x/languages"
-          cp "$top/src/bin/dosbox-x-sdl1" "$appdir/usr/bin/"
           cp "$top/src/bin/dosbox-x-sdl2" "$appdir/usr/bin/"
           ln -s dosbox-x-sdl2 "$appdir/usr/bin/dosbox-x"
           cp "$top/CHANGELOG" "$appdir/usr/share/dosbox-x/CHANGELOG.txt"
@@ -546,18 +512,13 @@ jobs:
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
           case "$1" in
-              --sdl1)
-                  shift
-                  exec "$HERE/usr/bin/dosbox-x-sdl1" "$@"
-                  ;;
               --appimage-help)
                   echo "Usage: $0 [OPTION] [DOSBox-X options]"
                   echo
                   echo "Options:"
-                  echo "  --sdl1            Run the SDL1 version"
                   echo "  --appimage-help   Show this help"
                   echo
-                  echo "The SDL2 version is used by default."
+                  echo "This AppImage contains the SDL2 version only."
                   exit 0
                   ;;
           esac
@@ -579,7 +540,6 @@ jobs:
           ./linuxdeploy-x86_64.AppImage \
             --appdir "$appdir" \
             --desktop-file "$appdir/dosbox-x.desktop" \
-            --executable "$appdir/usr/bin/dosbox-x-sdl1" \
             --executable "$appdir/usr/bin/dosbox-x-sdl2"
           appimage="$top/dosbox-x_${{ env.timestamp }}nightly_amd64.AppImage"
           ARCH=x86_64 ./appimagetool-x86_64.AppImage \
