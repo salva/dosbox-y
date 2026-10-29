@@ -26,7 +26,7 @@ int main() {
  const auto good=output.str();
  const size_t chip=32+8192+sizeof(bool), roles=chip+sizeof(DBOPL::Chip);
  assert(good.size()==roles+36+36*sizeof(Bitu)+18);
- for (int fault=0;fault<7;++fault) {
+ for (int fault=0;fault<13;++fault) {
   auto bytes=good;
   switch(fault) {
    case 0:bytes.replace(0,32,32,'X');break;
@@ -38,6 +38,12 @@ int main() {
    case 6: {uint32_t mask=0xffffffff;
     const size_t at=chip+offsetof(DBOPL::Chip,chan)+offsetof(DBOPL::Channel,op)+offsetof(DBOPL::Operator,waveMask);
     std::memcpy(&bytes[at],&mask,sizeof(mask));break;}
+   case 7:bytes[chip+offsetof(DBOPL::Chip,vibratoIndex)]=32;break;
+   case 8:bytes[chip+offsetof(DBOPL::Chip,tremoloIndex)]=char(255);break;
+   case 9:bytes[chip+offsetof(DBOPL::Chip,vibratoStrength)]=char(255);break;
+   case 10:bytes[chip+offsetof(DBOPL::Chip,tremoloStrength)]=char(255);break;
+   case 11:std::memset(&bytes[chip+offsetof(DBOPL::Chip,lfoAdd)],0,sizeof(uint32_t));break;
+   case 12:std::memset(&bytes[chip+offsetof(DBOPL::Chip,lfoCounter)],255,sizeof(uint32_t));break;
   }
   DBOPL::Handler target(true);target.Init(44100);
   std::istringstream input(bytes);target.LoadState(input);assert(input.fail());

@@ -1661,6 +1661,16 @@ void Handler::LoadState( std::istream& stream )
 	READ_POD( &synthhandler_idx, synthhandler_idx );
 	if (!stream) return;
 
+	// ForwardLFO indexes these tables before updating its counters and divides
+	// by lfoAdd. Check the consumed state, not merely its relocated pointers.
+	if (chip.vibratoIndex >= 32 || chip.tremoloIndex >= TREMOLO_TABLE ||
+	    chip.vibratoStrength > 1 ||
+	    (chip.tremoloStrength != 0 && chip.tremoloStrength != 2) ||
+	    !chip.lfoAdd || chip.lfoCounter >= LFO_MAX) {
+		stream.setstate(std::ios::failbit);
+		return;
+	}
+
 	// Resolve archive roles only after checking every table subscript/span.
 	// Unknown roles must not leave raw producer pointers as native fallbacks.
 	for (int channel = 0; channel < 18; ++channel) {
