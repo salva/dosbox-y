@@ -714,12 +714,16 @@ extern int ZEXPORT unzClose(unzFile file) {
         return UNZ_PARAMERROR;
     s=(unz64_s*)file;
 
+    int member_result = UNZ_OK;
     if (s->pfile_in_zip_read!=NULL)
-        unzCloseCurrentFile(file);
+        member_result = unzCloseCurrentFile(file);
 
-    ZCLOSE64(s->z_filefunc, s->filestream);
+    /* Retire the native stream exactly once, but preserve member settlement
+       and native close errors. Callers withhold publication on either. */
+    const int close_result = ZCLOSE64(s->z_filefunc, s->filestream);
     free(s);
-    return UNZ_OK;
+    return member_result != UNZ_OK ? member_result :
+           close_result == 0 ? UNZ_OK : UNZ_ERRNO;
 }
 
 
