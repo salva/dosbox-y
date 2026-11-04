@@ -11,6 +11,13 @@ cases=[('Mouse',lambda b:b[:-1],False),
        ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
        ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
+if os.environ.get('DOSBOX_TEST_MOUSE_SCALARS'):
+ # These first fields are fixed uint16/uint16/bool/bool, with no registered PODs.
+ # Keep ZIP CRC valid and consume the malformed representation in the real owner.
+ for offset in (4,5):
+  def bad_mouse_bool(data,offset=offset):
+   data=bytearray(data);data[offset]=2;return bytes(data)
+  cases.append(('Mouse',bad_mouse_bool,False))
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
  # No unchanged-destination assumption: every attempt is a fresh process.

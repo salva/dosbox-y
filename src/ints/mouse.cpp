@@ -2979,6 +2979,27 @@ public:
 	{}
 
 private:
+    // Inspect archive-supplied bool representations before evaluating them.
+    static bool validBool(const bool &value) {
+        const bool zero=false, one=true;
+        return !memcmp(&value,&zero,sizeof(value)) ||
+               !memcmp(&value,&one,sizeof(value));
+    }
+    static bool validScalars() {
+        for (const bool *value : {&useps2callback,&ps2callbackinit,
+                &mouse.background,&mouse.enabled,&mouse.inhibit_draw,
+                &mouse.timer_in_progress,&mouse.first_range_setx,
+                &mouse.first_range_sety,&mouse.in_UIR,&mouse.polled})
+            if (!validBool(*value)) return false;
+        for (const auto value : {double(mouse.hidden_at),double(mouse.add_x),
+                double(mouse.add_y),double(mouse.mickey_accum_x),
+                double(mouse.mickey_accum_y),double(mouse.x),double(mouse.y),
+                double(mouse.ps2x),double(mouse.ps2y),double(mouse.mickeysPerPixel_x),
+                double(mouse.mickeysPerPixel_y),double(mouse.pixelPerMickey_x),
+                double(mouse.pixelPerMickey_y),double(mouse.senv_x),double(mouse.senv_y)})
+            if (!isfinite(value)) return false;
+        return true;
+    }
 	void getBytes(std::ostream& stream) override
 	{
 		uint8_t screenMask_idx = 0xff, cursorMask_idx = 0xff;
@@ -2991,7 +3012,7 @@ private:
 		else if( mouse.cursorMask == userdefCursorMask ) cursorMask_idx = 0x01;
         else if (mouse.cursorMask == defaultCursorMaskNEC) cursorMask_idx = 0x02;
 
-        if (screenMask_idx > 1 || cursorMask_idx > 2) {
+        if (screenMask_idx > 1 || cursorMask_idx > 2 || !validScalars()) {
             stream.setstate(std::ios::failbit);
             return;
         }
@@ -3082,7 +3103,7 @@ private:
 		READ_POD( &screenMask_idx, screenMask_idx );
 		READ_POD( &cursorMask_idx, cursorMask_idx );
 
-        if (!stream || screenMask_idx > 1 || cursorMask_idx > 2 ||
+        if (!stream || !validScalars() || screenMask_idx > 1 || cursorMask_idx > 2 ||
             mouse.events > QUEUE_SIZE || aux_pkt_len > sizeof(aux_pkt) ||
             mouse.ps2_unlock_idx >= UNLOCK_SEQ_INTELLIMOUSE.size()) {
             stream.setstate(std::ios::failbit);

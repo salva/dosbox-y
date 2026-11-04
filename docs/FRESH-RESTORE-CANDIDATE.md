@@ -255,6 +255,12 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.
+* Mouse import checks raw bool object representations before evaluation and
+  rejects nonfinite position/sensitivity/accumulator/timestamp values at the
+  owning codec. `DOSBOX_TEST_MOUSE_SCALARS=1 fresh-startup-failure.py` adds real
+  valid-CRC malformed callback bool imports; mouse-consumption.py also exercises
+  actual-struct bool fields and NaN/infinity under UBSan. This is not complete
+  mouse native callback identity or physical-input/PC98 qualification.
 * `python3 tests/original-foundation/checkpoint-stream.py` checks bounded common
   memory capture and failure publication, plus unconditional direct file/slot
   and checkpoint used-target refusal without invoking any owner installer.
