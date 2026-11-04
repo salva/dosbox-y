@@ -55,6 +55,9 @@ struct Response {
     uint32_t ip=0;
     uint16_t cs=0, ax=0, bx=0, cx=0, dx=0;
     bool registers_valid=false, continuation=false, partial=false;
+    bool root_exit=false, resident=false, self_parent=false;
+    uint16_t root_psp=0;
+    uint8_t exit_code=0;
 };
 struct Event {
     uint64_t ordinal=0, registration=0;

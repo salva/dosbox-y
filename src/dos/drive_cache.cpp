@@ -992,6 +992,37 @@ bool DOS_Drive_Cache::FindFirst(char* path, uint16_t& id) {
     return true;
 }
 
+bool DOS_Drive_Cache::StateSearchPosition(uint16_t id, uint64_t &position, char *anchor) const {
+    if (id>=MAX_OPENDIRS || !dirFindFirst[id]) return false;
+    const auto *search=dirFindFirst[id];
+    position=search->nextEntry;
+    anchor[0]=0;
+    if (position && position<=search->fileList.size())
+        strcpy(anchor,search->fileList[position-1]->shortname);
+    return true;
+}
+
+bool DOS_Drive_Cache::StateRestoreSearch(const char *path, uint16_t id, uint64_t position, const char *anchor) {
+    if (id>=MAX_OPENDIRS || !path || strlen(path)>=CROSS_LEN) return false;
+    char current[CROSS_LEN]; strcpy(current,path);
+    uint16_t fresh=0;
+    if (!FindFirst(current,fresh)) return false;
+    // FindFirst uses the ordinary native current-directory cache, never INT21.
+    // The saved guest DTA keeps its slot. The old entry list is not rollback
+    // authority: skip only the available prefix if host entries have changed.
+    if (fresh!=id) {
+        DeleteFileInfo(dirFindFirst[id]);
+        dirFindFirst[id]=dirFindFirst[fresh];
+        dirFindFirst[fresh]=nullptr;
+    }
+    auto *search=dirFindFirst[id];
+    for (size_t i=0;anchor[0] && i<search->fileList.size();++i) {
+        if (!strcmp(anchor,search->fileList[i]->shortname)) {position=i+1;break;}
+    }
+    search->nextEntry=static_cast<Bitu>(std::min<uint64_t>(position,search->fileList.size()));
+    return true;
+}
+
 bool DOS_Drive_Cache::FindNext(uint16_t id, char* &result, char* &lresult) {
     // out of range ?
     if ((id>=MAX_OPENDIRS) || !dirFindFirst[id]) {

@@ -845,6 +845,10 @@ void POD_Save_DOS_Memory( std::ostream& stream )
 
 void POD_Load_DOS_Memory( std::istream& stream )
 {
-	// - pure data
-	READ_POD( &memAllocStrategy, memAllocStrategy );
+	uint16_t strategy = 0;
+	READ_POD( &strategy, strategy );
+	// Use the same accepted DOS allocation modes as INT 21h/AH=58h.
+	// Do not pass malformed state into the allocator's branch selection.
+	if (!stream || !DOS_SetMemAllocStrategy(strategy))
+		stream.setstate(std::ios::failbit);
 }

@@ -2898,95 +2898,92 @@ private:
 		WRITE_POD( &pagehandler_idx, pagehandler_idx );
 	}
 
-	void setBytes(std::istream& stream) override
+	struct Pending {
+		MemoryBlock descriptor;
+		std::vector<MemHandle> handles;
+		uint8_t handlers[0x40000];
+		void install() {
+			memory = descriptor;
+			if (!dos_kernel_disabled) std::copy(handles.begin(), handles.end(), memory.mhandles);
+			for (Bitu page = 0; page < memory.pages; ++page) {
+				if (handlers[page] != 0xff)
+					memory.phandlers[page] = (PageHandler*)Memory_PageHandler_table[handlers[page]];
+				else if (page < 0xa0 || page > 0xff) memory.phandlers[page] = nullptr;
+			}
+            // The descriptor changes guest windows, not native callout objects.
+            // Rebind the fresh objects to the consumed spans; retaining the
+            // startup callout ranges would dispatch a different guest mapping.
+            if (memory.lfb.start_page && memory.lfb.pages) lfb_mem_cb_init();
+            else lfb_mem_cb_free();
+		}
+	};
+	std::unique_ptr<Pending> prepare(std::istream& stream)
 	{
-		uint8_t pagehandler_idx[0x40000];
-
-		//***********************************************
-		//***********************************************
-
-		SerializeGlobalPOD::setBytes(stream);
-
-
-		// Allocation extents belong to the current process, never the archive.
-		// Decode the descriptor before it can control a live RAM transfer.
-		MemoryBlock incoming;
-		READ_POD( &incoming, incoming );
-		if (!stream || incoming.pages != memory.pages ||
-		    incoming.handler_pages != memory.handler_pages ||
-		    incoming.reported_pages > incoming.pages ||
-		    incoming.pages > sizeof(pagehandler_idx) ||
-		    incoming.pages > MemSize / 4096)
-			E_Exit("Invalid save-state memory allocation extent");
-		// Address-line geometry is configured with native backing and callouts.
-		// A20 may mask its own line, not introduce arbitrary aliasing.
-		if (incoming.address_bits != memory.address_bits ||
+		std::unique_ptr<Pending> p(new Pending);
+		auto &incoming = p->descriptor;
+		readPOD(stream, incoming);
+        // The legacy descriptor contains a bool. Check its wire bytes before
+        // any typed read/assignment of that field (invalid bool is C++ UB).
+        const auto *a20_bytes = reinterpret_cast<const unsigned char *>(&incoming.a20.enabled);
+        const bool off=false,on=true;
+        if (!stream || (memcmp(a20_bytes,&off,sizeof(off)) &&
+                        memcmp(a20_bytes,&on,sizeof(on)))) return {};
+		if (incoming.pages != memory.pages || incoming.handler_pages != memory.handler_pages ||
+		    incoming.reported_pages != memory.reported_pages || incoming.pages > sizeof(p->handlers) ||
+		    incoming.pages > MemSize / 4096 || incoming.address_bits != memory.address_bits ||
 		    incoming.mem_alias_pagemask != memory.mem_alias_pagemask ||
+            incoming.reported_pages_4gb != memory.reported_pages_4gb ||
+            incoming.hw_next_assign != memory.hw_next_assign ||
 		    (incoming.mem_alias_pagemask_active != incoming.mem_alias_pagemask &&
-		     incoming.mem_alias_pagemask_active != (incoming.mem_alias_pagemask & ~0x100u)))
-			E_Exit("Invalid save-state memory address geometry");
+		     incoming.mem_alias_pagemask_active != (incoming.mem_alias_pagemask & ~0x100u))) return {};
+        const auto valid_span=[](Bitu start,Bitu end,Bitu pages) {
+            const uint64_t limit=uint64_t(1)<<20; // physical page domain
+            return uint64_t(start)<=limit && uint64_t(end)<=limit &&
+                   uint64_t(pages)<=limit && end>=start && end-start==pages;
+        };
+        if (!valid_span(incoming.lfb.start_page,incoming.lfb.end_page,incoming.lfb.pages) ||
+            !valid_span(incoming.lfb_mmio.start_page,incoming.lfb_mmio.end_page,incoming.lfb_mmio.pages) ||
+            (incoming.lfb.pages && !memory.lfb.handler) ||
+            (incoming.lfb_mmio.pages && !memory.lfb_mmio.handler)) return {};
 		incoming.phandlers = memory.phandlers;
 		incoming.mhandles = memory.mhandles;
 		incoming.lfb.handler = memory.lfb.handler;
 		incoming.lfb_mmio.handler = memory.lfb_mmio.handler;
-		memory = incoming;
-
-		// - static 'new' ptr
-		READ_POD_SIZE( MemBase, memory.pages*4096 );
-
-		//***********************************************
-		//***********************************************
-
-
-
+		p->handles.resize(incoming.pages);
+		// Geometry is checked above; consume directly into the disposable
+		// allocation. Later failure invalidates the target, not these bytes.
+		stream.read(reinterpret_cast<char*>(MemBase), size_t(incoming.pages) * 4096);
+		stream.read(reinterpret_cast<char*>(p->handles.data()), p->handles.size() * sizeof(MemHandle));
+		readPOD(stream, p->handlers);
+		if (!stream) return {};
 		if (!dos_kernel_disabled) {
-			READ_POD_SIZE( memory.mhandles, sizeof(MemHandle) * memory.pages );
-		}
-		else {
-			/* gotta fake it! */
-			MemHandle m = 0;
-			for (unsigned int i=0;i < memory.pages;i++) {
-				READ_POD_SIZE( &m, sizeof(MemHandle) );
-			}
-		}
-		READ_POD( &pagehandler_idx, pagehandler_idx );
-		if (!stream) E_Exit("Short save-state memory payload");
-		if (!dos_kernel_disabled) {
-			// Allocation consumers follow positive links without bounds checks.
-			std::vector<uint8_t> visited(memory.pages, 0);
-			for (Bitu page = 0; page < memory.pages; ++page) {
-				const MemHandle next = memory.mhandles[page];
-				if (next < -1 || (next > 0 && Bitu(next) >= memory.pages))
-					E_Exit("Invalid save-state memory handle link");
-			}
-			for (Bitu page = 1; page < memory.pages; ++page) {
+			std::vector<uint8_t> visited(incoming.pages, 0);
+			for (auto next : p->handles)
+				if (next < -1 || (next > 0 && Bitu(next) >= incoming.pages)) return {};
+			for (Bitu page = 1; page < incoming.pages; ++page) {
 				MemHandle link = static_cast<MemHandle>(page);
 				while (link > 0 && visited[link] == 0) {
 					visited[link] = 1;
-					link = memory.mhandles[link];
+					link = p->handles[link];
 				}
-				if (link > 0 && visited[link] == 1)
-					E_Exit("Cyclic save-state memory handles");
+				if (link > 0 && visited[link] == 1) return {};
 				link = static_cast<MemHandle>(page);
 				while (link > 0 && visited[link] == 1) {
 					visited[link] = 2;
-					link = memory.mhandles[link];
+					link = p->handles[link];
 				}
 			}
 		}
-		const size_t handler_count = sizeof(Memory_PageHandler_table) / sizeof(Memory_PageHandler_table[0]);
-		for (Bitu page = 0; page < memory.pages; ++page)
-			if (pagehandler_idx[page] != 0xff && pagehandler_idx[page] >= handler_count)
-				E_Exit("Invalid save-state memory page handler");
-
-		for( unsigned int lcv=0; lcv<memory.pages; lcv++ ) {
-			if( pagehandler_idx[lcv] != 0xff )
-				memory.phandlers[lcv] = (PageHandler *) Memory_PageHandler_table[ pagehandler_idx[lcv] ];
-			else if ( lcv >= 0xa0 && lcv <= 0xff)
-				{ /* VGA and BIOS emulation does not handle this right, yet */ }
-			else
-				memory.phandlers[lcv] = NULL; /* MEM_SlowPath() will fill it in again */
-		}
+		const size_t count = sizeof(Memory_PageHandler_table) / sizeof(Memory_PageHandler_table[0]);
+		for (Bitu page = 0; page < incoming.pages; ++page)
+			if (p->handlers[page] != 0xff && p->handlers[page] >= count) return {};
+		return p;
+	}
+	void setBytes(std::istream& stream) override
+	{
+		auto p = prepare(stream);
+		if (!p) E_Exit("Invalid saved memory state");
+		p->install();
 	}
 } dummy;
 }

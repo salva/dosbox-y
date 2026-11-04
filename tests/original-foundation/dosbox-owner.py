@@ -28,7 +28,7 @@ int main(){
  assert(empty.fail());
  assert(ticksRemain==11 && ticksLast==12 && ticksAdded==13 && ticksDone==14 && ticksScheduled==15);
  std::istringstream good("x");entry.setBytes(good);
- assert(good && ticksRemain==5 && ticksLast==42 && !ticksAdded && !ticksDone && !ticksScheduled);
+ assert(good && ticksRemain==11 && ticksLast==12 && ticksAdded==13 && ticksDone==14 && ticksScheduled==15);
 }
 '''
 (work/'test.cpp').write_text(code)

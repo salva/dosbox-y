@@ -6473,6 +6473,7 @@ Bits DEBUG_DispatchNativeExecution(void) {
     if (local_boundary) {
         NativeDebug::Request local;
         if (!native_execution.activate(DOSBOX_MachineServiceOwner().token,local)) return 0;
+        DOSBOX_ContinueFreshPacing();
         // Only prepare the original machine continuation. No decoder/callback
         // frame or local request copy may survive into guest execution.
         if(local.over) {
@@ -6517,6 +6518,7 @@ Bits DEBUG_DispatchNativeExecution(void) {
     }
     NativeDebug::Request request;
     const bool activated=native_execution.activate(DOSBOX_MachineServiceOwner().token,request);
+    if (activated) DOSBOX_ContinueFreshPacing();
     if (activated && !request.stop_any.empty()) {
         native_execution.stopRuntime().begin(request.stop_any.size(),PIC_Ticks);
         if (DEBUG_EvaluateNativeConditions()) {
@@ -8065,6 +8067,7 @@ static void ExecutionFinish(const char *reason);
 #endif
 void DEBUG_HoldRestoredStartup()
 {
+    DOSBOX_HoldFreshPacing();
     DEBUG_EnterCommonStoppedState();
     exitLoop=true;
     DOSBOX_SetLoop(DEBUG_Loop);

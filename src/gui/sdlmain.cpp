@@ -162,6 +162,8 @@ void GFX_DispatchMappedMouseMotion(int32_t host_x,int32_t host_y,
 #if C_DEBUG
 #include "native_control_owner.h"
 #endif
+#include "native_frontier.h"
+#include "restored_session.h"
 #include "zipfile.h"
 #include "glidedef.h"
 #include "bios_disk.h"
@@ -7765,6 +7767,11 @@ bool DOSBOX_parse_argv() {
             if (!control->cmdline->NextOptArgv(tmp)) return false;
             control->opt_time_limit = atof(tmp.c_str());
         }
+        else if (optname == "restore-state") {
+            if (!control->opt_restore_state.empty() ||
+                !control->cmdline->NextOptArgv(control->opt_restore_state) ||
+                control->opt_restore_state.empty()) return false;
+        }
         else if (optname == "break-start") {
             control->opt_break_start = true;
         }
@@ -8073,6 +8080,12 @@ bool DOSBOX_parse_argv() {
     competing = competing || !control->opt_agent_config.empty() || control->opt_agent_self_test;
 #endif
     competing = competing || getenv("DOSBOX_Y_LUA_MODE") || getenv("DOSBOX_Y_LUA_LAUNCH_HOLD_MS");
+    if (!control->opt_restore_state.empty() &&
+        (control->lua_driver.program_set || control->lua_driver.archive_set ||
+         !control->opt_debug_lua_script.empty())) {
+        LOG_MSG("Fresh restore cannot combine with legacy replay or pre-invocation Lua startup");
+        return false;
+    }
     if (!control->lua_driver.valid(!control->opt_debug_lua_script.empty(), competing) ||
         (control->opt_debug_lua_validation_exit && control->opt_debug_lua_script.empty())) return false;
 #endif
@@ -8213,6 +8226,52 @@ void VM_RunPendingBootShell() {
     SHELL_Run();
 }
 
+// Shared native new-kernel construction. This does not execute CONFIG.SYS,
+// AUTOEXEC or the shell, and must not be entered to repair a used target.
+static void VM_ConstructDOSKernelNative(bool initialize_guest_clock = true) {
+    Init_MemHandles();
+    DispatchVMEvent(VM_EVENT_DOS_BOOT);
+    dos_kernel_disabled = false;
+    void DOS_Startup(Section* sec);
+    DOS_Startup(NULL);
+    maincp = 0;
+
+#if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
+    Reflect_Menu();
+#endif
+
+    void DRIVES_Startup(Section *s);
+    DRIVES_Startup(NULL);
+    void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
+    if (IS_PC98_ARCH) update_pc98_function_row(1);
+
+    DispatchVMEvent(VM_EVENT_DOS_INIT_KERNEL_READY);
+    // Ordinary boot samples BIOS through INT1A guest execution. Fresh startup
+    // consumes the saved DOS date below, so must not execute that bootstrap.
+    if (initialize_guest_clock) DOS_InitClock();
+#if !defined(OSFREE)
+    void DOS_KeyboardLayout_Startup(Section* sec);
+    DOS_KeyboardLayout_Startup(NULL);
+#endif
+    void XMS_Startup(Section *sec);
+    XMS_Startup(NULL);
+#if !defined(OSFREE)
+    void EMS_Startup(Section* sec);
+    EMS_Startup(NULL);
+#endif
+}
+
+static void VM_ConstructDOSShellNative() {
+    SHELL_Init(); // Native shell footprint; no SHELL_Run/EXEC frame.
+    DispatchVMEvent(VM_EVENT_DOS_INIT_SHELL_READY);
+    void AUTOEXEC_Startup(Section *sec);
+    AUTOEXEC_Startup(NULL);
+    void MSCDEX_Startup(Section* sec);
+    MSCDEX_Startup(NULL);
+    void MOUSE_Startup(Section *sec);
+    MOUSE_Startup(NULL);
+}
+
 bool VM_Boot_DOSBox_Kernel() {
     if (!dos_kernel_disabled) {
 #if !defined(OSFREE)
@@ -8242,49 +8301,7 @@ bool VM_Boot_DOSBox_Kernel() {
     }
 
     if (dos_kernel_disabled) {
-        /* in case of reboot */
-        Init_MemHandles();
-
-        DispatchVMEvent(VM_EVENT_DOS_BOOT); // <- just starting the DOS kernel now
-
-        /* DOS kernel init */
-        dos_kernel_disabled = false; // FIXME: DOS_Init should install VM callback handler to set this
-        void DOS_Startup(Section* sec);
-        DOS_Startup(NULL);
-        maincp = 0;
-
-#if DOSBOXMENU_TYPE == DOSBOXMENU_HMENU
-        Reflect_Menu();
-#endif
-
-        void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
-
-        void DRIVES_Startup(Section *s);
-        DRIVES_Startup(NULL);
-
-        /* NEC's function key row seems to be deeply embedded in the CON driver. Am I wrong? */
-        if (IS_PC98_ARCH) update_pc98_function_row(1);
-
-        DispatchVMEvent(VM_EVENT_DOS_INIT_KERNEL_READY); // <- kernel is ready
-
-        /* Date/time */
-        DOS_InitClock();
-
-#if !defined(OSFREE)
-        /* keyboard mapping, at this point in CONFIG.SYS parsing, right? */
-        void DOS_KeyboardLayout_Startup(Section* sec);
-        DOS_KeyboardLayout_Startup(NULL);
-#endif
-
-        /* Most MS-DOS installations have a DEVICE=C:\HIMEM.SYS somewhere near the top of their CONFIG.SYS */
-        void XMS_Startup(Section *sec);
-        XMS_Startup(NULL);
-
-#if !defined(OSFREE)
-        /* And then after that, usually a DEVICE=C:\EMM386.EXE just after HIMEM.SYS */
-        void EMS_Startup(Section* sec);
-        EMS_Startup(NULL);
-#endif
+        VM_ConstructDOSKernelNative();
 
         /* possible return to DOSBox-X DOS environment */
         mainMenu.get_item("HelpCommandMenu").enable();
@@ -8294,24 +8311,7 @@ bool VM_Boot_DOSBox_Kernel() {
         CONFIGSHELL_Run();
 
         DispatchVMEvent(VM_EVENT_DOS_INIT_CONFIG_SYS_DONE); // <- we just finished executing CONFIG.SYS
-        SHELL_Init(); // <- NTS: this will change CPU instruction pointer!
-        DispatchVMEvent(VM_EVENT_DOS_INIT_SHELL_READY); // <- we just finished loading the shell (COMMAND.COM)
-
-        /* it's time to init parsing AUTOEXEC.BAT */
-        void AUTOEXEC_Startup(Section *sec);
-        AUTOEXEC_Startup(NULL);
-
-        /* Most MS-DOS installations run MSCDEX.EXE from somewhere in AUTOEXEC.BAT. We do the same here, in a fashion. */
-        /* TODO: Can we make this an OPTION if the user doesn't want to make MSCDEX.EXE resident? */
-        /* TODO: When we emulate executing AUTOEXEC.BAT between INIT_SHELL_READY and AUTOEXEC_BAT_DONE, can we make a fake MSCDEX.EXE within drive Z:\
-         *       and auto-add a Z:\DOS\MSCDEX.EXE to the top of AUTOEXEC.BAT, command line switches and all. if the user has not already added it? */
-        void MSCDEX_Startup(Section* sec);
-        MSCDEX_Startup(NULL);
-
-        /* Some installations load the MOUSE.COM driver from AUTOEXEC.BAT as well */
-        /* TODO: Can we make this an option? Can we add a fake MOUSE.COM to the Z: drive as well? */
-        void MOUSE_Startup(Section *sec);
-        MOUSE_Startup(NULL);
+        VM_ConstructDOSShellNative();
 
         DispatchVMEvent(VM_EVENT_DOS_INIT_AUTOEXEC_BAT_DONE); // <- we just finished executing AUTOEXEC.BAT
         DispatchVMEvent(VM_EVENT_DOS_INIT_AT_PROMPT); // <- now, we're at the DOS prompt
@@ -8331,6 +8331,27 @@ bool VM_PowerOn() {
     }
 
     return true;
+}
+
+// Startup owner only: same native footprint without entering reset-vector,
+// POST callback, CONFIG drivers or shell. Failure cannot be retried in-process.
+void VM_ConstructFreshNative() {
+    static bool attempted = false;
+    if (attempted || !NativeFrontier::frontiers().quiescent() ||
+        !guest_machine_power_on || !dos_kernel_disabled ||
+        first_shell || boot_shell_pending)
+        E_Exit("Fresh native construction requires an unused powered target");
+    attempted = true;
+    const auto *devices = dynamic_cast<Section_line *>(control->GetSection("devices"));
+    if (devices && devices->data.find_first_not_of(" \t") != std::string::npos)
+        E_Exit("Fresh native construction unsupported: nonempty [devices]");
+    extern void BIOS_ConstructFreshNative();
+    BIOS_ConstructFreshNative();
+    VM_ConstructDOSKernelNative(false);
+    SHELL_MessagesInit();
+    // Empty CONFIGSHELL has no allocation. Do not run it or emit false
+    // commands-executed/prompt events on this no-replay route.
+    VM_ConstructDOSShellNative();
 }
 
 #if defined(LINUX) && C_X11
@@ -10560,6 +10581,14 @@ fresh_boot:
          *      which will then "boot" into the DOSBox-X kernel, and then the shell, by calling VM_Boot_DOSBox_Kernel() */
         /* FIXME: throwing int() is a stupid and nondescriptive way to signal shutdown/reset. */
         try {
+            if (!control->opt_restore_state.empty()) {
+                SaveState::instance().restoreFreshStartup(control->opt_restore_state);
+#if C_DEBUG
+                DEBUG_HoldRestoredStartup();
+#else
+                E_Exit("Restored target held: this build has no explicit continuation frontend");
+#endif
+            }
 #if C_DEBUG
 #if C_DEBUG_LUA
             struct LocalLuaLifetime {
@@ -10571,13 +10600,28 @@ fresh_boot:
                     E_Exit("Lua debugger: startup script failed: %s", control->opt_debug_lua_script.c_str());
             } else
 #endif
-            if (control->opt_break_start) DEBUG_EnableDebugger();
+            if (control->opt_break_start && control->opt_restore_state.empty()) DEBUG_EnableDebugger();
 #endif
 #if C_DEBUG_LUA
             if (!control->opt_debug_lua_validation_exit || control->opt_debug_lua_script.empty())
 #endif
             DOSBOX_RunMachine(MachineService::Kind::RootGuest);
+        } catch (const RestoredSession::RootExit &exit) {
+            const auto facts=exit.facts;
+            LOG_MSG("Restored session ended: invocation=%llu root=%04x code=%u resident=%u self-parent=%u",
+                    (unsigned long long)facts.invocation, unsigned(facts.root),
+                    unsigned(facts.code), unsigned(facts.resident), unsigned(facts.self_parent));
+            // Never execute a producer parent's native suffix or reboot this
+            // disposed invocation. RootExit has already crossed guest frames.
+            run_machine=false;
+            dos_kernel_shutdown=false;
         } catch (int x) {
+            // A restored invocation has no represented BIOS/shell continuation.
+            // Do not turn a reset/BOOT departure into a reusable normal guest.
+            // Root termination uses RootExit above and preserves its own facts.
+            if (RestoredSession::selected() &&
+                (x==2 || x==3 || x==6 || x==7 || x==8 || x==9))
+                E_Exit("Restored session unsupported native departure (signal %d); target discarded",x);
             if (x == 2) { /* booting a guest OS. "boot" has already done the work to load the image and setup CPU registers */
                 LOG(LOG_MISC,LOG_DEBUG)("Emulation threw a signal to boot guest OS");
 
@@ -11166,29 +11210,13 @@ void SDL_GL_SwapBuffers(void) {
 // save state support
 void POD_Save_Sdlmain( std::ostream& stream )
 {
-	// - pure data
-	WRITE_POD( &sdl.mouse.autolock, sdl.mouse.autolock );
-	WRITE_POD( &sdl.mouse.requestlock, sdl.mouse.requestlock );
+    // Mouse acquisition is destination host policy, not emulated input state.
+    // This owner intentionally has an empty payload in the current revision.
+    (void)stream;
 }
 
 void POD_Load_Sdlmain( std::istream& stream )
 {
-	// Read the whole owner before publishing either host acquisition flag.
-	// Invalid bool representations must not be installed into live objects.
-	unsigned char autolock[sizeof(bool)] = {};
-	unsigned char requestlock[sizeof(bool)] = {};
-	stream.read(reinterpret_cast<char*>(autolock), sizeof(autolock));
-	stream.read(reinterpret_cast<char*>(requestlock), sizeof(requestlock));
-	if (!stream) return;
-	const bool off = false, on = true;
-	auto decode = [&stream, &off, &on](const unsigned char *bytes, bool &value) {
-		if (memcmp(bytes, &off, sizeof(bool)) == 0) value = false;
-		else if (memcmp(bytes, &on, sizeof(bool)) == 0) value = true;
-		else { stream.setstate(std::ios::failbit); return false; }
-		return true;
-	};
-	bool new_autolock = false, new_requestlock = false;
-	if (!decode(autolock, new_autolock) || !decode(requestlock, new_requestlock)) return;
-	sdl.mouse.autolock = new_autolock;
-	sdl.mouse.requestlock = new_requestlock;
+    // Never import autolock/requestlock or acquire a host mouse from an archive.
+    (void)stream;
 }

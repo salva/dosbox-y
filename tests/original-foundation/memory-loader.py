@@ -21,12 +21,18 @@ s=r'''
 #include <cassert>
 #include <cstring>
 #include <vector>
+#include <memory>
+#include <algorithm>
+template<class T> void readPOD(std::istream &s,T &v){s.read(reinterpret_cast<char*>(&v),sizeof(v));}
 using Bitu=unsigned;using MemHandle=int;struct PageHandler {};
 '''+struct+r'''
 char bytes[16384];char *MemBase=bytes;size_t MemSize=sizeof(bytes);
 PageHandler handler;PageHandler *handlers[4];MemHandle handles[4];
 PageHandler *Memory_PageHandler_table[]={nullptr,&handler};
 bool dos_kernel_disabled=false;
+unsigned binds=0,releases=0;bool fail_bind=false;
+void lfb_mem_cb_init(){++binds;if(fail_bind)throw 8;}
+void lfb_mem_cb_free(){++releases;}
 struct SerializeGlobalPOD {static void setBytes(std::istream&) {} static void getBytes(std::ostream&) {}};
 [[noreturn]] void E_Exit(const char*) {throw 7;}
 #define READ_POD(p,v) stream.read(reinterpret_cast<char*>(p),sizeof(v))
@@ -52,12 +58,23 @@ int main(){
  std::ostringstream valid;loader.getBytes(valid);assert(valid && !valid.str().empty());
  auto hostile=original;hostile.pages=0xffffffff;
  auto reported=original;reported.reported_pages=original.pages+1;
+ auto conventional=original;conventional.reported_pages=1;
  auto bits=original;bits.address_bits=40;
  auto mask=original;mask.mem_alias_pagemask=0xffffffff;
  auto active=original;active.mem_alias_pagemask_active ^= 0x200;
- for(auto h:{hostile,reported,bits,mask,active}) {std::istringstream in(archive(h));bool fatal=false;
+ auto assignment=original;assignment.hw_next_assign^=4096;
+ auto high=original;high.reported_pages_4gb=1;
+ auto span=original;span.lfb.start_page=0xfffff;span.lfb.end_page=0;span.lfb.pages=1;
+ auto extent=original;extent.lfb_mmio.end_page=2;extent.lfb_mmio.pages=1;
+ for(auto h:{hostile,reported,conventional,bits,mask,active,assignment,high,span,extent}) {std::istringstream in(archive(h));bool fatal=false;
  try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal && memory.pages==4);}
  auto encoded=original;encoded.phandlers=nullptr;encoded.mhandles=nullptr;
+ for(unsigned char value:{2,127,255}) {
+  auto wire=archive(original);
+  const auto offset=reinterpret_cast<const char*>(&original.a20.enabled)-reinterpret_cast<const char*>(&original);
+  wire[size_t(offset)]=char(value);std::istringstream in(wire);bool fatal=false;
+  try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);
+ }
  encoded.lfb.handler=encoded.lfb_mmio.handler=nullptr;
  {auto masked=encoded;masked.mem_alias_pagemask_active &= ~0x100u;
  std::istringstream in(archive(masked));loader.setBytes(in);assert(in);
@@ -66,6 +83,23 @@ int main(){
  assert(good && memory.phandlers==handlers && memory.mhandles==handles);
  assert(memory.lfb.handler==&handler && memory.lfb_mmio.handler==&handler);
  assert(handlers[0]==&handler && handlers[1]==&handler);
+ {auto mapped=encoded;mapped.lfb.start_page=0x100;mapped.lfb.end_page=0x110;mapped.lfb.pages=16;
+  mapped.lfb_mmio.start_page=0x200;mapped.lfb_mmio.end_page=0x210;mapped.lfb_mmio.pages=16;
+  const auto before=binds;
+  memory.lfb.handler=nullptr;bool absent=false;std::istringstream missing(archive(mapped));
+  try{loader.setBytes(missing);}catch(int){absent=true;}
+  assert(absent && binds==before);memory.lfb.handler=&handler;
+  memory.lfb_mmio.handler=nullptr;absent=false;std::istringstream missing_mmio(archive(mapped));
+  try{loader.setBytes(missing_mmio);}catch(int){absent=true;}
+  assert(absent && binds==before);memory.lfb_mmio.handler=&handler;
+  std::istringstream in(archive(mapped));loader.setBytes(in);
+  assert(in && binds==before+1 && memory.lfb.start_page==0x100);
+  fail_bind=true;bool failed=false;std::istringstream failure(archive(mapped));
+  try{loader.setBytes(failure);}catch(int code){failed=code==8;}
+  assert(failed && memory.lfb.start_page==0x100);fail_bind=false;
+  const auto released=releases;std::istringstream disabled(archive(encoded));loader.setBytes(disabled);
+  assert(disabled && releases==released+1);
+ }
  for(unsigned n:{0u,1u,unsigned(sizeof(MemoryBlock)-1),unsigned(sizeof(MemoryBlock)+1)}) {
   std::istringstream in(archive(encoded).substr(0,n));bool fatal=false;
   try{loader.setBytes(in);}catch(int){fatal=true;}assert(fatal);

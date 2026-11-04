@@ -1827,6 +1827,50 @@ bool localDrive::FileUnlink(const char * name) {
 	}
 }
 
+void localDrive::SaveState(std::ostream &stream) {
+    DOS_Drive::SaveState(stream);
+    for (uint16_t id=0;id<MAX_OPENDIRS;++id) {
+        uint64_t position=0; char anchor[DOS_NAMELENGTH_ASCII]={};
+        const uint8_t active=dirCache.StateSearchPosition(id,position,anchor)?1:0;
+        stream.write(reinterpret_cast<const char *>(&active),sizeof(active));
+        if (!active) continue;
+        if (!srchInfo[id].srch_dir[0]) {stream.setstate(std::ios::failbit);return;}
+        stream.write(srchInfo[id].srch_dir,sizeof(srchInfo[id].srch_dir));
+        stream.write(reinterpret_cast<const char *>(&position),sizeof(position));
+        stream.write(anchor,sizeof(anchor));
+    }
+}
+
+void localDrive::LoadState(std::istream &stream) {
+    DOS_Drive::LoadState(stream);
+    if (!stream) return;
+    for (uint16_t id=0;id<MAX_OPENDIRS;++id) {
+        uint8_t active=0;
+        stream.read(reinterpret_cast<char *>(&active),sizeof(active));
+        if (!stream) return;
+        if (active>1) {stream.setstate(std::ios::failbit);return;}
+        if (!active) continue;
+        char path[CROSS_LEN]={}, anchor[DOS_NAMELENGTH_ASCII]={}; uint64_t position=0;
+        stream.read(path,sizeof(path));
+        stream.read(reinterpret_cast<char *>(&position),sizeof(position));
+        stream.read(anchor,sizeof(anchor));
+        // Producer native paths are tied to the initialized matching mount.
+        // Never let an archive enumerate outside its mount or overflow the
+        // consumer's full_name concatenation in FindNext.
+        const size_t base_length=strlen(basedir);
+        if (!stream || !memchr(path,0,sizeof(path)) || !memchr(anchor,0,sizeof(anchor)) ||
+            strlen(path)<base_length || strncasecmp(path,basedir,base_length) ||
+            (base_length && basedir[base_length-1]!='/' && basedir[base_length-1]!='\\' &&
+             path[base_length] && path[base_length]!='/' && path[base_length]!='\\') ||
+            strstr(path+base_length,"..") ||
+            strlen(path)+DOS_NAMELENGTH_ASCII>=CROSS_LEN ||
+            !dirCache.StateRestoreSearch(path,id,position,anchor)) {
+            stream.setstate(std::ios::failbit);return;
+        }
+        strcpy(srchInfo[id].srch_dir,path);
+    }
+}
+
 bool localDrive::FindFirst(const char * _dir,DOS_DTA & dta,bool fcb_findfirst) {
 	char tempDir[CROSS_LEN];
 	strcpy(tempDir,basedir);
@@ -1860,6 +1904,9 @@ bool localDrive::FindFirst(const char * _dir,DOS_DTA & dta,bool fcb_findfirst) {
 		dta.SetDirID(id);
 		strcpy(srchInfo[id].srch_dir,tempDir);
 	} else {
+        // This codec represents classic DTA searches, not the global LFN
+        // handle table. Do not accidentally capture a stale classic slot.
+        srchInfo[id].srch_dir[0]=0;
 		ldid[lfn_filefind_handle]=id;
 		ldir[lfn_filefind_handle]=tempDir;
 	}
@@ -2801,6 +2848,7 @@ next:
 }
 
 localDrive::localDrive(const char * startdir,uint16_t _bytes_sector,uint8_t _sectors_cluster,uint16_t _total_clusters,uint16_t _free_clusters,uint8_t _mediaid, std::vector<std::string> &options) : special_prefix_local(prefix_local.c_str()) {
+    memset(srchInfo,0,sizeof(srchInfo));
 	strcpy(basedir,startdir);
 	sprintf(info,"local directory %s",startdir);
 	allocation.bytes_sector=_bytes_sector;

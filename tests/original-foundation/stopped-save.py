@@ -1,16 +1,46 @@
-"""Original-engine stopped save vertical (author integration probe)."""
+"""Stopped-save producer and used-target load refusal integration probe.
+Fresh success/malformed-owner disposal belongs to fresh-startup{,-failure}.py.
+"""
 import os, pathlib, tempfile, subprocess, pty, fcntl, termios, struct, socket, select, time, zipfile, re, json, hashlib
 root = pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'stopped-save-vertical'
 root.mkdir(exist_ok=True)
 w = pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root))
 binary = pathlib.Path(os.environ.get('DOSBOX_TEST_BINARY','src/dosbox-x')).resolve()
-(w/'TINY.COM').write_bytes(bytes.fromhex('90 40 eb fc'))
+(w/'TINY.COM').write_bytes(bytes.fromhex(os.environ.get('DOSBOX_TEST_PROGRAM_HEX','90 40 eb fc')))
+if os.environ.get('DOSBOX_TEST_EXEC_CHILD'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-child.asm')),'-o',str(w/'TINY.COM')],check=True)
+ (w/'CHILD.COM').write_bytes(bytes.fromhex('b8 07 4c cd 21'))
+if os.environ.get('DOSBOX_TEST_XMS_SERVICE'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_XMS_HELD'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms-held.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_EMS_SERVICE'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-ems.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_EMS_HELD'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-ems-held.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_CUSTOM_INT22'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-int22.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_INT27'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-int27.asm')),'-o',str(w/'TINY.COM')],check=True)
+for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm')):
+ if os.environ.get('DOSBOX_TEST_'+option):
+  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
 slot_mode=bool(os.environ.get('DOSBOX_TEST_SLOT'))
 file_state = bool(os.environ.get('DOSBOX_TEST_FILE_STATE'))
+unsupported_devices = bool(os.environ.get('DOSBOX_TEST_UNSUPPORTED_DEVICES'))
 if file_state:
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('file-state.asm')),'-o',str(w/'TINY.COM')],check=True)
  for name in ('ONE.DAT', 'TWO.DAT'): (w/name).write_bytes(b'directory witness')
-flagged = file_state or bool(os.environ.get('DOSBOX_TEST_FLAGGED'))
+if os.environ.get('DOSBOX_TEST_SEARCH_HELD'):
+ subprocess.run(['nasm','-f','bin','-DEXTRA_CURRENT_ENTRY='+str(int(bool(os.environ.get('DOSBOX_TEST_SEARCH_MATCHING_ENTRY')))),'-DDELETE_CURRENT_ENTRY='+str(int(bool(os.environ.get('DOSBOX_TEST_SEARCH_DELETED_ENTRIES')))),str(pathlib.Path(__file__).with_name('fresh-search-held.asm')),'-o',str(w/'TINY.COM')],check=True)
+ (w/'ONE.DAT').write_bytes(b'one')
+ (w/'TWO.DAT').write_bytes(b'two')
+if os.environ.get('DOSBOX_TEST_LFN_HELD'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-lfn-held.asm')),'-o',str(w/'TINY.COM')],check=True)
+ (w/'ONE.DAT').write_bytes(b'one')
+if os.environ.get('DOSBOX_TEST_SHARED_FILE'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-file-shared.asm')),'-o',str(w/'TINY.COM')],check=True)
+flagged = file_state or bool(os.environ.get('DOSBOX_TEST_FLAGGED')) or bool(os.environ.get('DOSBOX_TEST_SHARED_FILE'))
 if flagged:
  (w/'FLAG.TXT').write_bytes(b'captured flagged guest file\r\n')
 # Obtain native wire extents from this exact binary, not guessed pointer offsets.
@@ -28,22 +58,38 @@ layout = subprocess.check_output(['gdb','-batch','-ex','p '+size_expr,'-ex','p s
 (w/'layout.txt').write_text(layout)
 cpu_prefix, memory_descriptor = map(int,re.findall(r'\$\d+ = (\d+)',layout))
 print(w, flush=True)
-def run(restore):
- d=w/(restore if isinstance(restore,str) else 'restore' if restore else 'capture');d.mkdir()
+def run():
+ d=w/'capture';d.mkdir()
  listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(20)
  flag_command = 'flagsave FLAG.TXT\n' if flagged else ''
  conf=d/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[autoexec]\nmount c {w}\nc:\n{flag_command}debugbox TINY.COM\n')
+ # Exercise represented geometry/timing, not just the default 16MB/3000 case.
+ if os.environ.get('DOSBOX_TEST_MEMSIZE'):
+  memory=int(os.environ['DOSBOX_TEST_MEMSIZE'])
+  assert 1 <= memory <= 256
+  conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nmemsize={memory}\n'))
+ if os.environ.get('DOSBOX_TEST_CYCLES'):
+  cycles=int(os.environ['DOSBOX_TEST_CYCLES'])
+  assert 1 <= cycles <= 1000000
+  conf.write_text(conf.read_text().replace('cycles=fixed 3000',f'cycles=fixed {cycles}'))
+ if os.environ.get('DOSBOX_TEST_AUDIO'):
+  conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
+ if os.environ.get('DOSBOX_TEST_BASIC_ROM'):
+  rom=w/'BASIC.ROM';rom.write_bytes(bytes([0x90])*32768)
+  conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nibm rom basic={rom}\n'))
+ if os.environ.get('DOSBOX_TEST_LFN_HELD'):
+  conf.write_text(conf.read_text().replace('[autoexec]', '[dos]\nver=7.1\nlfn=true\n[autoexec]'))
+ if unsupported_devices:
+  conf.write_text(conf.read_text().replace('[autoexec]', '[devices]\nrem unrepresented driver recipe\n[autoexec]'))
  if slot_mode: conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nsaveremark=false\n'))
  xr,xw=os.pipe();xlog=open(d/'xvfb.log','wb');x=subprocess.Popen(['Xvfb','-displayfd',str(xw),'-screen','0','1024x768x24'],pass_fds=(xw,),stdout=xlog,stderr=xlog);os.close(xw)
  with os.fdopen(xr) as pipe: display=pipe.readline().strip()
  master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',50,160,0,0));os.set_blocking(master,False)
  log=open(d/'pty.log','wb');wire=open(d/'wire.log','wb')
- if restore == 'config': conf.write_text(conf.read_text().replace('cycles=fixed 3000','cycles=fixed 3001'))
- consumer = pathlib.Path(os.environ['DOSBOX_TEST_OTHER_BINARY']) if restore == 'build' else binary
- argv=[str(consumer),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
+ argv=[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
  if os.environ.get('DOSBOX_SAVE_BACKTRACE'):
   argv=['gdb','-batch','-ex','break '+os.environ['DOSBOX_SAVE_BACKTRACE'],'-ex','run','-ex','bt','-ex','continue','--args']+argv
- p=subprocess.Popen(argv,stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,DISPLAY=':'+display,TERM='xterm',SDL_AUDIODRIVER='dummy'));os.close(slave)
+ p=subprocess.Popen(argv,stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,DISPLAY=':'+display,TERM='xterm',SDL_AUDIODRIVER=os.environ.get('DOSBOX_TEST_AUDIO_DRIVER','dummy'),SDL_DISKAUDIOFILE=str(d/'host-audio.raw')));os.close(slave)
  conn=None;buf=b''
  def drain():
   while select.select([master],[],[],0)[0]:
@@ -76,6 +122,31 @@ def run(restore):
  try:
   conn,_=listener.accept();conn.setblocking(False)
   time.sleep(2);drain()
+  if os.environ.get('DOSBOX_TEST_BASIC_ROM'):
+   # Change only the pathname contents after initialization. The archive must
+   # continue describing the bytes actually loaded by the BIOS owner.
+   request('rom-before',f'STATEWRITE {d}/rom-before.sav')
+   (w/'BASIC.ROM').write_bytes(bytes([0x91])*32768)
+   request('rom-after',f'STATEWRITE {d}/rom-after.sav')
+   with zipfile.ZipFile(d/'rom-before.sav') as before, zipfile.ZipFile(d/'rom-after.sav') as after:
+    assert before.read('Config_Identity')==after.read('Config_Identity')
+    assert before.read('Build_Identity')==after.read('Build_Identity')
+  if os.environ.get('DOSBOX_TEST_AUDIO_DRIVER'):
+   driver=os.environ['DOSBOX_TEST_AUDIO_DRIVER'].encode()
+   assert b'Audio '+driver in (d/'pty.log').read_bytes(), 'requested SDL audio backend not initialized'
+   if driver==b'disk':
+    assert (d/'host-audio.raw').stat().st_size>0, 'SDL disk backend produced no host output'
+  if unsupported_devices:
+   # Real initialized process, not the reduced Section_line fixture. Refusal
+   # must not publish a destination or leave a serializer-owned partial file.
+   destination=w/'unsupported.sav'
+   request('devices-save',f'STATEWRITE {destination}',expect_failure=True)
+   assert b'nonempty [devices]' in (d/'pty.log').read_bytes()
+   assert not destination.exists()
+   assert not list(w.glob(destination.name+'.*')),list(w.iterdir())
+   step=request('devices-step','STEPIN')
+   assert b'CS:IP=0814:0101' in step,step
+   return
   if slot_mode:
    import runpy, shutil
    sendkey=runpy.run_path(str(pathlib.Path(__file__).with_name('slot-keys.py')))['key']
@@ -91,22 +162,27 @@ def run(restore):
    shutil.copyfile(d/'1.sav',d/'slot-before.sav')
    sendkey(':'+display,'l');time.sleep(2);drain()
    text=(d/'pty.log').read_bytes()
-   assert b'Loading state from slot' in text and b'Slot load refused' not in text,text[-4000:]
-   # Capture installed state through a second slot save, still stopped.
+   assert b'fresh launch required' in text and b'Loading state from slot' not in text,text[-4000:]
+   # Refused load retains the held guest and repeated slot save capability.
    sendkey(':'+display,'s');time.sleep(2);drain()
    with zipfile.ZipFile(d/'slot-before.sav') as before, zipfile.ZipFile(d/'1.sav') as after:
     for name in ('Archive_Revision','Build_Identity','Config_Identity'):
-     assert before.read(name)==after.read(name),('slot restore changed held state',name)
+     assert before.read(name)==after.read(name),('slot refusal changed held identity',name)
     assert before.read('CPU')[:cpu_prefix]==after.read('CPU')[:cpu_prefix]
     assert before.read('Memory')[memory_descriptor:]==after.read('Memory')[memory_descriptor:]
+    for name in before.namelist():
+     # Mapper input can change Keyboard, not cycles/PIC/timer/other owners.
+     if name not in ('Time_Stamp','Keyboard'):
+      assert before.read(name)==after.read(name),('valid slot refusal changed owner',name)
    shutil.copyfile(d/'1.sav',d/'refusal-before.sav')
    # Corrupt identity with valid ZIP CRC: slot ingress must refuse, no dialog.
    bad=d/'bad.sav'
    with zipfile.ZipFile(d/'1.sav') as original, zipfile.ZipFile(bad,'w') as changed:
     for name in original.namelist(): changed.writestr(name,b'bad-revision' if name=='Archive_Revision' else original.read(name))
    shutil.copyfile(bad,d/'1.sav')
+   previous_refusals=(d/'pty.log').read_bytes().count(b'State load refused: fresh launch required')
    sendkey(':'+display,'l');time.sleep(2);drain()
-   assert b'Slot load refused or failed' in (d/'pty.log').read_bytes()
+   assert (d/'pty.log').read_bytes().count(b'State load refused: fresh launch required')>previous_refusals
    sendkey(':'+display,'s');time.sleep(2);drain()
    deadline=time.monotonic()+15
    while time.monotonic()<deadline:
@@ -120,165 +196,69 @@ def run(restore):
      # Mapper key/focus presentation legitimately changes keyboard input state.
      if name not in ('Time_Stamp','Keyboard'): assert before.read(name)==after.read(name),('slot refusal changed owner',name)
    return
-  if restore in ('config','build'):
-   request('before',f'STATEWRITE {d}/before.sav')
-   request('identity-refusal',f'STATEREAD {w}/first.sav',expect_failure=True)
-   request('after',f'STATEWRITE {d}/after.sav')
-   with zipfile.ZipFile(d/'before.sav') as before, zipfile.ZipFile(d/'after.sav') as after, zipfile.ZipFile(w/'first.sav') as producer:
-    field = 'Build_Identity' if restore == 'build' else 'Config_Identity'
-    assert before.read(field) != producer.read(field), 'not a real producer/consumer mismatch'
-    for name in before.namelist():
-     if name != 'Time_Stamp': assert before.read(name) == after.read(name), ('identity refusal changed owner',name)
-   return
-  if restore == 'fatal':
-   # Valid transport, invalid consumed owner: preceding owners may have effects.
-   bad = w/'short-pic.sav'
-   with zipfile.ZipFile(w/'first.sav') as original, zipfile.ZipFile(bad, 'w') as changed:
-    for name in original.namelist():
-     changed.writestr(name, b'' if name == 'Pic' else original.read(name))
-   command = f'REQ fatal EXEC STATEREAD {bad}\n'.encode()
-   conn.sendall(command);wire.write(command);wire.flush()
-   end=time.monotonic()+20
-   eof=False
-   while time.monotonic()<end:
-    drain()
-    if select.select([conn],[],[],.02)[0]:
-     data=conn.recv(65536)
-     if not data:
-      eof=True
-      break
-     wire.write(data);wire.flush();buf+=data
-   assert eof, 'partial install left the frontend connection alive'
-   rc=p.wait(timeout=5)
-   (d/'exit-code.txt').write_text(str(rc)+'\n')
-   assert rc == 1, ('fatal disposal did not exit through E_Exit', rc)
-   drain()
-   fatal_log = (d/'pty.log').read_bytes()
-   assert b'Invalid or truncated saved PIC queue link' in fatal_log
-   assert b'terminate called' not in fatal_log, fatal_log[-2000:]
-   assert b'State completed' not in buf and b'END fatal' not in buf, buf
-   return
-  if file_state:
-   request('checkpoint-bp','BP 0814:0180')
+  if file_state or os.environ.get('DOSBOX_TEST_CAPTURE_IP'):
+   checkpoint=os.environ.get('DOSBOX_TEST_CAPTURE_IP','0814:0180')
+   request('checkpoint-bp','BP '+checkpoint)
    request('setup-run','RUN')
    time.sleep(1);drain()
-  if restore:
-   request('ready','SR BX 5678')
-   unknown = request('unknown-command','NOT_A_DEBUGGER_COMMAND',expect_failure=True)
-   assert b'Debugger command not recognized' in unknown, unknown
-   missing_argument = request('missing-argument','STATEWRITE',expect_failure=True)
-   assert b'State path required' in missing_argument, missing_argument
-   assert b'Debugger command not recognized' not in missing_argument, missing_argument
-   request('before-refusals',f'STATEWRITE {w}/before-refusals.sav')
-   request('missing-path',f'STATEREAD {w}/absent.sav',expect_failure=True)
-   request('invalid-destination',f'STATEWRITE {w}/absent-directory/state.sav',expect_failure=True)
-   for field in ('Archive_Revision', 'Build_Identity', 'Config_Identity', 'DOSBox-X_Version', 'Program_Name', 'Memory_Size', 'Machine_Type'):
-    bad = w / (field + '.sav')
-    with zipfile.ZipFile(w/'first.sav') as original, zipfile.ZipFile(bad, 'w') as changed:
-     for name in original.namelist():
-      # Numeric mismatch used to overflow diagnostic-only atoi/multiplication.
-      mismatch = b'2147483647' if field == 'Memory_Size' else b'incompatible'
-      changed.writestr(name, mismatch if name == field else original.read(name))
-    refused = request('mismatch',f'STATEREAD {bad}',expect_failure=True)
-    assert b'State failed' in refused and b'State completed' not in refused, refused
-   # Real ZIP integrity refusal must happen before the first owner install.
-   with zipfile.ZipFile(w/'first.sav') as original:
-    owner = original.namelist()[-1]
-    for kind in ('missing', 'crc'):
-     bad = w / (kind + '.sav')
-     with zipfile.ZipFile(bad, 'w', compression=zipfile.ZIP_STORED) as changed:
-      for name in original.namelist():
-       if kind != 'missing' or name != owner:
-        changed.writestr(name, original.read(name))
-     if kind == 'crc':
-      with zipfile.ZipFile(bad) as changed:
-       entry = changed.getinfo(owner)
-      data = bytearray(bad.read_bytes())
-      name_length, extra_length = struct.unpack_from('<HH', data, entry.header_offset + 26)
-      offset = entry.header_offset + 30 + name_length + extra_length
-      assert entry.file_size > 0
-      data[offset] ^= 1
-      bad.write_bytes(data)
-     refused = request(kind, f'STATEREAD {bad}', expect_failure=True)
-     assert b'State failed' in refused and b'State completed' not in refused, refused
-   request('after-refusals',f'STATEWRITE {w}/after-refusals.sav')
-   request('load',f'STATEREAD {w}/first.sav')
-   if flagged:
-    assert (w/'FLAG.TXT').read_bytes() == b'changed between processes\r\n'
-    assert not (w/'first.dat').exists(), 'machine save unexpectedly created flagged sidecar'
-   request('again',f'STATEWRITE {w}/restored.sav')
-   time.sleep(.4)
-   request('held',f'STATEWRITE {w}/restored-held.sav')
-  else:
+  if os.environ.get('DOSBOX_TEST_LFN_HELD'):
+   # Real LFN handle allocation succeeded before IP0200. Capture must not
+   # publish an archive pretending that the global native handle is classic.
+   destination=w/'unrepresented-lfn.sav'
+   request('lfn-save',f'STATEWRITE {destination}',expect_failure=True)
+   assert not destination.exists()
+   step=request('lfn-refusal-step','STEPIN')
+   segment=os.environ['DOSBOX_TEST_CAPTURE_IP'].split(':')[0]
+   assert ('CS:IP='+segment+':0201').encode() in step,step
+   return
+  if not slot_mode:
+   unknown=request('unknown-command','NOT_A_DEBUGGER_COMMAND',expect_failure=True)
+   assert b'Debugger command not recognized' in unknown,unknown
+   missing=request('missing-argument','STATEWRITE',expect_failure=True)
+   assert b'State path required' in missing,missing
+   assert b'Debugger command not recognized' not in missing,missing
    request('reg','SR AX 1234')
+   # Permit capture after an explicit guest setup prefix (for example setting
+   # PSP parent=self). Save observations begin only after these authorized steps.
+   for index in range(int(os.environ.get('DOSBOX_TEST_CAPTURE_STEPS','0'))):
+    request('capture-prefix'+str(index),'STEPIN')
    request('first',f'STATEWRITE {w}/first.sav')
    time.sleep(.4)
    request('second',f'STATEWRITE {w}/second.sav')
    if flagged:
     (w/'FLAG.TXT').write_bytes(b'changed between processes\r\n')
-   request('same-load',f'STATEREAD {w}/first.sav')
-   if flagged:
-    assert (w/'FLAG.TXT').read_bytes() == b'changed between processes\r\n'
-   request('same-again',f'STATEWRITE {w}/same-restored.sav')
-   time.sleep(.4)
-   request('same-held',f'STATEWRITE {w}/same-restored-held.sav')
-  if file_state:
-   request('done-bp','BP 0814:0208')
-   request('witness-run','RUN')
-   time.sleep(4);drain()
-   # Capture the held terminal; BREAK also diagnoses a fixture that failed to
-   # reach its completion breakpoint rather than claiming an active save.
-   request('hold','BREAK')
-   request('witness-save',f'STATEWRITE {d}/witness.sav')
-   with zipfile.ZipFile(d/'witness.sav') as archive:
-    ram=archive.read('Memory');mark=ram.index(b'R3-FILE-WITNESS!')+len(b'R3-FILE-WITNESS!')
-    result,count,cursor,error,search_error=struct.unpack_from('<5H',ram,mark)
-    assert (result,count,cursor,error,search_error)==(0x1234,4,7,5,18), (result,count,cursor,error,search_error)
-    assert ram[mark+10:mark+14]==b'nged', ram[mark+10:mark+14]
-    names = {ram[mark+14:mark+27].split(b'\0')[0],ram[mark+27:mark+40].split(b'\0')[0]}
-    assert names == {b'ONE.DAT',b'TWO.DAT'},names
-   assert (w/'FLAG.TXT').read_bytes()==b'changed between processes\r\n'
-  else:
-   step = request('step','STEPIN')
-   assert b'CS:IP=0814:0101 AX=1234 BX=0000' in step, step
+   # This tests only the supported used-target refusal, not startup restore.
+   request('invalid-destination',f'STATEWRITE {w}/absent-directory/state.sav',expect_failure=True)
+   request('same-load',f'STATEREAD {w}/first.sav',expect_failure=True)
+   request('missing-load',f'STATEREAD {w}/absent.sav',expect_failure=True)
+   request('refusal-save',f'STATEWRITE {w}/after-live-refusal.sav')
+   with zipfile.ZipFile(w/'first.sav') as before, zipfile.ZipFile(w/'after-live-refusal.sav') as after:
+    for name in before.namelist():
+     if name != 'Time_Stamp': assert before.read(name)==after.read(name),name
+   step=request('refusal-step','STEPIN')
+   expected=os.environ.get('DOSBOX_TEST_REFUSAL_REGISTERS','CS:IP=0814:0101 AX=1234 BX=0000').encode()
+   if file_state:
+    assert b'CS:IP=0814:0184' in step,step
+   else:
+    assert expected in step,step
  finally:
   if conn:conn.close()
   if p.poll() is None:p.terminate()
   try:p.wait(timeout=5)
   except subprocess.TimeoutExpired:p.kill();p.wait()
   drain();os.close(master);log.close();wire.close();listener.close();x.terminate();x.wait(timeout=5);xlog.close()
-run(False)
+run()
+if os.environ.get('DOSBOX_TEST_LFN_HELD'):
+ print('real LFN search capture refusal/no publication/explicit step probe completed',flush=True)
+ raise SystemExit(0)
+if unsupported_devices:
+ print('nonempty devices capture refusal/no publication/explicit step probe completed',flush=True)
+ raise SystemExit(0)
 if slot_mode:
  print('slot mapper probe completed',flush=True)
- raise SystemExit(0)
-if flagged:
- (w/'FLAG.TXT').write_bytes(b'changed between processes\r\n')
-run(True)
-run('config')
-if os.environ.get('DOSBOX_TEST_OTHER_BINARY'): run('build')
-run('fatal')
-# Same-process host delay must not change any owner payload. Fresh-process
-# archives contain process-local addresses in legacy owners; do not mistake
-# whole-archive byte equality for their still-required semantic qualification.
-with zipfile.ZipFile(w/'before-refusals.sav') as before, zipfile.ZipFile(w/'after-refusals.sav') as after:
- for name in before.namelist():
-  if name != 'Time_Stamp': assert before.read(name) == after.read(name), ('refusal changed owner', name)
-with zipfile.ZipFile(w/'first.sav') as first, zipfile.ZipFile(w/'second.sav') as second:
- for name in first.namelist():
-  if name != 'Time_Stamp': assert first.read(name) == second.read(name), name
-with zipfile.ZipFile(w/'same-restored.sav') as restored, zipfile.ZipFile(w/'same-restored-held.sav') as held, zipfile.ZipFile(w/'first.sav') as first:
- for name in restored.namelist():
-  if name != 'Time_Stamp': assert restored.read(name) == held.read(name), ('same-process restored delay', name)
- for name in ('Pic', 'IntTimer10'):
-  assert first.read(name) == restored.read(name), ('same-process restored state', name)
- assert first.read('CPU')[:cpu_prefix] == restored.read('CPU')[:cpu_prefix], 'same-process CPU architectural/cycle state'
- assert first.read('Memory')[memory_descriptor:] == restored.read('Memory')[memory_descriptor:], 'same-process guest RAM/handles/page identities'
-with zipfile.ZipFile(w/'restored.sav') as restored, zipfile.ZipFile(w/'restored-held.sav') as held, zipfile.ZipFile(w/'first.sav') as first:
- for name in restored.namelist():
-  if name != 'Time_Stamp': assert restored.read(name) == held.read(name), name
- for name in ('Pic', 'IntTimer10'):
-  assert first.read(name) == restored.read(name), name
- assert first.read('CPU')[:cpu_prefix] == restored.read('CPU')[:cpu_prefix], 'CPU architectural/cycle state'
- assert first.read('Memory')[memory_descriptor:] == restored.read('Memory')[memory_descriptor:], 'guest RAM/handles/page identities'
-(w/'receipt.json').write_text(json.dumps({'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(), 'cpu_prefix':cpu_prefix, 'memory_descriptor':memory_descriptor, 'changed_flagged_content_preserved':flagged, 'real_dos_file_cursor_error_directory_witness':file_state, 'probe_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(), 'checks':['valid-CRC truncated Pic causes connection EOF, E_Exit and nonzero process disposal (exit cleanup quality unqualified)','missing source and invalid destination return ERR without modal UI','seven revision/build/config/legacy metadata and missing/CRC-corrupt owner refusals without changed owner payloads','repeated completed saves','fresh stopped restore/re-save','host delay payload equality before/after restore','fresh CPU architectural/cycle prefix equality','fresh guest RAM/handle/page identity equality','fresh Pic/IntTimer10 equality','explicit one-step CS:IP/AX/BX']},indent=2))
-print('stopped save and consumed-owner fatal-disposal probe completed (exit cleanup/device/resource qualification remains)',flush=True)
+else:
+ # Stopped producer: host delay and refused loads do not advance any owner.
+ with zipfile.ZipFile(w/'first.sav') as first, zipfile.ZipFile(w/'second.sav') as second:
+  for name in first.namelist():
+   if name != 'Time_Stamp': assert first.read(name) == second.read(name), name
+ print('used-target load refusal/repeated stopped save/explicit step probe completed',flush=True)

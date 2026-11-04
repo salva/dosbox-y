@@ -1796,11 +1796,19 @@ void CMscdex::SaveState( std::ostream& stream )
 
 void CMscdex::LoadState( std::istream& stream )
 {
-	// - pure data
-	READ_POD( &defaultBufSeg, defaultBufSeg );
+	uint16_t saved_buffer = 0;
+    READ_POD(&saved_buffer, saved_buffer);
 #if !defined(OSFREE)
-	READ_POD( &rootDriverHeaderSeg, rootDriverHeaderSeg );
+    uint16_t saved_header = 0;
+    READ_POD(&saved_header, saved_header);
 #endif
+    if (!stream) return;
+    // These are native service allocations, not relocatable archive pointers.
+    if (saved_buffer != defaultBufSeg
+#if !defined(OSFREE)
+        || saved_header != rootDriverHeaderSeg
+#endif
+    ) stream.setstate(std::ios::failbit);
 }
 
 void POD_Save_DOS_Mscdex( std::ostream& stream )
@@ -1833,44 +1841,47 @@ void POD_Save_DOS_Mscdex( std::ostream& stream )
 void POD_Load_DOS_Mscdex( std::istream& stream )
 {
 	if (!dos_kernel_disabled) {
-		uint16_t dnum;
-		READ_POD( &dnum, dnum);
-		if (GetNumDrives()>dnum) {
-			numDrives=dnum;
-			for (uint16_t i=dnum; i<GetNumDrives(); i++) {
-				if (cdrom[i]) {
-					cdrom[i]->Release();
-					cdrom[i] = nullptr;
-				}
-			}
-		}
-		/* dnum comes from the savestate and is not trustworthy. It must be
-		 * compared against a counter wide enough to hold it, or a value above
-		 * 255 wraps the uint8_t and the loop never terminates. */
-		if (dnum > MSCDEX_MAX_DRIVES) {
-			LOG_MSG("MSCDEX: savestate declares %u CD drives, more than the %u supported; ignoring",
-				(unsigned)dnum, (unsigned)MSCDEX_MAX_DRIVES);
-			dnum = 0;
-		}
+        uint16_t dnum = 0;
+        READ_POD(&dnum, dnum);
+        if (!stream) return;
+        // Native drive inventory is preconfigured. An archive cannot release
+        // or invent CD interfaces while installing its sequential payload.
+        if (dnum > MSCDEX_MAX_DRIVES || dnum != GetNumDrives()) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
 		for (uint16_t drive_unit=0; drive_unit<dnum; drive_unit++) {
 			TMSF pos, start, end;
 			uint32_t msf_time, play_len;
-			bool playing, pause;
+            uint8_t playing = 0, pause = 0;
 
-
-			READ_POD( &playing, playing );
-			READ_POD( &pause, pause );
-			READ_POD( &pos, pos );
-			READ_POD( &start, start );
-			READ_POD( &end, end );
+            READ_POD(&playing, playing);
+            READ_POD(&pause, pause);
+            READ_POD(&pos, pos);
+            READ_POD(&start, start);
+            READ_POD(&end, end);
+            if (!stream) return;
+            if (playing > 1 || pause > 1 || pos.sec >= 60 ||
+                start.sec >= 60 || end.sec >= 60 || pos.fr >= 75 ||
+                start.fr >= 75 || end.fr >= 75) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
+            const uint32_t position = pos.min * 4500u + pos.sec * 75u + pos.fr;
+            const uint32_t beginning = start.min * 4500u + start.sec * 75u + start.fr;
+            const uint32_t ending = end.min * 4500u + end.sec * 75u + end.fr;
+            if ((playing || pause) && (position < beginning || ending < 150u ||
+                ending - 150u < position - beginning)) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
 
 
 			// end = total play time (GetAudioStatus adds +150)
 			// pos = current play cursor
 			// start = start play cursor
-			play_len = end.min * 75 * 60 + ( end.sec * 75 ) + end.fr - 150;
-			play_len -= ( pos.min - start.min ) * 75 * 60 + ( pos.sec - start.sec ) * 75 + ( pos.fr - start.fr );
-			msf_time = ( pos.min << 16 ) + ( pos.sec << 8 ) + ( pos.fr );
+            play_len = (playing || pause) ? ending - 150u - (position - beginning) : 0;
+            msf_time = (uint32_t(pos.min) << 16) | (uint32_t(pos.sec) << 8) | pos.fr;
 
 
 #if !defined(OSFREE)

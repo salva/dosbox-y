@@ -53,5 +53,7 @@ int main() {
     assert(!owner.frontier.holding());
     assert(!owner.frontier.ownsHold(outside));
     owner.fail=false;owner.frontier.reach(Kind::ExitFence,7);
-    assert(owner.calls==7 && owner.frontier.unbind(hold,&owner));
+    owner.expected=Kind::RestoredHeld;
+    owner.frontier.reach(Kind::RestoredHeld,7);
+    assert(owner.calls==8 && owner.frontier.unbind(hold,&owner));
 }

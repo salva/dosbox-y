@@ -23,6 +23,7 @@
  */
 
 #include "dosbox.h"
+#include "restored_session.h"
 #include <stdlib.h>
 #include <string.h>
 #include <regex>
@@ -2103,6 +2104,7 @@ private:
 
             return tmpfile;
         }
+        catch(const RestoredSession::RootExit &) { throw; }
         catch(...) {
             return NULL;
         }
@@ -3652,6 +3654,7 @@ public:
             }
             else WriteOut(MSG_Get("PROGRAM_LOADROM_UNRECOGNIZED"));
         }
+        catch(const RestoredSession::RootExit &) { throw; }
         catch(...) {
             return;
         }
@@ -3713,6 +3716,7 @@ public:
             SegSet16(cs, 0xf000);
             reg_eip = 0xfff0;
         }
+        catch (const RestoredSession::RootExit &) { throw; }
         catch (...) {
             return;
         }

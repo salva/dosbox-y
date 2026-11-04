@@ -1512,36 +1512,51 @@ void POD_Save_CPU_Paging( std::ostream& stream )
 	WRITE_POD( &pf_queue, pf_queue );
 }
 
-void POD_Load_CPU_Paging( std::istream& stream )
+void POD_Load_CPU_Paging(std::istream& stream)
 {
-	READ_POD( &paging.cr3, paging.cr3 );
-	READ_POD( &paging.cr2, paging.cr2 );
-//	READ_POD( &paging.wp, paging.wp );
-	READ_POD( &paging.base, paging.base );
-
-	READ_POD( &paging.tlb.read, paging.tlb.read );
-	READ_POD( &paging.tlb.write, paging.tlb.write );
-	READ_POD( &paging.tlb.phys_page, paging.tlb.phys_page );
-
-	READ_POD( &paging.links, paging.links );
-//	READ_POD( &paging.ur_links, paging.ur_links );
-//	READ_POD( &paging.krw_links, paging.krw_links );
-//	READ_POD( &paging.kr_links, paging.kr_links );
-
-	READ_POD( &paging.firstmb, paging.firstmb );
-	READ_POD( &paging.enabled, paging.enabled );
-
-	READ_POD( &pf_queue, pf_queue );
-
-	// No serialized host cache entry is authoritative. In particular, do not
-	// walk archived links (including unused entries) through PAGING_ClearTLB.
-	// Rebuild all host pointers and link counts without dereferencing archive
-	// indices. Earlier paging fields are live, so incomplete input is fatal.
-	if (!stream)
-		E_Exit("Incomplete paging state during save-state installation");
-	if (pf_queue.used > PF_QUEUESIZE)
-		E_Exit("Invalid page fault queue during save-state installation");
-	PAGING_InitTLB();
+    // Native caches are not continuation state. Consume the legacy spans
+    // without installing saved host pointers or a huge stack-local block.
+    decltype(paging.cr3) cr3 = 0, cr2 = 0;
+    decltype(paging.base) base = {};
+    decltype(paging.firstmb) firstmb = {};
+    unsigned char enabled = 0;
+    static_assert(sizeof(paging.enabled) == sizeof(enabled), "paging bool ABI");
+    decltype(pf_queue) faults = {};
+    readPOD(stream, cr3);
+    readPOD(stream, cr2);
+    readPOD(stream, base);
+    const auto cache_bytes = sizeof(paging.tlb.read) + sizeof(paging.tlb.write) +
+                             sizeof(paging.tlb.phys_page) + sizeof(paging.links);
+    stream.ignore(cache_bytes);
+    if (stream.gcount() != std::streamsize(cache_bytes)) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    readPOD(stream, firstmb);
+    readPOD(stream, enabled);
+    readPOD(stream, faults);
+    if (!stream || enabled > 1 || faults.used > PF_QUEUESIZE ||
+        base.page != (cr3 >> 12u) || base.addr != (cr3 & ~0xfffu)) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    // These entries are consumed by PageFaultCore without another privilege
+    // check. Inactive slots are padding, not live continuation state.
+    for (Bitu i = 0; i < faults.used; ++i) {
+        const auto &entry = faults.entries[i];
+        if (entry.cs > 0xffffu || entry.eip > UINT32_MAX ||
+            entry.page_addr > UINT32_MAX - 3u || entry.mpl > 3u) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+    }
+    paging.cr3 = cr3;
+    paging.cr2 = cr2;
+    paging.base = base;
+    std::copy(std::begin(firstmb), std::end(firstmb), std::begin(paging.firstmb));
+    paging.enabled = enabled != 0;
+    pf_queue = faults;
+    PAGING_InitTLB();
 }
 
 uint8_t PageHandler_HostPtReadB(PageHandler *p,PhysPt addr) {

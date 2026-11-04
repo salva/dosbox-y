@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #endif
 #include <algorithm>
+#include <memory>
 #include <functional>
 #include <map>
 #include <sstream>
@@ -212,6 +213,8 @@ void					DOSBOX_RunMachine();
 Bits DOSBOX_DispatchDecoder();
 Bitu DOSBOX_DispatchCallback(Bits callback);
 void					DOSBOX_SetLoop(LoopHandler * handler);
+void DOSBOX_HoldFreshPacing();
+void DOSBOX_ContinueFreshPacing();
 void					DOSBOX_SetNormalLoop();
 
 void MenuBrowseImageFile(char drive, bool arc, bool boot, bool multiple, const std::string &dev_spec=std::string(), const std::string &dev_spec_opts=std::string());
@@ -341,6 +344,8 @@ void ApplyPreventCapMenu(void);
 #ifndef SAVE_STATE_H_INCLUDED
 #define SAVE_STATE_H_INCLUDED
 
+#include <cstring>
+
 #define WRITE_POD(x,y) \
 	stream.write(reinterpret_cast<const char*>( (x) ), sizeof( (y) ) );
 
@@ -369,6 +374,10 @@ public:
     bool saveFile(const std::string &path, StateArchive::Effects &effects,
                   const StateArchive::Budget *budget = nullptr);
     bool loadFile(const std::string &path) const;
+    // One-shot startup operation: constructs an unused native target, consumes
+    // the archive, and selects its immutable DOS root. Failure is fatal to this
+    // disposable process, never a return to ordinary boot or a live-load API.
+    void restoreFreshStartup(const std::string &path) const;
 
     // Process-local captures reuse the registered component streams. Native
     // admission and suspended-continuation lifetime belong to the caller;
@@ -427,7 +436,10 @@ private:
         Component& comp;
     };
 
-    typedef std::map<std::string, CompData> CompEntry;
+    struct ComponentOrder {
+        bool operator()(const std::string &left, const std::string &right) const;
+    };
+    typedef std::map<std::string, CompData, ComponentOrder> CompEntry;
     CompEntry components;
 };
 
@@ -466,19 +478,8 @@ protected:
 
     void setBytes(std::istream& stream) override
     {
-        // Consume the whole owner before assigning any live field. This is
-        // not whole-archive validation or an atomic multi-owner installation.
-        std::vector<std::vector<char>> pending;
-        pending.reserve(podRef.size());
-        for (const auto& x : podRef) {
-            pending.emplace_back(x.size);
-            if (x.size && !stream.read(pending.back().data(), x.size))
-                return;
-        }
-        for (size_t i = 0; i < podRef.size(); ++i) {
-            if (podRef[i].size)
-                std::copy(pending[i].begin(), pending[i].end(),
-                          static_cast<char*>(podRef[i].address));
+        for (const auto &x : podRef) {
+            if (!x.read(stream, x.address, x.size)) return;
         }
     }
 
@@ -487,9 +488,31 @@ private:
     struct POD
     {
         template <class T>
-        POD(T& pod) : address(&pod), size(sizeof(T)) {}
+        POD(T& pod) : address(&pod), size(sizeof(T)), read(ReadBytes) {}
+        POD(bool& pod) : address(&pod), size(sizeof(bool)), read(ReadBool) {}
         void* address;
         size_t size;
+        bool (*read)(std::istream &, void *, size_t);
+
+        static bool ReadBytes(std::istream &stream, void *address, size_t size)
+        {
+            return bool(stream.read(static_cast<char*>(address), size));
+        }
+
+        static bool ReadBool(std::istream &stream, void *address, size_t)
+        {
+            // Invalid bool representations must never become live objects.
+            char bytes[sizeof(bool)];
+            if (!stream.read(bytes, sizeof(bytes))) return false;
+            const bool no = false, yes = true;
+            if (!memcmp(bytes, &no, sizeof(bool))) *static_cast<bool*>(address) = false;
+            else if (!memcmp(bytes, &yes, sizeof(bool))) *static_cast<bool*>(address) = true;
+            else {
+                stream.setstate(std::ios::failbit);
+                return false;
+            }
+            return true;
+        }
     };
 
     static inline void WriteGlobalPOD(std::ostream& stream, const POD& data)

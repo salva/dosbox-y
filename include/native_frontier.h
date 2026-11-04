@@ -9,7 +9,7 @@
 #include <stdexcept>
 namespace NativeFrontier {
 enum class Kind { Predispatch, PostTick, Decoder, CallbackEntry, NestedEntry, NativeReturn, PartialParent,
-                  LoopStop, ExitFence };
+                  LoopStop, RestoredHeld, ExitFence };
 struct Descriptor {
     Kind kind;
     uint64_t invocation;

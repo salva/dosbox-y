@@ -22,6 +22,7 @@
 
 #include "dosbox.h"
 #include "inout.h"
+#include <cmath>
 #include "cpu.h"
 #include "callback.h"
 #include "logging.h"
@@ -1384,136 +1385,97 @@ private:
 				//test->saveState(stream);
 		}
 
-    void setBytes(std::istream& stream) override
+    struct Pending {
+        decltype(PIC_Ticks) ticks = 0;
+        decltype(PIC_IRQCheck) irq = 0, pending_irq = 0;
+        PIC_Controller controllers[2];
+        PICEntry entries[PIC_QUEUESIZE];
+        uint16_t links[PIC_QUEUESIZE], free_head = 0xffff, next_head = 0xffff;
+        uint8_t servicing = 0;
+        double lag = 0;
+        std::vector<std::unique_ptr<TickerBlock>> tickers;
+        void install() {
+            PIC_Ticks = ticks;
+            PIC_IRQCheck = irq;
+            PIC_IRQCheckPending = pending_irq;
+            std::copy(std::begin(controllers), std::end(controllers), pics);
+            for (unsigned i = 0; i < PIC_QUEUESIZE; ++i) {
+                pic_queue.entries[i] = entries[i];
+                pic_queue.entries[i].next = links[i] == 0xffff ? nullptr : &pic_queue.entries[links[i]];
+            }
+            pic_queue.free_entry = free_head == 0xffff ? nullptr : &pic_queue.entries[free_head];
+            pic_queue.next_entry = next_head == 0xffff ? nullptr : &pic_queue.entries[next_head];
+            InEventService = servicing != 0;
+            srv_lag = lag;
+            while (firstticker) {
+                auto *old = firstticker;
+                firstticker = old->next;
+                delete old;
+            }
+            auto **tail = &firstticker;
+            for (auto &node : tickers) {
+                *tail = node.release();
+                tail = &(*tail)->next;
+            }
+            if (IS_PC98_ARCH) PC98_Mouse_RestoreTick();
+        }
+    };
+
+    std::unique_ptr<Pending> prepare(std::istream& stream)
     {
-				uint16_t free_idx, next_idx;
-				uint16_t ticker_size;
-
-
-        SerializeGlobalPOD::setBytes(stream);
-
-
-				// - data
-        stream.read(reinterpret_cast<char*>(&PIC_Ticks), sizeof(PIC_Ticks) );
-        stream.read(reinterpret_cast<char*>(&PIC_IRQCheck), sizeof(PIC_IRQCheck) );
-        stream.read(reinterpret_cast<char*>(&PIC_IRQCheckPending), sizeof(PIC_IRQCheckPending) );
-
-				// - data structs
-        stream.read(reinterpret_cast<char*>(&pics), sizeof(pics) );
-
-
-				for( int lcv=0; lcv<PIC_QUEUESIZE; lcv++ ) {
-					uint16_t event_idx = 0xffff, next_idx = 0xffff;
-
-					// - data
-					/* Read .index as fixed 8-byte double (see save side). */
-					double index_d = 0.0;
-					stream.read(reinterpret_cast<char*>(&index_d), sizeof(index_d) );
-					pic_queue.entries[lcv].index = (pic_tickindex_t)index_d;
-					stream.read(reinterpret_cast<char*>(&pic_queue.entries[lcv].value), sizeof(pic_queue.entries[lcv].value) );
-
-
-					// - function ptr
-					stream.read(reinterpret_cast<char*>(&event_idx), sizeof(event_idx) );
-					pic_queue.entries[lcv].pic_event = (PIC_EventHandler) PIC_State_IndexEvent( event_idx );
-
-
-					// - reloc ptr
-					stream.read(reinterpret_cast<char*>(&next_idx), sizeof(next_idx) );
-
-					if (!stream || (next_idx != 0xffff && next_idx >= PIC_QUEUESIZE))
-						E_Exit("Invalid or truncated saved PIC queue link");
-					pic_queue.entries[lcv].next = NULL;
-					if( next_idx != 0xffff )
-						pic_queue.entries[lcv].next = &pic_queue.entries[next_idx];
-				}
-
-				// - reloc ptrs
-        stream.read(reinterpret_cast<char*>(&free_idx), sizeof(free_idx) );
-        stream.read(reinterpret_cast<char*>(&next_idx), sizeof(next_idx) );
-
-				if (!stream || (free_idx != 0xffff && free_idx >= PIC_QUEUESIZE) ||
-				    (next_idx != 0xffff && next_idx >= PIC_QUEUESIZE))
-					E_Exit("Invalid or truncated saved PIC queue head");
-				pic_queue.free_entry = NULL;
-				if( free_idx != 0xffff )
-					pic_queue.free_entry = &pic_queue.entries[free_idx];
-
-				pic_queue.next_entry = NULL;
-				if( next_idx != 0xffff )
-					pic_queue.next_entry = &pic_queue.entries[next_idx];
-
-        // The two native chains partition the fixed queue. Range-valid links
-        // alone still permit cycles, shared entries and lost capacity. Validate
-        // the consumed topology before any event service can traverse it.
+        std::unique_ptr<Pending> p(new Pending);
+        readPOD(stream, p->ticks);
+        readPOD(stream, p->irq);
+        readPOD(stream, p->pending_irq);
+        readPOD(stream, p->controllers);
+        auto link_valid = [](uint16_t index) { return index == 0xffff || index < PIC_QUEUESIZE; };
+        for (unsigned i = 0; i < PIC_QUEUESIZE; ++i) {
+            double index = 0;
+            uint16_t event = 0xffff;
+            readPOD(stream, index);
+            readPOD(stream, p->entries[i].value);
+            readPOD(stream, event);
+            readPOD(stream, p->links[i]);
+            if (!stream || !std::isfinite(index) || !link_valid(p->links[i]) ||
+                (event != 0xffff && event >= sizeof(pic_state_event_table)/sizeof(pic_state_event_table[0])))
+                return {};
+            p->entries[i].index = index;
+            p->entries[i].pic_event = event == 0xffff ? nullptr : (PIC_EventHandler)pic_state_event_table[event];
+            p->entries[i].next = nullptr;
+        }
+        readPOD(stream, p->free_head);
+        readPOD(stream, p->next_head);
+        if (!stream || !link_valid(p->free_head) || !link_valid(p->next_head)) return {};
         bool visited[PIC_QUEUESIZE] = {};
-        unsigned visited_count = 0;
-        for (auto head : {pic_queue.free_entry, pic_queue.next_entry}) {
-            for (auto entry = head; entry; entry = entry->next) {
-                const auto index = entry - pic_queue.entries;
-                if (visited[index]) E_Exit("Invalid saved PIC queue topology");
-                visited[index] = true;
-                ++visited_count;
+        unsigned count = 0;
+        for (auto head : {p->free_head, p->next_head}) {
+            for (auto i = head; i != 0xffff; i = p->links[i]) {
+                if (visited[i]) return {};
+                visited[i] = true;
+                ++count;
             }
         }
-        if (visited_count != PIC_QUEUESIZE)
-            E_Exit("Incomplete saved PIC queue topology");
-
-
-				// - data
-        stream.read(reinterpret_cast<char*>(&InEventService), sizeof(InEventService) );
-        {
-            double srv_lag_d = 0.0; /* fixed-width on disk; see PICEntry.index above */
-            stream.read(reinterpret_cast<char*>(&srv_lag_d), sizeof(srv_lag_d) );
-            srv_lag = (pic_tickindex_t)srv_lag_d;
+        if (count != PIC_QUEUESIZE) return {};
+        readPOD(stream, p->servicing);
+        readPOD(stream, p->lag);
+        uint16_t size = 0;
+        readPOD(stream, size);
+        if (!stream || p->servicing > 1 || !std::isfinite(p->lag)) return {};
+        for (unsigned i = 0; i < size; ++i) {
+            uint16_t index = 0xffff;
+            readPOD(stream, index);
+            if (!stream || index >= sizeof(pic_state_timer_table)/sizeof(pic_state_timer_table[0]) ||
+                !pic_state_timer_table[index]) return {};
+            p->tickers.emplace_back(new TickerBlock{(TIMER_TickHandler)pic_state_timer_table[index], nullptr});
         }
+        return p;
+    }
 
-
-        // Retain actual native replacement nodes before releasing live tickers.
-        // Earlier PIC fields are already installed: failure is fatal partial
-        // installation, not a pre-effect refusal.
-        stream.read(reinterpret_cast<char*>(&ticker_size), sizeof(ticker_size));
-        if (!stream) E_Exit("Truncated saved PIC ticker count");
-        std::vector<std::unique_ptr<TickerBlock>> prepared;
-        prepared.reserve(ticker_size);
-        for (unsigned i = 0; i < ticker_size; ++i) {
-            uint16_t ticker_idx = 0xffff;
-            stream.read(reinterpret_cast<char*>(&ticker_idx), sizeof(ticker_idx));
-            if (!stream) E_Exit("Truncated saved PIC ticker callback");
-            auto handler = (TIMER_TickHandler)PIC_State_IndexTimer(ticker_idx);
-            if (!handler) E_Exit("Invalid saved PIC ticker callback");
-            prepared.emplace_back(new TickerBlock{handler, nullptr});
-        }
-
-        // Commit owned nodes without allocating after release.
-				while( firstticker != NULL ) {
-					TickerBlock *ticker_ptr;
-
-					ticker_ptr = firstticker;
-					firstticker = firstticker->next;
-
-					delete ticker_ptr;
-				}
-
-
-        TickerBlock **tail = &firstticker;
-        for (auto &node : prepared) {
-            *tail = node.release();
-            tail = &(*tail)->next;
-        }
-
-
-				// - system (leave alone)
-        //stream.read(reinterpret_cast<char*>(&PIC_benchstart), sizeof(PIC_benchstart) );
-        //stream.read(reinterpret_cast<char*>(&PIC_tickstart), sizeof(PIC_tickstart) );
-
-				// - static (leave alone)
-				//test->loadState(stream);
-
-				// the PC-98 bus mouse tick goes by the interrupt enable its own state restored
-				// (it loads before this), not by whatever tick the queue above held
-				if (IS_PC98_ARCH) PC98_Mouse_RestoreTick();
+    void setBytes(std::istream& stream) override
+    {
+        auto p = prepare(stream);
+        if (!p) E_Exit("Invalid saved PIC state");
+        p->install();
     }
 } dummy;
 }
-

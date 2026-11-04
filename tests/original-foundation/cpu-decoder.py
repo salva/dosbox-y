@@ -10,8 +10,8 @@ t=(root/'src/cpu/cpu.cpp').read_text()
 a=t.index('uint16_t CPU_FindDecoderType(')
 b=t.index('extern void POD_Save_CPU_Flags',a)
 mapping=t[a:b]
-a=t.index('    // Earlier CPU fields are already live.')
-b=t.index('    POD_Load_CPU_Flags(stream);',a)
+a=t.index('    readPOD(stream, p->decoder);')
+b=t.index('    return p;',a)
 check=t[a:b]
 s='''
 #include <cassert>
@@ -24,7 +24,14 @@ int CPU_Core_Dyn_X86_Run(){return 0;} int CPU_Core_Dynrec_Run(){return 0;}
 int CPU_Core_Normal_Trap_Run(){return 0;} int CPU_Core_Dyn_X86_Trap_Run(){return 0;}
 int CPU_Core_Dynrec_Trap_Run(){return 0;} int HLT_Decode(){return 0;}
 [[noreturn]] void E_Exit(const char*){throw 7;}
-'''+mapping+'void consume(std::istream &stream,uint16_t decoder_idx){\n'+check+'}\n'+'''
+'''+mapping+'''
+template<class T>void readPOD(std::istream &s,T &v){s.read(reinterpret_cast<char*>(&v),sizeof(v));}
+struct Pending{uint16_t decoder,hlt_decoder;struct{unsigned cpl=0,mpl=0;int direction=1;}state;};
+bool consume(std::istream &stream){Pending storage;auto *p=&storage;
+'''+check+'''return true;}
+std::string wire(uint16_t decoder,uint16_t hlt){std::string s;
+ s.append(reinterpret_cast<const char*>(&decoder),2);s.append(reinterpret_cast<const char*>(&hlt),2);return s;}
+'''+'''
 int main(){
  for(unsigned i=0;i<65536;++i){
   const bool valid=i==0 || i==1 || i==100 || i==200 ||
@@ -34,14 +41,16 @@ int main(){
   assert(bool(mapped)==valid);
   if(mapped)assert(CPU_FindDecoderType(mapped)==i);
   assert(CPU_FindDecoderType(nullptr)==0xffff);
-  std::istringstream stream;bool fatal=false;
-  try{consume(stream,uint16_t(i));}catch(int n){assert(n==7);fatal=true;}
-  assert(fatal==!valid);
+  std::istringstream stream(wire(uint16_t(i),i==200?0:0xffff));
+  assert(consume(stream)==valid);
+  std::istringstream invalid_hlt(wire(200,uint16_t(i)));
+  assert(consume(invalid_hlt)==(valid && i!=200));
  }
  for(unsigned i:{0u,100u,200u}){
-  std::istringstream stream;stream.setstate(std::ios::failbit);bool fatal=false;
-  try{consume(stream,uint16_t(i));}catch(int n){fatal=n==7;}assert(fatal);
+  const auto bytes=wire(uint16_t(i),i==200?0:0xffff);
+  for(unsigned n=0;n<4;++n){std::istringstream stream(bytes.substr(0,n));assert(!consume(stream));}
  }
+ std::istringstream stale(wire(0,0));assert(!consume(stale));
 }
 '''
 # Production uses defined(C_EMSCRIPTEN), so omit the macro on ordinary hosts.

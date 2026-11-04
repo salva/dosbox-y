@@ -1,38 +1,35 @@
 #!/usr/bin/env python3
-"""Same configured ROM path: real matching and refusing fresh consumers."""
+"""Loaded ROM identity through actual fresh-startup success/disposal consumers.
+
+Matching different ROM paths are allowed; changed installed bytes are refused.
+Producer also changes its pathname contents after initialization to prove that
+capture describes loaded bytes, not a later reopen. No used-target load oracle.
+"""
+import os
 import pathlib
-source=pathlib.Path('tests/original-foundation/stopped-save.py').read_text()
-source=source[:source.index('\nrun(False)')]
-source=source.replace('def run(restore):','''def run(restore):
- (w/'BASIC.ROM').write_bytes(bytes([0x91 if restore=='changed' else 0x90])*32768)''')
-source=source.replace('mcp_server={listener.getsockname()[1]}\\n','mcp_server={listener.getsockname()[1]}\\nibm rom basic={w}/BASIC.ROM\\n')
-start=source.index('  if slot_mode:\n   import runpy')
-end=source.index('\n finally:',start)
-source=source[:start]+'''  request('loaded',f'STATEWRITE {d}/loaded.sav')
-  # Replace the path after owner initialization. Identity must describe the
-  # installed immutable ROM, not the current host file at capture time.
-  (w/'BASIC.ROM').write_bytes(bytes([0x92])*32768)
-  request('before',f'STATEWRITE {d}/before.sav')
-  with zipfile.ZipFile(d/'loaded.sav') as loaded, zipfile.ZipFile(d/'before.sav') as before:
-   assert loaded.read('Config_Identity')==before.read('Config_Identity')
-   assert loaded.read('Build_Identity')==before.read('Build_Identity')
-  if restore:
-   mismatch=restore=='changed'
-   with zipfile.ZipFile(w/'capture/before.sav') as old, zipfile.ZipFile(d/'before.sav') as new:
-    assert (old.read('Config_Identity')!=new.read('Config_Identity'))==mismatch
-    assert old.read('Build_Identity')==new.read('Build_Identity')
-   request('load',f'STATEREAD {w}/capture/before.sav',expect_failure=mismatch)
-   request('after',f'STATEWRITE {d}/after.sav')
-   with zipfile.ZipFile(d/'before.sav') as before, zipfile.ZipFile(d/'after.sav') as after, zipfile.ZipFile(w/'capture/before.sav') as producer:
-    expected=before if mismatch else producer
-    for name in expected.namelist():
-     if name=='CPU' and not mismatch:
-      assert expected.read(name)[:cpu_prefix]==after.read(name)[:cpu_prefix],name
-     elif name=='Memory' and not mismatch:
-      assert expected.read(name)[memory_descriptor:]==after.read(name)[memory_descriptor:],name
-     elif mismatch and name!='Time_Stamp': assert expected.read(name)==after.read(name),name
-    # Cross-process nonarchitectural owner bytes are covered separately by
-    # stopped-save; this control proves stopped CPU/RAM install, not pointer parity.
-   print('ROM',restore,'PASS',w,flush=True)
-''' +source[end:]+ '\nrun(False)\nrun("matching")\nrun("changed")\n'
-exec(compile(source,__file__,'exec'))
+import subprocess
+import tempfile
+
+here = pathlib.Path(__file__).resolve().parent
+base = pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT']) / 'state-inputs'
+base.mkdir(exist_ok=True)
+root = pathlib.Path(tempfile.mkdtemp(prefix='run-', dir=base))
+producer = subprocess.run(
+    ['python3', str(here / 'stopped-save.py')],
+    env=dict(os.environ, DOSBOX_TEST_BASIC_ROM='1',
+             DOSBOX_TEST_PROGRAM_HEX='90 b8 2a 4c cd 21 eb fe',
+             DOSBOX_TEST_AUDIO='1', DOSBOX_TEST_LIVE_REFUSAL='1'),
+    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+(root / 'producer.log').write_text(producer.stdout)
+producer.check_returncode()
+archive = pathlib.Path(producer.stdout.splitlines()[0]) / 'first.sav'
+assert archive.is_file(), producer.stdout
+rom = root / 'same-loaded-input.rom'
+rom.write_bytes(bytes([0x90]) * 32768)
+consumer = dict(os.environ, DOSBOX_TEST_ARCHIVE=str(archive),
+                DOSBOX_TEST_AUDIO='1', DOSBOX_TEST_ROOT_EXIT='1',
+                DOSBOX_TEST_BASIC_ROM='1', DOSBOX_TEST_BASIC_ROM_PATH=str(rom))
+subprocess.run(['python3', str(here / 'fresh-startup.py')], env=consumer, check=True)
+subprocess.run(['python3', str(here / 'fresh-startup-failure.py')],
+               env=dict(consumer, DOSBOX_TEST_CHANGED_BASIC_ROM='1'), check=True)
+print('Loaded immutable ROM identity: different-path success, changed-byte disposal passed')

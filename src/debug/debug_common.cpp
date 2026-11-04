@@ -8,6 +8,7 @@
  */
 
 #include "dosbox.h"
+#include "restored_session.h"
 #if C_DEBUG
 
 #include "debug_common.h"
@@ -166,6 +167,8 @@ static DebuggerStopEvent Debugger_RunInstructionSlices(const uint32_t requested_
 			break;
 		try {
             result = DEBUG_Run(1, true);
+        } catch (const RestoredSession::RootExit &) {
+            throw;
         } catch (...) {
             continuation_unavailable = true;
             if (phase) phase->reason = "execution_error";

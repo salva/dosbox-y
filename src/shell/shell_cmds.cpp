@@ -23,6 +23,7 @@
 
 
 #include "dosbox.h"
+#include "restored_session.h"
 #include "logging.h"
 #include "shell.h"
 #include "callback.h"
@@ -3529,6 +3530,7 @@ void DOS_Shell::CMD_SUBST(char * args) {
 		}
 		return;
 	}
+    catch (const RestoredSession::RootExit &) { throw; }
 	catch(...) {		//dynamic cast failed =>so no localdrive
 		WriteOut(MSG_Get("SHELL_CMD_SUBST_FAILURE"));
 		return;

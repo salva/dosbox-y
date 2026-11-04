@@ -1945,18 +1945,45 @@ namespace
 {
 class SerializeInt10 : public SerializeGlobalPOD
 {
-public:
-    SerializeInt10() : SerializeGlobalPOD("Int10")
-    {
-        registerPOD(int10);
-        //registerPOD(CurMode);
-        //registerPOD(call_10);
-        //registerPOD(warned_ff);
+    void bindings(std::ostream *output, std::istream *input) const {
+        // Native ROM locations are not mutable guest state. Keep the fresh
+        // owner's references rather than overwriting them from RAM metadata.
+        const uint32_t fields[] = {
+            uint32_t(call_10), int10.rom.font_8_first, int10.rom.font_8_second,
+            int10.rom.font_13, int10.rom.font_14, int10.rom.font_16,
+            int10.rom.font_14_alternate, int10.rom.font_16_alternate,
+            int10.rom.font_19, int10.rom.static_state,
+            int10.rom.video_save_pointers, int10.rom.video_dynamic_save_area,
+            int10.rom.video_parameter_table, int10.rom.video_save_pointer_table,
+            int10.rom.video_dcc_table, int10.rom.oemstring, int10.rom.vesa_modes,
+            int10.rom.wait_retrace, int10.rom.set_window, int10.rom.pmode_interface,
+            int10.rom.pmode_interface_size, int10.rom.pmode_interface_start,
+            int10.rom.pmode_interface_window, int10.rom.pmode_interface_palette,
+            int10.rom.vesa_alloc_modes, int10.rom.used,
+            uint32_t(int10.vesa_nolfb), uint32_t(int10.vesa_oldvbe),
+            uint32_t(int10.vesa_oldvbe10), uint32_t(int10.vesa_vbe3)
+        };
+        for (const auto field : fields) {
+            if (output) output->write(reinterpret_cast<const char*>(&field),sizeof(field));
+            else {
+                uint32_t saved=0;
+                if (!input->read(reinterpret_cast<char*>(&saved),sizeof(saved))) return;
+                if (saved!=field) { input->setstate(std::ios::failbit); return; }
+            }
+        }
     }
-
-	 //   virtual void setBytes(std::istream& stream)
-    //{
-      //  SerializeGlobalPOD::setBytes(stream);
-		//}
+public:
+    SerializeInt10() : SerializeGlobalPOD("Int10") {}
+    void getBytes(std::ostream &stream) override {
+        bindings(&stream,nullptr);
+        WRITE_POD(&int10.vesa_setmode,int10.vesa_setmode);
+        WRITE_POD(&int10.text_row,int10.text_row);
+    }
+    void setBytes(std::istream &stream) override {
+        bindings(nullptr,&stream);
+        if (!stream) return;
+        READ_POD(&int10.vesa_setmode,int10.vesa_setmode);
+        READ_POD(&int10.text_row,int10.text_row);
+    }
 } dummy;
 }

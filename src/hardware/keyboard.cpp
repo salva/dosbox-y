@@ -333,7 +333,7 @@ static void KEYBOARD_Add8042Response(uint8_t data) {
     else if (keyb.buf8042_len == 0)
         keyb.buf8042_pos = 0;
 
-    if (keyb.buf8042_pos >= sizeof(keyb.buf8042)) {
+    if (keyb.buf8042_len >= sizeof(keyb.buf8042)) {
         LOG(LOG_KEYBOARD,LOG_NORMAL)("8042 Buffer full, dropping code");
         KEYBOARD_ClrBuffer(); return;
     }
@@ -3068,6 +3068,26 @@ namespace
 class SerializeKeyboard : public SerializeGlobalPOD
 {
 public:
+    void setBytes(std::istream& stream) override
+    {
+        SerializeGlobalPOD::setBytes(stream);
+        if (!stream || keyb.used > KEYBUFSIZE || keyb.pos >= KEYBUFSIZE ||
+            keyb.buf8042_len > sizeof(keyb.buf8042) ||
+            (keyb.buf8042_len ? keyb.buf8042_pos >= keyb.buf8042_len : keyb.buf8042_pos != 0) ||
+            keyb.pending_key < -1 || keyb.pending_key >= KBD_LAST ||
+            keyb.command < CMD_NONE || keyb.command > CMD_WRITEAUX ||
+            keyb.aux_command < ACMD_NONE || keyb.aux_command > ACMD_SET_RESOLUTION ||
+            keyb.repeat.key < KBD_NONE || keyb.repeat.key >= KBD_LAST ||
+            keyb.scanset < 1 || keyb.scanset > 3 || keyb.led_state > 7 ||
+            keyb.ps2mouse.type < MOUSE_NONE || keyb.ps2mouse.type > MOUSE_INTELLIMOUSE45 ||
+            keyb.ps2mouse.mode < MM_REMOTE || keyb.ps2mouse.mode > MM_STREAM ||
+            keyb.ps2mouse.reset_mode < MM_REMOTE || keyb.ps2mouse.reset_mode > MM_STREAM ||
+            keyb.ps2mouse.resolution > 3 ||
+            !std::isfinite(keyb.ps2mouse.acx) || !std::isfinite(keyb.ps2mouse.acy) ||
+            std::fabs(keyb.ps2mouse.acx) > 268435440.0f ||
+            std::fabs(keyb.ps2mouse.acy) > 268435440.0f)
+            stream.setstate(std::ios::failbit);
+    }
     SerializeKeyboard() : SerializeGlobalPOD("Keyboard")
     {
         registerPOD(keyb.buffer);
@@ -3084,6 +3104,47 @@ public:
         registerPOD(keyb.scanning); 
         registerPOD(keyb.scheduled);
         registerPOD(port_61_data);
+        // Controller state is consumed by the next port read/write and tick;
+        // restoring only the keyboard FIFO loses pending D1 and AUX semantics.
+        registerPOD(keyb.buf8042);
+        registerPOD(keyb.buf8042_len);
+        registerPOD(keyb.buf8042_pos);
+        registerPOD(keyb.pending_key);
+        registerPOD(keyb.pending_key_state);
+        registerPOD(keyb.aux_command);
+        registerPOD(keyb.led_state);
+        registerPOD(keyb.scanset);
+        registerPOD(keyb.enable_aux);
+        registerPOD(keyb.reset);
+        registerPOD(keyb.auxactive);
+        registerPOD(keyb.auxchanged);
+        registerPOD(keyb.cb_override_inhibit);
+        registerPOD(keyb.cb_irq12);
+        registerPOD(keyb.cb_irq1);
+        registerPOD(keyb.cb_xlat);
+        registerPOD(keyb.cb_sys);
+        registerPOD(keyb.leftalt_pressed);
+        registerPOD(keyb.rightalt_pressed);
+        registerPOD(keyb.leftctrl_pressed);
+        registerPOD(keyb.rightctrl_pressed);
+        registerPOD(keyb.leftshift_pressed);
+        registerPOD(keyb.rightshift_pressed);
+        registerPOD(keyb.ps2mouse.type);
+        registerPOD(keyb.ps2mouse.mode);
+        registerPOD(keyb.ps2mouse.reset_mode);
+        registerPOD(keyb.ps2mouse.samplerate);
+        registerPOD(keyb.ps2mouse.resolution);
+        registerPOD(keyb.ps2mouse.last_srate);
+        registerPOD(keyb.ps2mouse.acx);
+        registerPOD(keyb.ps2mouse.acy);
+        registerPOD(keyb.ps2mouse.reporting);
+        registerPOD(keyb.ps2mouse.scale21);
+        registerPOD(keyb.ps2mouse.intellimouse_mode);
+        registerPOD(keyb.ps2mouse.intellimouse_btn45);
+        registerPOD(keyb.ps2mouse.int33_taken);
+        registerPOD(keyb.ps2mouse.l);
+        registerPOD(keyb.ps2mouse.m);
+        registerPOD(keyb.ps2mouse.r);
     }
 } dummy;
 }

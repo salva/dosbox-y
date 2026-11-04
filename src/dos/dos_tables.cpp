@@ -547,20 +547,121 @@ void DOS_SetupTables(void) {
 }
 
 // save state support
+extern uint16_t DOS_IHSEG;
+// These locations are retained native bindings, not mutable guest payload.
+// Compare against the initialized owner before consuming table contents.
+static void DOS_TableBindings(std::ostream *output, std::istream *input)
+{
+    const uint32_t bindings[] = {
+        dos.tables.mediaid, dos.tables.tempdta, dos.tables.tempdta_fcbdelete,
+        dos.tables.dbcs, dos.tables.filenamechar, dos.tables.collatingseq,
+        dos.tables.upcase, dos.tables.dpb, dos.tables.dpb_size,
+        dos.tables.mediaid_offset, DOS_TableUpCase, DOS_TableLowCase,
+        DOS_PRIVATE_SEGMENT, DOS_PRIVATE_SEGMENT_END,
+        DOS_DriveDataListHead, uint32_t(call_casemap),
+        DOS_SDA_SEG, DOS_SDA_OFS, DOS_SDA_SEG_SIZE,
+        DOS_INFOBLOCK_SEG, DOS_CONDRV_SEG, DOS_CDS_SEG,
+        DOS_IHSEG, cmd_line_seg
+    };
+    for (const auto binding : bindings) {
+        if (output) output->write(reinterpret_cast<const char*>(&binding), sizeof(binding));
+        else {
+            uint32_t saved = 0;
+            if (!input->read(reinterpret_cast<char*>(&saved), sizeof(saved))) return;
+            if (saved != binding) {
+                input->setstate(std::ios::failbit);
+                return;
+            }
+        }
+    }
+    // The original allocator already records role, order, location and span.
+    // Reuse that record: no independently maintained allocation catalogue.
+    if (output) {
+        const uint32_t count = uint32_t(DOS_GetMemLog.size());
+        output->write(reinterpret_cast<const char*>(&count), sizeof(count));
+    } else {
+        uint32_t count = 0;
+        if (!input->read(reinterpret_cast<char*>(&count), sizeof(count))) return;
+        if (count != DOS_GetMemLog.size()) {
+            input->setstate(std::ios::failbit);
+            return;
+        }
+    }
+    for (const auto &entry : DOS_GetMemLog) {
+        const uint32_t fields[] = {entry.segbase, entry.pages, uint32_t(entry.who.size())};
+        for (const auto field : fields) {
+            if (output) output->write(reinterpret_cast<const char*>(&field), sizeof(field));
+            else {
+                uint32_t saved = 0;
+                if (!input->read(reinterpret_cast<char*>(&saved), sizeof(saved))) return;
+                if (saved != field) {
+                    input->setstate(std::ios::failbit);
+                    return;
+                }
+            }
+        }
+        // Compare role bytes incrementally; archive lengths never allocate.
+        for (const char expected : entry.who) {
+            if (output) output->put(expected);
+            else if (input->get() != static_cast<unsigned char>(expected)) {
+                input->setstate(std::ios::failbit);
+                return;
+            }
+        }
+    }
+}
+
+static bool DOS_CaseMapBindingIntact()
+{
+    // DOS_CaseMapFunc owns an unhookable CB_RETF body. Guest INT vectors and
+    // country contents outside its native entry remain payload, not defaults.
+    const auto address=CALLBACK_PhysPointer(call_casemap);
+    if (!call_casemap || address>0x100000u-5u) return false;
+    return mem_readb(address)==0xfe && mem_readb(address+1)==0x38 &&
+           mem_readw(address+2)==call_casemap && mem_readb(address+4)==0xcb;
+}
+
 void POD_Save_DOS_Tables( std::ostream& stream )
 {
-	// - pure data
-	WRITE_POD( &DOS_TableUpCase, DOS_TableUpCase );
-	WRITE_POD( &DOS_TableLowCase, DOS_TableLowCase );
-
-	WRITE_POD( &dos_memseg, dos_memseg );
+    if (!DOS_CaseMapBindingIntact()) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    DOS_TableBindings(&stream, nullptr);
+    if (dos.tables.country != country_info && dos.tables.country != country_info_pc98) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    // Native storage is rebuilt; only its defined schema/content travels.
+    stream.write(reinterpret_cast<const char*>(dos.tables.country), sizeof(country_info));
+    WRITE_POD( &dos_memseg, dos_memseg );
 }
 
 void POD_Load_DOS_Tables( std::istream& stream )
 {
-	// - pure data
-	READ_POD( &DOS_TableUpCase, DOS_TableUpCase );
-	READ_POD( &DOS_TableLowCase, DOS_TableLowCase );
-
-	READ_POD( &dos_memseg, dos_memseg );
+    DOS_TableBindings(nullptr, &stream);
+    if (!stream) return;
+    // RAM is already installed, so this compares the controlled body against
+    // the retained destination binding, not against overwritten metadata.
+    if (!DOS_CaseMapBindingIntact()) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    if (dos.tables.country != country_info && dos.tables.country != country_info_pc98) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    uint8_t country[sizeof(country_info)] = {};
+    uint16_t cursor = 0;
+    stream.read(reinterpret_cast<char*>(country), sizeof(country));
+    stream.read(reinterpret_cast<char*>(&cursor), sizeof(cursor));
+    // The casemap entry is native code, not a guest-selected replacement.
+    if (!stream || memcmp(country + 0x12, dos.tables.country + 0x12, 4) ||
+        DOS_GetMemory_unmapped || cursor < DOS_PRIVATE_SEGMENT ||
+        cursor > DOS_PRIVATE_SEGMENT_END) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    memcpy(dos.tables.country, country, sizeof(country));
+    dos_memseg = cursor;
 }

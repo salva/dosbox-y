@@ -20,6 +20,8 @@
 #include "machine_service.h"
 #include "state_machine_inputs.h"
 #include "native_frontier.h"
+#include "restored_session.h"
+#include "dos_inc.h"
 #if C_DEBUG && C_DEBUG_LUA
 #include "../debug/debug_lua.h"
 #endif
@@ -42,26 +44,55 @@
 #include "state_archive_output.h"
 #include "state_checkpoint_stream.h"
 #include <sstream>
-#include <state_build_identity.h>
+#include <cstddef>
+#include <limits>
 #include "../hardware/capture_sha256.h"
 
-// Strict resolved property identity, sourced from existing configuration owners.
-// Launch scripts and transport/presentation settings are not machine inputs.
-extern std::string GetDOSBoxXPath(bool withexe);
+// Representation/engine identity, not linked executable identity. Source and
+// binary hashes belong to build receipts; debug symbols, Lua/Agent frontends
+// and host SDL drivers do not change these common owner codecs. Increment the
+// engine revision whenever their serialized semantics or reconstruction changes.
 static std::string state_build_identity() {
-    // Bind to the actual linked executable as well as configured source inputs.
-    // Failure is a refusal, never a fallback to informational VERSION metadata.
-    std::ifstream executable(GetDOSBoxXPath(true),std::ios::binary);
-    if (!executable) return {};
-    CapturePNG::SHA256 hash;
-    char data[32768];
-    while (executable) {
-        executable.read(data,sizeof(data));
-        hash.update(reinterpret_cast<const uint8_t *>(data),size_t(executable.gcount()));
-    }
-    if (!executable.eof()) return {};
-    hash.update(reinterpret_cast<const uint8_t *>(STATE_BUILD_ID),strlen(STATE_BUILD_ID));
-    char hex[65]; hash.finish(hex); return hex;
+    std::ostringstream identity;
+    const uint32_t endian=0x01020304;
+    identity << "original-owner-engine-7;endian=";
+    const auto *bytes=reinterpret_cast<const unsigned char *>(&endian);
+    for (size_t i=0;i<sizeof(endian);++i) identity << unsigned(bytes[i]) << ',';
+    identity << ";char=" << sizeof(char) << ";short=" << sizeof(short)
+             << ";int=" << sizeof(int) << ";long=" << sizeof(long)
+             << ";pointer=" << sizeof(void*) << ";size=" << sizeof(size_t)
+             << ";bool=" << sizeof(bool) << ";float=" << sizeof(float)
+             << ";double=" << sizeof(double) << ";long-double=" << sizeof(long double)
+             << ";max-align=" << alignof(std::max_align_t)
+             << ";double-ieee=" << std::numeric_limits<double>::is_iec559
+             << ";double-digits=" << std::numeric_limits<double>::digits;
+#ifdef __GXX_ABI_VERSION
+    identity << ";cxx-abi=" << __GXX_ABI_VERSION;
+#endif
+#ifdef _MSC_VER
+    identity << ";msvc-abi=" << _MSC_VER;
+#endif
+#if C_FPU
+    identity << ";fpu=1";
+#else
+    identity << ";fpu=0";
+#endif
+#if C_FPU_X86
+    identity << ";fpu-x86=1";
+#else
+    identity << ";fpu-x86=0";
+#endif
+#if C_DYNAMIC_X86
+    identity << ";dynamic-x86=1";
+#else
+    identity << ";dynamic-x86=0";
+#endif
+#if C_DYNREC
+    identity << ";dynrec=1";
+#else
+    identity << ";dynrec=0";
+#endif
+    return identity.str();
 }
 static std::string state_config_identity() {
     if (STATE_MachineInputsIdentity().empty()) return {};
@@ -78,6 +109,18 @@ static std::string state_config_identity() {
         if (name=="sdl") continue;
         field(name);
         for (int j=0; auto *property=properties->Get_prop(j); ++j) {
+            // Immutable ROM identity is contributed by the bytes installed
+            // by the owning loader. A pathname is neither guest hardware nor
+            // proof of those bytes; different paths may hold the same input.
+            if ((name=="dosbox" && property->propname=="ibm rom basic") ||
+                (name=="video" && property->propname=="vga bios rom image")) continue;
+            // Destination presentation is rebuilt by SerializeRender. Keep
+            // raster/font switches (char9/euro/doublescan/modeswitch) here
+            // until their owning effective representation replaces this hash.
+            // Scaler/aspect/frame skipping do not change guest hardware.
+            if (name=="render" && (property->propname=="scaler" ||
+                property->propname=="aspect" || property->propname=="aspect_ratio" ||
+                property->propname=="frameskip")) continue;
             if (name=="dosbox" && (property->propname=="mcp_server" ||
                 property->propname=="captures" || property->propname=="saves" ||
                 property->propname=="compresssaveparts")) continue;
@@ -88,7 +131,7 @@ static std::string state_config_identity() {
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }
-static const char state_archive_revision[] = "DOSBox-X original-state revision 2";
+static const char state_archive_revision[] = "DOSBox-X original-state revision 7";
 
 #include "vs/zlib/contrib/minizip/zip.c"
 #include "vs/zlib/contrib/minizip/unzip.c"
@@ -264,9 +307,6 @@ namespace
 		{
 			//LOG_MSG("Loading state from slot: %d", (int)currentSlot + 1);
 			SaveState::instance().load(currentSlot);
-#if defined(USE_TTF)
-			if (ttf.inUse) resetFontSize();
-#endif
 		}
 		catch (const SaveState::Error& err)
 		{
@@ -431,9 +471,16 @@ static std::map<std::string,std::string> state_identity() {
             {"Config_Identity",state_config_identity()}};
 }
 
-// Both transports use this single original-engine traversal. Member integrity
-// is checked before the first owner; semantic owner prevalidation remains R4.
+// Both transports use this single original-engine dependency traversal. Each
+// owner checks consumed state; failure is not a promise of destination rollback.
 bool SaveState::capture(Output &output) const {
+    // CONFIGSHELL may allocate callbacks and execute drivers before SHELL_Init.
+    // That guest-executing route is not represented by the fresh recipe.
+    const auto *devices=dynamic_cast<Section_line *>(control->GetSection("devices"));
+    if (devices && devices->data.find_first_not_of(" \t")!=std::string::npos) {
+        LOG_MSG("State capture unsupported: nonempty [devices] requires guest driver construction");
+        return false;
+    }
     for (const auto &item : state_identity()) {
         if (item.second.empty()) return false;
         auto *stream=output.open(item.first);
@@ -453,17 +500,28 @@ bool SaveState::capture(Output &output) const {
 }
 bool SaveState::install(Input &input) const {
     for (const auto &item : state_identity()) {
-        if (item.second.empty() || !input.verify(item.first)) return false;
+        if (item.second.empty() || !input.verify(item.first)) {
+            LOG_MSG("State compatibility metadata unavailable: %s",item.first.c_str());
+            return false;
+        }
         auto *stream=input.open(item.first);
-        if (!stream) return false;
+        if (!stream) {
+            LOG_MSG("State compatibility metadata cannot be opened: %s",item.first.c_str());
+            return false;
+        }
         std::string actual(item.second.size(),'\0');
         stream->read(&actual[0],actual.size());
         const bool match=bool(*stream) && actual==item.second &&
             stream->peek()==std::char_traits<char>::eof();
-        if (!input.close() || !match) return false;
+        const bool closed=input.close();
+        if (!closed || !match) {
+            LOG_MSG("State compatibility metadata %s: %s",item.first.c_str(),
+                    !closed ? "settlement failed" : "incompatible or malformed");
+            return false;
+        }
     }
-    for (const auto &entry : components)
-        if (!input.verify(entry.first)) return false;
+    // Owners consume progressively. Member EOF/CRC/close is settled below;
+    // a late failure disposes the startup target, not a rollback promise.
 #if C_DEBUG && C_DEBUG_LUA
     if (!Debugger_LuaPrepareRestore()) return false;
 #endif
@@ -537,9 +595,31 @@ bool SaveState::checkpointSave(Checkpoint &parts, size_t limit) {
 }
 
 bool SaveState::checkpointLoad(const Checkpoint &parts) {
-    if (!save_state_frontier() || parts.size()!=components.size()+state_identity().size()) return false;
-    MemoryInput input(parts);
-    return install(input);
+    (void)parts;
+    LOG_MSG("State load refused: fresh launch required; used-target checkpoint restore is unsupported");
+    return false;
+}
+
+bool SaveState::ComponentOrder::operator()(const std::string &left,
+                                           const std::string &right) const {
+    // Registration storage is also the common capture/install dependency order.
+    // Memory owns mappings; DOS/XMS/EMS reconstruct their resources against it;
+    // CPU selects decoders and resets caches only after those owners. Events
+    // follow device state. Output owners are last. Unknown extensions remain
+    // deterministic, but are not thereby qualified for fresh installation.
+    static const char *const order[] = {
+        "BIOS layout", "Memory", "Shell bindings", "Dos", "XMS", "EMS", "CPU", "FPU", "CMOS", "DMA",
+        "IO handler", "Int10", "IntTimer10", "Keyboard", "Joystick",
+        "Mouse", "Vga", "Mixer", "Midi", "Pic", "Dosbox-x", "Render"
+    };
+    auto rank = [&](const std::string &name) {
+        size_t i = 0;
+        for (; i < sizeof(order)/sizeof(order[0]); ++i)
+            if (name == order[i]) break;
+        return i;
+    };
+    const auto a = rank(left), b = rank(right);
+    return a == b ? left < right : a < b;
 }
 
 void SaveState::registerComponent(const std::string& uniqueName, Component& comp) {
@@ -840,197 +920,43 @@ bool loadstateconfirm(int ind) {
 }
 
 void SaveState::load(size_t slot) const {
-#if C_DEBUG
-    if (!DEBUG_NativeStateSlot(slot,true,"")) LOG_MSG("Slot load refused or failed");
-#else
     (void)loadFrom(slot,nullptr);
-#endif
 }
 bool SaveState::loadFile(const std::string &path) const { return loadFrom(0, &path); }
+
+void SaveState::restoreFreshStartup(const std::string &path) const {
+    static bool attempted=false;
+    if (attempted || path.empty() || !NativeFrontier::frontiers().quiescent() ||
+        DOSBOX_MachineServiceOwner().token)
+        E_Exit("Fresh restore requires unused startup outside guest frames");
+    attempted=true;
+    extern void VM_ConstructFreshNative();
+    VM_ConstructFreshNative();
+    unzFile archive=unzOpen64(path.c_str());
+    if (!archive) E_Exit("Fresh restore failed: cannot open source archive");
+    // Settle the exact archive once, including exceptions after partial effects.
+    // The outer startup owner must dispose; no boot fallback is permitted.
+    bool installed=false;
+    try {
+        ArchiveInput input(archive);
+        installed=install(input);
+    } catch (...) {
+        // Preserve the original failure, including a second settlement failure.
+        if (unzClose(archive)!=UNZ_OK)
+            LOG_MSG("Fresh restore archive close also failed; target must be disposed");
+        throw;
+    }
+    const bool closed=unzClose(archive)==UNZ_OK;
+    if (!installed || !closed)
+        E_Exit("Fresh restore failed; disposable target cannot continue");
+    const uint16_t root=dos.psp();
+    if (!RestoredSession::validRoot(root,false) || RestoredSession::selected())
+        E_Exit("Fresh restore failed: invalid or already selected native root");
+}
 bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw (Error)
-    // Explicit native operations must return a refusal, never enter modal UI
-    // or let force-load bypass incompatible metadata, including slot callers.
-    if (!save_state_frontier()) { LOG_MSG("Load refused: unsafe native continuation"); return false; }
-	//	if (isEmpty(slot)) return;
-	bool load_err=false;
-	bool installation_started=false;
-	if((MEM_TotalPages()*4096/1024/1024)>1024) {
-		LOG_MSG("Stopped. 1 GB is the maximum memory size for saving/loading states.");
-		LOG_MSG("Unsupported memory size for loading states.");
-		return false;
-	}
-	std::string path;
-	int err;
-	bool Get_Custom_SaveDir(std::string& savedir);
-	if(!Get_Custom_SaveDir(path)) {
-        path = working_dir + CROSS_FILESPLIT + "save";
-    }
-    path += CROSS_FILESPLIT;
-
-	std::string temp;
-	temp = path;
-	std::stringstream slotname;
-	slotname << slot+1;
-	std::string save=source ? *source : (use_save_file&&savefilename.size()?savefilename:temp+slotname.str()+".sav");
-	std::ifstream check_slot;
-	check_slot.open(save.c_str(), std::ifstream::in);
-	if(check_slot.fail()) {
-		LOG_MSG("No saved slot - %d (%s)",(int)slot+1,save.c_str());
-        LOG_MSG("The selected save file is currently empty or unavailable.");
-		load_err=true;
-		return false;
-	}
-	check_slot.close();
-    LOG_MSG("Loading state from slot: %d (%s)", (int)slot + 1, save.c_str());
-
-	unz_file_info64 file_info;
-	unzFile zf;
-	{
-		zlib_filefunc64_def ffunc;
-#ifdef USEWIN32IOAPI
-		fill_win32_filefunc64A(&ffunc);
-#else
-		fill_fopen64_filefunc(&ffunc);
-#endif
-		zf = unzOpen2_64(save.c_str(),&ffunc);
-	}
-	if (zf == NULL) { load_err=true; goto done; }
-
-
-	// Integrity only; owner semantic/resource validation remains separate.
-	{
-		const char *metadata[] = {"DOSBox-X_Version", "Program_Name",
-		                         "Memory_Size", "Machine_Type", "Time_Stamp", "Save_Remark"};
-		for (const char *name : metadata) {
-			if ((err=zip_verify_member(zf, name)) != UNZ_OK) { load_err=true; goto done; }
-		}
-	}
-
-	{
-		if ((err=unzLocateFile(zf,"DOSBox-X_Version",1/*case sensitive*/)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzOpenCurrentFile(zf)) != UNZ_OK) { load_err=true; goto done; }
-		zip_istreambuf zis(zf);
-
-		char buffer[4096];
-		std::streamsize sz = zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer)-1); buffer[sz] = 0;
-
-		// Only the first line identifies the emulator version. Platform,
-		// build-date and compression annotations are informational.
-		if (char *p = strchr(buffer, '\n')) *p = 0;
-		std::string emulatorversion = std::string("DOSBox-X ") + VERSION + std::string(" (") + SDL_STRING + std::string(")");
-		if (strcasecmp(buffer,emulatorversion.c_str())) {
-			loadstate_detail_saved = strlen(buffer) ? std::string(buffer) : std::string("(none)");
-			loadstate_detail_current = emulatorversion;
-			if (true) {
-				LOG_MSG("Aborted. Check your DOSBox-X version: %s",buffer);
-				load_err=true;
-				goto done;
-			}
-		}
-
-		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
-	}
-
-	{
-		if ((err=unzLocateFile(zf,"Program_Name",1/*case sensitive*/)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzOpenCurrentFile(zf)) != UNZ_OK) { load_err=true; goto done; }
-		zip_istreambuf zis(zf);
-
-		char buffer[4096];
-		size_t length = (size_t)zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer)-1); buffer[length] = 0;
-
-		if (!length||(size_t)length!=RunningProgram.size()||strncmp(buffer,RunningProgram.c_str(),length)) {
-			buffer[length]='\0';
-			loadstate_detail_saved = length ? std::string(buffer) : std::string("(none)");
-			loadstate_detail_current = RunningProgram.empty() ? std::string("(none)") : RunningProgram;
-			if (true) {
-				LOG_MSG("Aborted. Check your program name: %s",buffer);
-				load_err=true;
-				goto done;
-			}
-		}
-
-		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
-	}
-
-	{
-		if ((err=unzLocateFile(zf,"Memory_Size",1/*case sensitive*/)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzOpenCurrentFile(zf)) != UNZ_OK) { load_err=true; goto done; }
-		zip_istreambuf zis(zf);
-
-		char buffer[4096];
-		size_t length = (size_t)zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer)-1); buffer[length] = 0;
-
-		char str[10];
-		itoa((int)MEM_TotalPages(), str, 10);
-		if(!length||(size_t)length!=strlen(str)||strncmp(buffer,str,length)) {
-			buffer[length]='\0';
-			{
-				char tmp[32];
-				int current_mb = (int)MEM_TotalPages()*4096/1024/1024;
-				// Mismatch text is not an admitted page count. Do not parse and
-				// multiply untrusted input just to format a refusal diagnostic.
-				loadstate_detail_saved = length ? std::string(buffer) + " pages" : "(none)";
-				snprintf(tmp,sizeof(tmp),"%d MB",current_mb);
-				loadstate_detail_current = tmp;
-			}
-			if (true) {
-				LOG_MSG("Aborted. Check your memory size: %s pages", buffer);
-				load_err=true;
-				goto done;
-			}
-		}
-
-		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
-	}
-
-	{
-		if ((err=unzLocateFile(zf,"Machine_Type",1/*case sensitive*/)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzGetCurrentFileInfo64(zf,&file_info,NULL,0,NULL,0,NULL,0)) != UNZ_OK) { load_err=true; goto done; }
-		if ((err=unzOpenCurrentFile(zf)) != UNZ_OK) { load_err=true; goto done; }
-		zip_istreambuf zis(zf);
-
-		char buffer[4096];
-		size_t length = (size_t)zis.xsgetn((zip_istreambuf::char_type*)buffer,sizeof(buffer)-1); buffer[length] = 0;
-
-		char str[20];
-		strcpy(str, getType().c_str());
-		if(!length||(size_t)length!=strlen(str)||strncmp(buffer,str,length)) {
-			buffer[length]='\0';
-			loadstate_detail_saved = length ? std::string(buffer) : std::string("(none)");
-			loadstate_detail_current = std::string(str);
-			if (true) {
-				LOG_MSG("Aborted. Check your machine type: %s",buffer);
-				load_err=true;
-				goto done;
-			}
-		}
-
-		if ((err=zis.close()) != ZIP_OK) { load_err=true; goto done; }
-	}
-
-	{
-        ArchiveInput members(zf);
-        if (!install(members)) load_err=true;
-        else installation_started=true;
-    }
-
-done:
-	if (zf != NULL) {
-		err = unzClose(zf);
-		if (err != UNZ_OK) load_err = true;
-	}
-
-	// CRC/close failures or missing later components after installation are
-	// just as non-resumable as a consumed short stream. Earlier owners may
-	// already have changed; do not publish restore completion or resume.
-	if (load_err && installation_started)
-		E_Exit("Save-state installation failed after live state may have changed");
-	if (!load_err) LOG_MSG("[%s]: Loaded. (Slot %d)", getTime().c_str(), (int)slot+1);
-    return !load_err;
+    LOG_MSG("State load refused: fresh launch required (%s, slot %u)",
+            source ? source->c_str() : "selected state archive", unsigned(slot + 1));
+    return false;
 }
 
 bool SaveState::isEmpty(size_t slot) const {

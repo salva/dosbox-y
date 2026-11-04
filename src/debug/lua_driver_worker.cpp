@@ -122,6 +122,12 @@ int encode(lua_State *L) {
         lua_pushinteger(L,r.registration);lua_setfield(L,-2,"registration");
     }
     lua_pushlstring(L,r.reason.data(),r.reason.size());lua_setfield(L,-2,"reason");
+    if(r.root_exit) {
+        lua_pushinteger(L,r.root_psp);lua_setfield(L,-2,"root_psp");
+        lua_pushinteger(L,r.exit_code);lua_setfield(L,-2,"exit_code");
+        lua_pushboolean(L,r.resident);lua_setfield(L,-2,"resident");
+        lua_pushboolean(L,r.self_parent);lua_setfield(L,-2,"self_parent");
+    }
     lua_pushlstring(L,r.boundary.data(),r.boundary.size());lua_setfield(L,-2,"boundary");
     lua_pushboolean(L,r.continuation);lua_setfield(L,-2,"continuation");
     lua_pushboolean(L,r.registers_valid);lua_setfield(L,-2,"registers_valid");

@@ -106,6 +106,8 @@ public:
 	void EmptyCache(void) override { dirCache.EmptyCache(); };
 	void MediaChange() override {};
 	bool StateSearchActive() const {return dirCache.HasActiveSearch();}
+    void SaveState(std::ostream &stream) override;
+    void LoadState(std::istream &stream) override;
 	const char* getBasedir() const {return basedir;};
 	struct {
 		uint16_t bytes_sector;

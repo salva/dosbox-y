@@ -617,7 +617,14 @@ void DriveManager::SaveState( std::ostream& stream )
 void DriveManager::LoadState( std::istream& stream )
 {
 	// - pure data
-	READ_POD( &currentDrive, currentDrive );
+    int saved = 0;
+    READ_POD(&saved, saved);
+    if (!stream) return;
+    if (saved < 0 || saved >= DOS_DRIVES) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    currentDrive = saved;
 }
 
 void POD_Save_DOS_DriveManager( std::ostream& stream )

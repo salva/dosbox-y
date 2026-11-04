@@ -74,6 +74,7 @@
 #include "mixer.h"
 #include "timer.h"
 #include "dos_inc.h"
+#include "restored_session.h"
 #include "setup.h"
 #include "control.h"
 #include "cross.h"
@@ -506,6 +507,19 @@ Bitu DOSBOX_DispatchCallback(Bits callback) {
     return result;
 }
 
+// Host elapsed time while startup is held is not guest time. Arming does
+// not sample a clock or change saved CPU/PIC/TIMER state. Only an authorized
+// continuation consumes the pending host-pacing rebase.
+static bool fresh_pacing_pending = false;
+void DOSBOX_HoldFreshPacing() { fresh_pacing_pending = true; }
+void DOSBOX_ContinueFreshPacing() {
+    if (!fresh_pacing_pending) return;
+    fresh_pacing_pending = false;
+    ticksLast = GetTicks();
+    ticksRemain = ticksRemainSpeedFrac = ticksAdded = ticksScheduled = 0;
+    ticksDone = 0;
+}
+
 static Bitu Normal_Loop(void) {
 #if C_DEBUG
     // Host control is not a guest timer callback: polling it here keeps
@@ -844,6 +858,13 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
 #endif
     );
     Bitu ret;
+    // Bind the immutable restored root to this actual invocation before any
+    // attachment or guest dispatch, never a guessed startup token.
+    if (kind == MachineService::Kind::RootGuest && !control->opt_restore_state.empty()) {
+        if (!RestoredSession::validRoot(dos.psp(),false) ||
+            !RestoredSession::invocation().select(machine_owner.token(),dos.psp()))
+            E_Exit("Fresh restore machine owner/root selection failed");
+    }
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
     dosbox_agent::AGENT_BridgeAttachToCurrentThread();
 #endif
@@ -865,7 +886,9 @@ void DOSBOX_RunMachine(MachineService::Kind kind){
     // Fresh root admission precedes the first interpreter/callback entry.
     // The live launch hold must not wait for AUTOEXEC's EXEC to return.
     if (kind == MachineService::Kind::RootGuest)
-        NativeFrontier::frontiers().reach(NativeFrontier::Kind::LoopStop,
+        NativeFrontier::frontiers().reach(RestoredSession::selected() ?
+                                         NativeFrontier::Kind::RestoredHeld :
+                                         NativeFrontier::Kind::LoopStop,
                                          machine_owner.token());
     do {
         ret=(*loop)();
@@ -5801,12 +5824,9 @@ private:
 		//*******************************************
 		//*******************************************
 
-		// Reset any auto cycle guessing for this frame
-		ticksRemain=5;
-		ticksLast = GetTicks();
-		ticksAdded = 0;
-		ticksDone = 0;
-		ticksScheduled = 0;
+		// Installation is not a continuation grant. Do not schedule timer
+        // ticks or reset the cycle governor here. Host pacing belongs to the
+        // startup execution owner when explicit continuation is granted.
 	}
 } dummy;
 }

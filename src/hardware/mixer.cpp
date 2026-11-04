@@ -1368,17 +1368,24 @@ private:
 		//*************************************************
 
 		SerializeGlobalPOD::setBytes(stream);
+        if (!stream) return;
 
-
-		POD_Load_Adlib(stream);
-		POD_Load_Disney(stream);
-		POD_Load_Gameblaster(stream);
-		POD_Load_GUS(stream);
-		POD_Load_MPU401(stream);
-		POD_Load_PCSpeaker(stream);
-		POD_Load_Sblaster(stream);
-		POD_Load_Tandy_Sound(stream);
-		if (!stream) return;
+        POD_Load_Adlib(stream);
+        if (!stream) return;
+        POD_Load_Disney(stream);
+        if (!stream) return;
+        POD_Load_Gameblaster(stream);
+        if (!stream) return;
+        POD_Load_GUS(stream);
+        if (!stream) return;
+        POD_Load_MPU401(stream);
+        if (!stream) return;
+        POD_Load_PCSpeaker(stream);
+        if (!stream) return;
+        POD_Load_Sblaster(stream);
+        if (!stream) return;
+        POD_Load_Tandy_Sound(stream);
+        if (!stream) return;
 
 		// reset mixer channel (system data)
 		mixer.pos = 0;

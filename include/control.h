@@ -93,6 +93,7 @@ public:
     bool opt_defaultmapper = false;
     bool opt_fastbioslogo = false;
     bool opt_print_ticks = false;
+    std::string opt_restore_state;
     bool opt_break_start = false;
     bool opt_erasemapper = false;
     bool opt_resetmapper = false;

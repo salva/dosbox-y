@@ -259,6 +259,40 @@ RegionAllocTracking             rombios_alloc;
 Bitu                        rombios_minimum_location = 0xF0000; /* minimum segment allowed */
 Bitu                        rombios_minimum_size = 0x10000;
 
+// Native ROM allocation identity belongs to the allocator, not installed RAM.
+// Compare the fresh ordered layout; never import a saved allocator graph.
+namespace {
+class SerializeBIOSLayout : public SerializeGlobalPOD {
+    static void layout(std::ostream *output, std::istream *input) {
+        const auto field=[&](uint32_t value) {
+            if (output) { output->write(reinterpret_cast<const char*>(&value),sizeof(value)); return bool(*output); }
+            uint32_t saved=0;
+            if (!input->read(reinterpret_cast<char*>(&saved),sizeof(saved))) return false;
+            if (saved!=value) { input->setstate(std::ios::failbit); return false; }
+            return true;
+        };
+        if (!field(uint32_t(rombios_alloc._min)) ||
+            !field(uint32_t(rombios_alloc._max)) ||
+            !field(uint32_t(rombios_alloc._max_nonfixed)) ||
+            !field(uint32_t(rombios_alloc.topDownAlloc)) ||
+            !field(uint32_t(rombios_minimum_location)) ||
+            !field(uint32_t(rombios_minimum_size)) ||
+            !field(uint32_t(rombios_alloc.alist.size()))) return;
+        for (const auto &block : rombios_alloc.alist) {
+            if (!field(uint32_t(block.start)) || !field(uint32_t(block.end)) ||
+                !field(uint32_t(block.free)) || !field(uint32_t(block.fixed)) ||
+                !field(uint32_t(block.who.size()))) return;
+            // Fresh role owns the length: no archive-sized allocation.
+            for (const unsigned char c : block.who) if (!field(c)) return;
+        }
+    }
+public:
+    SerializeBIOSLayout() : SerializeGlobalPOD("BIOS layout") {}
+    void getBytes(std::ostream &stream) override { layout(&stream,nullptr); }
+    void setBytes(std::istream &stream) override { layout(nullptr,&stream); }
+} bios_layout_codec;
+}
+
 static bool ACPI_SCI_EN = false;
 static bool ACPI_BM_RLD = false;
 
@@ -9889,8 +9923,7 @@ extern unsigned int INT13Xfer;
 
 class BIOS:public Module_base{
 private:
-    static Bitu cb_bios_post__func(void) {
-        void TIMER_BIOS_INIT_Configure();
+    static void ConstructPOSTPrefixNative() {
 #if C_DEBUG
         void DEBUG_CheckCSIP();
 
@@ -10235,6 +10268,10 @@ private:
             mem_writew(0x5C8,0xFD80);
         }
 
+    }
+
+    static Bitu cb_bios_post__func(void) {
+        ConstructPOSTPrefixNative();
         if (bios_user_reset_vector_blob != 0 && !bios_user_reset_vector_blob_run) {
             LOG_MSG("BIOS POST: Running user reset vector blob at 0x%lx",(unsigned long)bios_user_reset_vector_blob);
             bios_user_reset_vector_blob_run = true;
@@ -10246,12 +10283,22 @@ private:
 
 #if C_DEBUG
             /* help the debugger reflect the new instruction pointer */
+            void DEBUG_CheckCSIP();
             DEBUG_CheckCSIP();
 #endif
 
             return CBRET_NONE;
         }
 
+        ConstructPOSTNative();
+        return CBRET_NONE;
+    }
+
+    // Shared native construction only. The reset blob above and subsequent
+    // video/adapter ROM scans remain guest execution and are not part of this
+    // constructor. Fresh-target startup will call this with dispatch quiescent.
+    static void ConstructPOSTNative() {
+        void TIMER_BIOS_INIT_Configure();
         if (cpu.pmode) E_Exit("BIOS error: POST function called while in protected/vm86 mode");
 
         CPU_CLI();
@@ -11204,8 +11251,6 @@ private:
 	}
 
         CPU_STI();
-
-        return CBRET_NONE;
     }
     CALLBACK_HandlerObject cb_bios_scan_video_bios;
     static Bitu cb_bios_scan_video_bios__func(void) {
@@ -12276,6 +12321,15 @@ startfunction:
         return CBRET_NONE;
     }
 public:
+    static void ConstructFreshNative() {
+        // Startup only: never use this to repair or reboot a used machine.
+        if (!bios_first_init || bios_post_counter || first_shell ||
+            bios_user_reset_vector_blob)
+            E_Exit("Fresh restore requires unused native BIOS without a reset blob");
+        ConstructPOSTPrefixNative();
+        ConstructPOSTNative();
+    }
+
     void write_FFFF_signature() {
         /* write the signature at 0xF000:0xFFF0 */
 
@@ -13000,6 +13054,11 @@ void BIOS_PnP_ComPortRegister(Bitu port,Bitu irq) {
 
 static BIOS* test = NULL;
 
+void BIOS_ConstructFreshNative() {
+    if (!test) E_Exit("Fresh restore requires powered native BIOS");
+    test->ConstructFreshNative();
+}
+
 void BIOS_Destroy(Section* /*sec*/){
     ROMBIOS_DumpMemory();
     ISA_PNP_FreeAllDevs();
@@ -13170,6 +13229,7 @@ void ROMBIOS_Init() {
 
     ibm_rom_basic.clear();
     ibm_rom_basic_size = 0;
+    STATE_RetireMachineInput("IBM ROM BASIC");
 
     oi = (Bitu)section->Get_int("rom bios minimum size"); /* in KB */
     oi = (oi + 3u) & ~3u; /* round to 4KB page */

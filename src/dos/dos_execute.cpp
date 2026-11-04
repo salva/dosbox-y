@@ -29,6 +29,7 @@
 #include "dos_inc.h"
 #include "regs.h"
 #include "callback.h"
+#include "restored_session.h"
 #include "debug.h"
 #include "cpu.h"
 #include "menu.h"
@@ -137,7 +138,62 @@ void DOS_UpdatePSPName(void) {
 	GFX_SetTitle(-1,-1,-1,false);
 }
 
+extern bool dos_kernel_disabled;
+extern uint16_t shell_psp;
+bool RestoredSession::validRoot(uint16_t root, bool capture) {
+    const uint32_t limit=MEM_ConventionalPages()*4096u;
+    const uint32_t base=uint32_t(root)*16u;
+    if (dos_kernel_disabled || !root || base+256u>limit ||
+        dos.psp()!=root || (capture && root==shell_psp)) return false;
+    if (mem_readw(base)!=0x20cd) return false;
+    // Follow the supported conventional MCB chain, not an arbitrary plausible
+    // header immediately preceding a forged PSP. Strictly increasing links
+    // bound traversal and exclude loops without another allocation graph.
+    uint32_t segment=dos.firstMCB;
+    bool owned=false;
+    while (segment && segment*16u+16u<=limit) {
+        DOS_MCB block(static_cast<uint16_t>(segment));
+        const uint32_t next=segment+1u+block.GetSize();
+        if (!block.isValid() || next*16u>limit) return false;
+        if (segment+1u==root) {
+            owned=block.GetPSPSeg()==root && block.GetSize()>=16;
+            break;
+        }
+        if (block.isLastMCB() || next>root) break;
+        segment=next;
+    }
+    if (!owned) return false;
+    DOS_PSP psp(root);
+    const uint16_t parent=psp.GetParent();
+    if (!parent || uint32_t(parent)*16u+256u>limit ||
+        mem_readw(uint32_t(parent)*16u)!=0x20cd)
+        return false;
+    // Guest INT22/23/24 hooks need not equal native defaults.
+    for (unsigned offset=0x0a;offset<=0x12;offset+=4) {
+        const RealPt vector=mem_readd(base+offset);
+        if (uint32_t(RealSeg(vector))*16u+RealOff(vector)>=0x100000u)
+            return false;
+    }
+    const RealPt stack=psp.GetStack();
+    return RealOff(stack)<=0xffedu &&
+           uint32_t(RealSeg(stack))*16u+RealOff(stack)+18u<=limit;
+}
+
+RestoredSession::Invocation &RestoredSession::invocation() {
+    static Invocation owned;
+    return owned;
+}
+
+bool RestoredSession::selected() {return invocation().selected();}
+
 void DOS_Terminate(uint16_t pspseg,bool tsr,uint8_t exitcode) {
+    // Before status writes and the self-parent return. Descendants retain normal
+    // DOS parent restoration; only the immutable captured root unwinds.
+    auto &restored = RestoredSession::invocation();
+    if (restored.selectedRoot(pspseg)) {
+        DOS_PSP root(pspseg);
+        restored.terminate(pspseg,tsr,exitcode,root.GetParent()==pspseg);
+    }
 
 	dos.return_code=exitcode;
 	dos.return_mode=tsr?(uint8_t)RETURN_TSR:(uint8_t)RETURN_EXIT;

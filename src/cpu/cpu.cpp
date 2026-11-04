@@ -4960,6 +4960,15 @@ void getBytes(std::ostream& stream) override
 
 
     decoder_idx = CPU_FindDecoderType( cpudecoder );
+    // HLT resumes the core that entered it, not the startup target's core.
+    // Do not encode a native function pointer or an irrelevant stale value.
+    const uint16_t hlt_decoder_idx = decoder_idx == 200 ?
+        CPU_FindDecoderType(cpu.hlt.old_decoder) : uint16_t(0xffff);
+    if (decoder_idx == 0xffff || (decoder_idx == 200 &&
+        (hlt_decoder_idx == 200 || hlt_decoder_idx == 0xffff))) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
 
     //********************************************
     //********************************************
@@ -5000,123 +5009,83 @@ void getBytes(std::ostream& stream) override
 
     // - reloc func ptr
     WRITE_POD( &decoder_idx, decoder_idx );
+    WRITE_POD( &hlt_decoder_idx, hlt_decoder_idx );
 
     POD_Save_CPU_Flags(stream);
 	POD_Save_CPU_Paging(stream);
 }
 
+struct Pending {
+    decltype(cpu_regs) regs;
+    CPUBlock state;
+    decltype(Segs) segments;
+    decltype(CPU_Cycles) cycles, left, io;
+    TaskStateSegment tss;
+    decltype(lastint) interrupt;
+    uint16_t decoder, hlt_decoder;
+    void install() {
+        cpu_regs = regs;
+        cpu = state;
+        cpu.hlt.old_decoder = decoder == 200 ? CPU_IndexDecoderType(hlt_decoder) : nullptr;
+        Segs = segments;
+        CPU_Cycles = cycles;
+        CPU_CycleLeft = left;
+        CPU_IODelayRemoved = io;
+        cpu_tss = tss;
+        lastint = interrupt;
+        selectDecoder(decoder);
+    }
+};
+std::unique_ptr<Pending> prepare(std::istream& stream)
+{
+    std::unique_ptr<Pending> p(new Pending);
+    p->state = cpu; // Nonserialized destination configuration is retained.
+    p->tss = cpu_tss;
+    readPOD(stream, p->regs);
+    readPOD(stream, p->state.cpl);
+    readPOD(stream, p->state.mpl);
+    readPOD(stream, p->state.cr0);
+    readPOD(stream, p->state.pmode);
+    p->state.gdt.LoadState(stream);
+    p->state.idt.LoadState(stream);
+    readPOD(stream, p->state.stack);
+    readPOD(stream, p->state.code);
+    readPOD(stream, p->state.hlt.cs);
+    readPOD(stream, p->state.hlt.eip);
+    readPOD(stream, p->state.exception);
+    readPOD(stream, p->state.direction);
+    readPOD(stream, p->state.trap_skip);
+    readPOD(stream, p->state.drx);
+    readPOD(stream, p->state.trx);
+    readPOD(stream, p->segments);
+    readPOD(stream, p->cycles);
+    readPOD(stream, p->left);
+    readPOD(stream, p->io);
+    p->tss.LoadState(stream);
+    readPOD(stream, p->interrupt);
+    readPOD(stream, p->decoder);
+    readPOD(stream, p->hlt_decoder);
+    if (!stream || !CPU_IndexDecoderType(p->decoder) ||
+        (p->decoder == 200 ? (p->hlt_decoder == 200 || !CPU_IndexDecoderType(p->hlt_decoder)) :
+                             p->hlt_decoder != 0xffff) ||
+        p->state.cpl > 3 || p->state.mpl > 3 ||
+        (p->state.direction != 1 && p->state.direction != -1)) return {};
+    return p;
+}
 void setBytes(std::istream& stream) override
 {
-    uint16_t decoder_idx;
-    uint16_t decoder_old;
-
-
-
-
-
-    decoder_old = CPU_FindDecoderType( cpudecoder );
-
-    //********************************************
-    //********************************************
-    //********************************************
-
-    SerializeGlobalPOD::setBytes(stream);
-
-
-    // - pure data
-    READ_POD( &cpu_regs, cpu_regs );
-
-    READ_POD( &cpu.cpl, cpu.cpl );
-    READ_POD( &cpu.mpl, cpu.mpl );
-    READ_POD( &cpu.cr0, cpu.cr0 );
-    READ_POD( &cpu.pmode, cpu.pmode );
-    cpu.gdt.LoadState(stream);
-    cpu.idt.LoadState(stream);
-    READ_POD( &cpu.stack, cpu.stack );
-    READ_POD( &cpu.code, cpu.code );
-    READ_POD( &cpu.hlt.cs, cpu.hlt.cs );
-    READ_POD( &cpu.hlt.eip, cpu.hlt.eip );
-    READ_POD( &cpu.exception, cpu.exception );
-    READ_POD( &cpu.direction, cpu.direction );
-    READ_POD( &cpu.trap_skip, cpu.trap_skip );
-    READ_POD( &cpu.drx, cpu.drx );
-    READ_POD( &cpu.trx, cpu.trx );
-
-    READ_POD( &Segs, Segs );
-    READ_POD( &CPU_Cycles, CPU_Cycles );
-    READ_POD( &CPU_CycleLeft, CPU_CycleLeft );
-    READ_POD( &CPU_IODelayRemoved, CPU_IODelayRemoved );
-    cpu_tss.LoadState(stream);
-    READ_POD( &lastint, lastint );
-
-    //********************************************
-    //********************************************
-    //********************************************
-
-    // - reloc func ptr
-    READ_POD( &decoder_idx, decoder_idx );
-
-    // Earlier CPU fields are already live. A truncated or unknown decoder
-    // identity cannot be a resumable refusal, nor may an arbitrary numeric
-    // range silently select a trap/HLT core.
-    if (!stream || !CPU_IndexDecoderType(decoder_idx))
-        E_Exit("Invalid CPU decoder identity during save-state installation");
-
+    auto p = prepare(stream);
+    if (!p) E_Exit("Invalid saved CPU state");
+    p->install();
     POD_Load_CPU_Flags(stream);
-    if (!stream)
-        E_Exit("Invalid CPU lazy flags during save-state installation");
-	POD_Load_CPU_Paging(stream);
-
-    //*******************************************
-    //*******************************************
-    //*******************************************
-
-    // switch to running core
-    if( decoder_idx < 100 ) {
-        switch( decoder_old ) {
-            // run -> run (0-99)
-
-            // trap -> run
-            case 100: cpudecoder = CPU_IndexDecoderType(0); break;
-            case 101: cpudecoder = CPU_IndexDecoderType(4); break;
-            case 102: cpudecoder = CPU_IndexDecoderType(5); break;
-
-            // hlt -> run
-            case 200: cpudecoder = cpu.hlt.old_decoder; break;
-        }
-    }
-
-    // switch to trap core
-    else if( decoder_idx < 200 ) {
-        switch( decoder_old ) {
-            // run -> trap
-            case 0:
-            case 1:
-            case 2:
-            case 3: cpudecoder = CPU_IndexDecoderType(100); break;
-            case 4: cpudecoder = CPU_IndexDecoderType(101); break;
-            case 5: cpudecoder = CPU_IndexDecoderType(102); break;
-
-            // trap -> trap (100-199)
-
-            // hlt -> trap
-            case 200: {
-                switch( CPU_FindDecoderType(cpu.hlt.old_decoder) ) {
-                    case 0:
-                    case 1:
-                    case 2:
-                    case 3: cpudecoder = CPU_IndexDecoderType(100); break;
-                    case 4: cpudecoder = CPU_IndexDecoderType(101); break;
-                    case 5: cpudecoder = CPU_IndexDecoderType(102); break;
-                }
-            }
-        }
-    }
-
-    // switch to hlt core
-    else if( decoder_idx < 300 ) {
-        cpudecoder = CPU_IndexDecoderType(200);
-    }
+    POD_Load_CPU_Paging(stream);
+    if (stream) PAGING_SetWP((cpu.cr0 & CR0_WRITEPROTECT) != 0);
+}
+static void selectDecoder(uint16_t decoder_idx)
+{
+    // Select the saved mode itself, not a transition from the fresh decoder:
+    // run->run and trap->trap transitions otherwise retain the wrong core.
+    cpudecoder = CPU_IndexDecoderType(decoder_idx);
 #if (C_DYNAMIC_X86)
     CPU_Core_Dyn_X86_Cache_Reset();
 #endif

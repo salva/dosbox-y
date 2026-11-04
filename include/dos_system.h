@@ -225,6 +225,8 @@ public:
 
 	bool		FindFirst			(char* path, uint16_t& id);
     bool        FindNext            (uint16_t id, char* &result, char* &lresult);
+    bool StateSearchPosition(uint16_t id, uint64_t &position, char *anchor) const;
+    bool StateRestoreSearch(const char *path, uint16_t id, uint64_t position, const char *anchor);
 
 	void		CacheOut			(const char* path, bool ignoreLastDir = false);
 	void		AddEntry			(const char* path, bool checkExists = false);

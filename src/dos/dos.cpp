@@ -30,6 +30,7 @@
 #include "control.h"
 #include "dosbox.h"
 #include "dos_inc.h"
+#include "restored_session.h"
 #include "bios_disk.h"
 #include "bios.h"
 #include "logging.h"
@@ -5946,7 +5947,14 @@ namespace
 	class SerializeDos : public SerializeGlobalPOD
 	{
 		public:
-			SerializeDos() : SerializeGlobalPOD("Dos") { }
+			SerializeDos() : SerializeGlobalPOD("Dos") {
+                registerPOD(dos.verify);
+                registerPOD(dos.breakcheck);
+                registerPOD(dos.echo);
+                registerPOD(dos.direct_output);
+                registerPOD(dos.internal_output);
+                registerPOD(uselfn);
+            }
 
 		private:
 			void getBytes(std::ostream& stream) override
@@ -5968,20 +5976,23 @@ namespace
 				WRITE_POD( &dos.return_mode, dos.return_mode );
 
 				WRITE_POD( &dos.current_drive, dos.current_drive );
-				WRITE_POD( &dos.verify, dos.verify );
-				WRITE_POD( &dos.breakcheck, dos.breakcheck );
-				WRITE_POD( &dos.echo, dos.echo );
-				WRITE_POD( &dos.direct_output, dos.direct_output );
-				WRITE_POD( &dos.internal_output, dos.internal_output );
+
 
 				WRITE_POD( &dos.loaded_codepage, dos.loaded_codepage );
 				WRITE_POD( &dos.version.major, dos.version.major );
 				WRITE_POD( &dos.version.minor, dos.version.minor );
 				WRITE_POD( &countryNo, countryNo );
-				WRITE_POD( &uselfn, uselfn );
 				WRITE_POD( &lfn_filefind_handle, lfn_filefind_handle );
 				WRITE_POD( &bootdrive, bootdrive );
 				WRITE_POD( &dos_kernel_disabled, dos_kernel_disabled );
+                // Identity is the current process at capture, including a child
+                // of the producer's original target. No Agent receipt is used.
+                const uint16_t root=dos.psp();
+                if (!RestoredSession::validRoot(root,true)) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
+                WRITE_POD(&root,root);
 
 				POD_Save_DOS_Devices(stream);
 				POD_Save_DOS_DriveManager(stream);
@@ -5994,6 +6005,7 @@ namespace
 			void setBytes(std::istream& stream) override
 			{
 				SerializeGlobalPOD::setBytes(stream);
+                if (!stream) return;
 
 				//***********************************************
 				//***********************************************
@@ -6010,29 +6022,45 @@ namespace
 				READ_POD( &dos.return_mode, dos.return_mode );
 
 				READ_POD( &dos.current_drive, dos.current_drive );
-				READ_POD( &dos.verify, dos.verify );
-				READ_POD( &dos.breakcheck, dos.breakcheck );
-				READ_POD( &dos.echo, dos.echo );
-				READ_POD( &dos.direct_output, dos.direct_output );
-				READ_POD( &dos.internal_output, dos.internal_output );
+
 
 				READ_POD( &dos.loaded_codepage, dos.loaded_codepage );
 				READ_POD( &dos.version.major, dos.version.major );
 				READ_POD( &dos.version.minor, dos.version.minor );
 				READ_POD( &countryNo, countryNo );
-				READ_POD( &uselfn, uselfn );
 				READ_POD( &lfn_filefind_handle, lfn_filefind_handle );
 				READ_POD( &bootdrive, bootdrive );
-				bool olddisable = dos_kernel_disabled;
-				READ_POD( &dos_kernel_disabled, dos_kernel_disabled );
-				if (!olddisable && dos_kernel_disabled) DispatchVMEvent(VM_EVENT_DOS_EXIT_KERNEL);
+                // External boot/native teardown is not reconstructed by guest
+                // event replay. This codec represents an initialized DOS kernel.
+                unsigned char disabled[sizeof(bool)] = {};
+                const bool enabled = false;
+                stream.read(reinterpret_cast<char*>(disabled), sizeof(disabled));
+                if (!stream || dos_kernel_disabled ||
+                    memcmp(disabled, &enabled, sizeof(enabled)) ||
+                    dos.current_drive >= DOS_DRIVES) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
 
-				POD_Load_DOS_Devices(stream);
-				POD_Load_DOS_DriveManager(stream);
-				POD_Load_DOS_Files(stream);
-				POD_Load_DOS_Memory(stream);
-				POD_Load_DOS_Mscdex(stream);
-				POD_Load_DOS_Tables(stream);
+                uint16_t restored_root=0;
+                READ_POD(&restored_root,restored_root);
+                if (!stream || !RestoredSession::validRoot(restored_root,false)) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
+                POD_Load_DOS_Devices(stream);
+                if (!stream) return;
+                POD_Load_DOS_DriveManager(stream);
+                if (!stream) return;
+                POD_Load_DOS_Files(stream);
+                if (!stream) return;
+                POD_Load_DOS_Memory(stream);
+                if (!stream) return;
+                POD_Load_DOS_Mscdex(stream);
+                if (!stream) return;
+                POD_Load_DOS_Tables(stream);
+                if (stream && !RestoredSession::validRoot(restored_root,false))
+                    stream.setstate(std::ios::failbit);
 			}
 	} dummy;
 }

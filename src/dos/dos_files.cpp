@@ -3052,6 +3052,8 @@ void POD_Load_DOS_Files( std::istream& stream )
             if (!Drives[lcv])
                 E_Exit("Cannot restore save-state DOS drive: native reconstruction failed");
             Drives[lcv]->LoadState(stream);
+            if (!stream)
+                E_Exit("Invalid save-state DOS drive state; dispose startup target");
 		}
 
 		// Required saved handles must be reconstructed. A missing drive or failed

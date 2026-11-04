@@ -1276,10 +1276,56 @@ namespace
 class SerializeTimer : public SerializeGlobalPOD
 {
 public:
+    void setBytes(std::istream& stream) override
+    {
+        SerializeGlobalPOD::setBytes(stream);
+        if (!stream) return;
+        for (const auto &counter : pit) {
+            if (counter.cntr > 0x10000 || counter.cntr_cur > 0x10000 ||
+                counter.mode > 5 || counter.read_state > 3 ||
+                counter.write_state > PIT_Block::WriteState::WAIT_LSB ||
+                counter.cycle_base > 1 || counter.last_counter.cycle > 1 ||
+                !std::isfinite(counter.delay) || counter.delay < 0 ||
+                !std::isfinite(counter.start) || !std::isfinite(counter.now) ||
+                (counter.mode == 2 && counter.cntr_cur == 1) ||
+                ((counter.mode == 2 || counter.mode == 3) &&
+                 counter.gate && !counter.new_mode &&
+                 (counter.cntr_cur == 0 || counter.delay <= 0))) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
+        }
+    }
     SerializeTimer() : SerializeGlobalPOD("IntTimer10")
     {
-        registerPOD(pit);
-        //registerPOD(gate2);
+        // Register fields, not raw structs containing unchecked bool objects.
+        // Installation never tracks time, reschedules events or changes gates.
+        // The Pic owner reconstructs the saved event queue.
+        for (auto &counter : pit) {
+            registerPOD(counter.latched_timerstatus);
+            registerPOD(counter.latched_timerstatus_locked);
+            registerPOD(counter.cntr);
+            registerPOD(counter.cntr_cur);
+            registerPOD(counter.delay);
+            registerPOD(counter.start);
+            registerPOD(counter.now);
+            registerPOD(counter.read_latch);
+            registerPOD(counter.write_latch);
+            registerPOD(counter.mode);
+            registerPOD(counter.read_state);
+            registerPOD(counter.write_state);
+            registerPOD(counter.cycle_base);
+            registerPOD(counter.bcd);
+            registerPOD(counter.go_read_latch);
+            registerPOD(counter.new_mode);
+            registerPOD(counter.counterstatus_set);
+            registerPOD(counter.counting);
+            registerPOD(counter.update_count);
+            registerPOD(counter.gate);
+            registerPOD(counter.output);
+            registerPOD(counter.last_counter.counter);
+            registerPOD(counter.last_counter.cycle);
+        }
     }
 } dummy;
 }

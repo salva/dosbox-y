@@ -1137,16 +1137,23 @@ extern bool dos_kernel_disabled;
 // save state support
 void POD_Save_DOS_Devices( std::ostream& stream )
 {
-	if (!dos_kernel_disabled) {
-		if( strcmp( Devices[2]->GetName(), "CON" ) == 0 )
-			Devices[2]->SaveState(stream);
-	}
+    if (!dos_kernel_disabled) {
+        if (!DOS_CON) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        DOS_CON->SaveState(stream);
+    }
 }
 
 void POD_Load_DOS_Devices( std::istream& stream )
 {
-	if (!dos_kernel_disabled) {
-		if( strcmp( Devices[2]->GetName(), "CON" ) == 0 )
-			Devices[2]->LoadState(stream, false);
-	}
+    if (!dos_kernel_disabled) {
+        if (!stream) return;
+        if (!DOS_CON) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        DOS_CON->LoadState(stream, false);
+    }
 }

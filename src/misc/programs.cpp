@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 
 #include "programs.h"
+#include "restored_session.h"
 #include "callback.h"
 #include "logging.h"
 #include "regs.h"
@@ -168,6 +169,11 @@ static Bitu PROGRAMS_Handler(void) {
 	try { /* "BOOT" can throw an exception (int(2)) */
 		new_program->Run();
 		delete new_program;
+	}
+	catch (const RestoredSession::RootExit &) {
+		// Shell destruction can close guest files/free a PSP. No represented
+		// native return suffix exists; process disposal reclaims this object.
+		throw;
 	}
 	catch (...) { /* well if it happened, free the program anyway to avert memory leaks */
 		delete new_program;
