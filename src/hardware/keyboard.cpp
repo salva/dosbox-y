@@ -2705,10 +2705,9 @@ void PC98_Mouse_LoadState(std::istream& stream) {
 
     stream.read(reinterpret_cast<char*>(regs), sizeof(regs));
     stream.read(reinterpret_cast<char*>(&rate), sizeof(rate));
-    if (!stream) { /* saved before the bus mouse was part of the state */
-        stream.clear();
-        return;
-    }
+    // Revision7 always includes these registers. A partial owner is not an
+    // older optional suffix: it must fail and dispose the fresh target.
+    if (!stream) return;
 
     p7fd9_8255_mouse_x = (int8_t)regs[0];
     p7fd9_8255_mouse_y = (int8_t)regs[1];

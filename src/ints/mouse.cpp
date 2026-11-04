@@ -2981,7 +2981,7 @@ public:
 private:
 	void getBytes(std::ostream& stream) override
 	{
-		uint8_t screenMask_idx, cursorMask_idx;
+		uint8_t screenMask_idx = 0xff, cursorMask_idx = 0xff;
 
 
 		if( mouse.screenMask == defaultScreenMask ) screenMask_idx = 0x00;
@@ -2989,6 +2989,12 @@ private:
 
 		if( mouse.cursorMask == defaultCursorMask ) cursorMask_idx = 0x00;
 		else if( mouse.cursorMask == userdefCursorMask ) cursorMask_idx = 0x01;
+        else if (mouse.cursorMask == defaultCursorMaskNEC) cursorMask_idx = 0x02;
+
+        if (screenMask_idx > 1 || cursorMask_idx > 2) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
 
 		//*******************************************
 		//*******************************************
@@ -3010,7 +3016,11 @@ private:
 
 
 		// - near-pure data
-		WRITE_POD( &mouse, mouse );
+        // Encode mask roles below, never host addresses as native identity.
+        auto saved_mouse = mouse;
+        saved_mouse.screenMask = nullptr;
+        saved_mouse.cursorMask = nullptr;
+        WRITE_POD( &saved_mouse, saved_mouse );
 
 		// - pure data
 		WRITE_POD( &gfxReg3CE, gfxReg3CE );
@@ -3031,7 +3041,7 @@ private:
 
 	void setBytes(std::istream& stream) override
 	{
-		uint8_t screenMask_idx, cursorMask_idx;
+		uint8_t screenMask_idx = 0xff, cursorMask_idx = 0xff;
 
 		//*******************************************
 		//*******************************************
@@ -3053,6 +3063,10 @@ private:
 
 		// - near-pure data
 		READ_POD( &mouse, mouse );
+        // Short streams also must not leave serialized host addresses installed.
+        // Failure remains terminal for this disposable target.
+        mouse.screenMask = nullptr;
+        mouse.cursorMask = nullptr;
 
 
 		// - pure data
@@ -3068,12 +3082,20 @@ private:
 		READ_POD( &screenMask_idx, screenMask_idx );
 		READ_POD( &cursorMask_idx, cursorMask_idx );
 
+        if (!stream || screenMask_idx > 1 || cursorMask_idx > 2 ||
+            mouse.events > QUEUE_SIZE || aux_pkt_len > sizeof(aux_pkt) ||
+            mouse.ps2_unlock_idx >= UNLOCK_SEQ_INTELLIMOUSE.size()) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+
 
 		if( screenMask_idx == 0x00 ) mouse.screenMask = defaultScreenMask;
 		else if( screenMask_idx == 0x01 ) mouse.screenMask = userdefScreenMask;
 
 		if( cursorMask_idx == 0x00 ) mouse.cursorMask = defaultCursorMask;
 		else if( cursorMask_idx == 0x01 ) mouse.cursorMask = userdefCursorMask;
+        else if (cursorMask_idx == 0x02) mouse.cursorMask = defaultCursorMaskNEC;
 
 		//*******************************************
 		//*******************************************

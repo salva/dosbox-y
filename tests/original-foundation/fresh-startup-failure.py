@@ -6,7 +6,10 @@ root=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])
 w=pathlib.Path(tempfile.mkdtemp(prefix='failure-',dir=root/'fresh-native-entry'))
 source=pathlib.Path(os.environ['DOSBOX_TEST_ARCHIVE'])
 original=hashlib.sha256(source.read_bytes()).hexdigest()
-cases=[('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
+cases=[('Mouse',lambda b:b[:-1],False),
+       ('Mouse',lambda b:b[:-16]+b'\xff'+b[-15:],False),
+       ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
+       ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
@@ -239,7 +242,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  assert 'Restored session ended:' not in text
  assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
 assert hashlib.sha256(source.read_bytes()).hexdigest()==original
-print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHANGED_BASIC_ROM') else 'malformed Pic/late Keyboard, late CRC settlement and missing late owner')+
+print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHANGED_BASIC_ROM') else 'malformed Mouse masks/truncated suffix, Pic/late Keyboard, late CRC settlement and missing late owner')+
       ('/truncated CPU and Memory' if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION') else '')+
       ('/DBOPL volume-wave-synth roles/LFO scalar bounds' if os.environ.get('DOSBOX_TEST_DBOPL') else '')+
       ('/active native search tag/path/truncation' if os.environ.get('DOSBOX_TEST_SEARCH_STATE') else '')+

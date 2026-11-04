@@ -255,6 +255,14 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.
+* `python3 tests/original-foundation/mouse-consumption.py` extracts the actual
+  mouse struct/codec with reduced transport doubles: default/user/NEC mask roles,
+  every short stream, invalid roles, event/AUX/unlock bounds. The owner clears
+  serialized pointer fields before any consumer can use them and emits no mask
+  host addresses. Revision7 PC98 mouse suffix is mandatory; short input remains
+  failed instead of clearing EOF as legacy optional suffix. Actual fresh-failure
+  probes cover valid-CRC invalid mask roles and one-byte-short mouse suffix.
+  This does not qualify complete mouse native callback bindings or PC98 hardware.
 * `DOSBOX_TEST_AUDIO=1` in producer and consumer keeps emulated audio enabled.
   Producer uses Xvfb software surface; consumer SDL dummy surface/audio.
   Default producer host audio is dummy; select actual disk output with
