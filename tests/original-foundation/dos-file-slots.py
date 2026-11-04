@@ -8,7 +8,7 @@ w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'dos-file-slots'
 w.mkdir(exist_ok=True)
 s=(root/'src/dos/dos_files.cpp').read_text()
 a=s.index('\t\t\tuint8_t file_valid = 0;',s.index('void POD_Load_DOS_Files'))
-b=s.index('\n\t\t\t// Detach any live',a)
+b=s.index('\n\t\t\t// Retire local host handles',a)
 d=s.index('    const uint8_t ZDRIVE_CUR =',s.index('void POD_Load_DOS_Files'))
 e=s.index('\n\tif (!dos_kernel_disabled)',d)
 code=r'''

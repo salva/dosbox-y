@@ -14,6 +14,9 @@ fixture = r'''
 #include "machine_service.h"
 #include "native_frontier.h"
 using Bitu=unsigned;
+// This fixture tests selected/ordinary callback ownership, not startup admission.
+// Actual admission predicate and pre-effect ordering: fresh-callback-entry.py.
+void RequireGuestCallbackEntry() {}
 unsigned reg_eip=0x123456,reg_ax=0x4b00;
 unsigned short cs=0x1234;
 enum {CB_SOFFSET=0x100,CB_MAX=8,CB_SEG=0xf000};
