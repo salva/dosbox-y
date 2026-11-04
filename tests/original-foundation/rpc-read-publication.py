@@ -29,6 +29,8 @@ bool ReadResolvedByte(const MemoryAddress&,uint32_t r,uint8_t *v,MemoryAccessErr
 }
 struct DebuggerAdapter {
  bool RequireAvailable(std::string*) const{return available;}
+ // Authority is doubled here; this test owns publish-last, not lease admission.
+ bool RequireStoppedObservation(std::string *error) const{return RequireAvailable(error) && RequireEmulationThread(error);}
  bool ReadMemory(const MemoryAddress&,std::size_t,std::vector<uint8_t>*,MemoryAccessError*,std::string*) const;
 };
 '''+body+r'''
