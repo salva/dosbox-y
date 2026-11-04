@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Real production live checkpoint consumer; private process/display and bounded I/O."""
+"""Real bounded capture/live-load refusal; fresh install is fresh-root-matrix.py."""
 import os,pathlib,tempfile,subprocess,pty,fcntl,termios,struct,time,select,sys
 root=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'checkpoint-runtime'
 root.mkdir(exist_ok=True)
 w=pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root))
 mode=os.environ.get('DOSBOX_TEST_CHECKPOINT_DEPARTURE','')
-assert mode in ('','control','restore','closed')
+assert mode in ('','control','closed')
 (w/'TINY.COM').write_bytes(bytes.fromhex('b9 ff ff 40 e2 fd b8 00 4c cd 21' if mode else '40 eb fd'))
 (w/'fixture.conf').write_text(f'[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[dos]\nlfn=false\n[autoexec]\nmount c {w}\nc:\nTINY.COM\n'+('echo RETURNED>RETURN.TXT\nexit\n' if mode else ''))
 (w/'dispatcher.lua').write_text('''return {
@@ -52,10 +52,7 @@ try:
   time.sleep(.05)
  assert call('dbg.live.stop(); return true')=='true'
  if mode:
-  if mode!='control':
-   assert call("close_witness=setmetatable({}, {__gc=function() local f=assert(io.open('CLOSED.TXT','w')); f:write('CLOSED'); f:close() end}); return true")=='true'
-   assert call("assert(dbg.live.checkpoint{op='save',id='a'}.ok); assert(dbg.live.checkpoint{op='load',id='a'}.ok); return true")=='true'
-   assert call('return dbg.live.status().checkpoint_dispose_before_return')=='true'
+  assert call("assert(dbg.live.checkpoint{op='save',id='a'}.ok); local r=dbg.live.checkpoint{op='load',id='a'}; assert(not r.ok); return r.error")=='checkpoint load requires a fresh disposable launch'
   # A natural return may close the carrier before a resume reply is read.
   os.write(wi,b"dbg.live.resume(); return 'resumed'\n")
   if mode=='closed':os.close(wi);wi=-1
@@ -64,33 +61,27 @@ try:
    drain();assert time.monotonic()<end,('natural departure timeout',w);time.sleep(.02)
   drain()
   marker=w/'RETURN.TXT'
-  if mode=='control':
-   assert p.returncode==0 and marker.read_text().strip()=='RETURNED',(p.returncode,w)
-  else:
-   assert p.returncode==1 and not marker.exists(),(p.returncode,w)
-   assert 'restored owner disposed before native return' in (w/'pty.log').read_text(errors='replace'),w
-   assert (w/'CLOSED.TXT').read_text()=='CLOSED',w
-   assert 'persistent state closed' in (w/'pty.log').read_text(errors='replace'),w
+  assert p.returncode==0 and marker.read_text().strip()=='RETURNED',(p.returncode,w)
   print('natural departure '+mode+' PASS exit='+str(p.returncode),flush=True)
   sys.exit(0)
- assert call("local r=dbg.live.checkpoint{op='load',id='missing'}; assert(not r.ok); return r.error")=='checkpoint owner/PSP/mount mismatch or missing'
+ assert call("local r=dbg.live.checkpoint{op='load',id='missing'}; assert(not r.ok); return r.error")=='checkpoint load requires a fresh disposable launch'
  assert call("local r=dbg.live.checkpoint{op='save',id='a'}; assert(r.ok,r.error); return r.ok")=='true'
  saved=call("return dbg.reg('AX')")
  assert call("dbg.live.phase{instruction_limit=2,wall_ms=100}; return true")=='true'
  changed=call("return dbg.reg('AX')")
  assert changed!=saved,(saved,changed)
  assert call("local r=dbg.live.checkpoint{op='save',id='b'}; assert(r.ok,r.error); return r.ok")=='true'
- for i in range(19):
-  assert call("local r=dbg.live.checkpoint{op='load',id='a'}; assert(r.ok,r.error); assert(r.state_epoch=="+str(i+1)+"); return dbg.reg('AX')")==saved
- assert call("local r=dbg.live.checkpoint{op='load',id='b'}; assert(r.ok,r.error); return dbg.reg('AX')")==changed
- assert call("assert(dbg.live.checkpoint{op='save',id='a'}.ok); assert(dbg.live.checkpoint{op='load',id='a'}.ok); return dbg.reg('AX')")==changed
+ for name in ('a','b','missing'):
+  assert call("local r=dbg.live.checkpoint{op='load',id='"+name+"'}; assert(not r.ok); return r.error")=='checkpoint load requires a fresh disposable launch'
+  assert call("return dbg.reg('AX')")==changed
+ assert call("assert(dbg.live.checkpoint{op='save',id='a'}.ok); return dbg.reg('AX')")==changed
  before=call("return dbg.reg('IP')")
  time.sleep(.3)
  assert call("return dbg.reg('IP')")==before
  # Only explicit phase enters decoder; installation itself remains stopped.
  after=call("dbg.live.phase{instruction_limit=2,wall_ms=100}; return dbg.reg('AX')")
  assert after!=changed,(after,changed)
- print('production checkpoint repeated/replacement/held/explicit-continuation PASS',flush=True)
+ print('production checkpoint repeated/replacement capture/live-load refusal/held/explicit-continuation PASS',flush=True)
 finally:
  if p.poll() is None:p.terminate()
  try:p.wait(timeout=5)

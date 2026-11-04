@@ -258,6 +258,11 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
 * INT10 capture/import validates the actual fresh handler role and encoded
   native CB_IRET body after dependent Memory installation, without constraining
   legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* `checkpoint-runtime.py` now retains real repeated bounded capture/replacement,
+  AX/IP held/delay/explicit phase checks but requires fresh-launch refusal for
+  existing/missing checkpoints. Ordinary EXEC departure with open/closed carrier
+  remains legitimate after refusal; fresh root/TSR/child disposal coverage lives
+  in `fresh-root-matrix.py`, not an obsolete same-process restore loop.
 * The integrated root matrix additionally executes INT10 VBE mode query/set
   and the returned far bank-switch callback (mode101/bank0), then text-mode
   VRAM/readback, reaching root42 across Lua/no-Agent/no-Lua consumers. This is a
