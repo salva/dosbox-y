@@ -236,6 +236,12 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   Frontend logging can be discarded after SDL initialization.
 * Producer and `fresh-startup.py` accept `DOSBOX_TEST_MEMSIZE` (MB) and
   `DOSBOX_TEST_CYCLES` (fixed cycles) for matching preconfigured consumers.
+  `DOSBOX_TEST_AUTO_CYCLES=1` in both producer and consumer instead configures
+  `cycles=auto`. A terminating fixture (`DOSBOX_TEST_PROGRAM_HEX='90 b8 2a 4c cd 21 eb fe'`)
+  with AUDIO=1 passes repeated held saves/host delay, exact CPU/PIC/Dosbox-x
+  comparisons, then explicit step/Run/root42 across all three configured builds
+  (`proc-21fd94a2bffa` / `proc-71ab282797db`). This is a bounded host-delay
+  rebudget/catch-up witness, not every cycle algorithm or long-running workload.
   Author runtime witnesses include 16MB/3000 and 32MB/7000, not a fixed whitelist.
   `DOSBOX_TEST_PRESENTATION=1` on the consumer changes scaler/aspect/ratio/frame
   skipping without changing guest hardware. These four render properties are

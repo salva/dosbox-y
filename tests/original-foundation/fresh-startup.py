@@ -55,6 +55,8 @@ if os.environ.get('DOSBOX_TEST_CYCLES'):
  cycles=int(os.environ['DOSBOX_TEST_CYCLES'])
  assert 1 <= cycles <= 1000000
  conf.write_text(conf.read_text().replace('cycles=fixed 3000',f'cycles=fixed {cycles}'))
+if os.environ.get('DOSBOX_TEST_AUTO_CYCLES'):
+ conf.write_text(conf.read_text().replace('cycles=fixed 3000','cycles=auto'))
 if os.environ.get('DOSBOX_TEST_PRESENTATION'):
  # Deliberately different destination host presentation; guest raster/font
  # switches remain unchanged and emulated audio is still enabled separately.
