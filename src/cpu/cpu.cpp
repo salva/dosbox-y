@@ -4417,7 +4417,18 @@ void TaskStateSegment::LoadState( std::istream& stream )
 	READ_POD( &base, base );
 	READ_POD( &limit, limit );
 	READ_POD( &is386, is386 );
-	READ_POD( &valid, valid );
+    // Consume the archive representation without evaluating/copying a possibly
+    // invalid native bool. This also protects the later TaskStateSegment copy.
+    bool pending_valid = false;
+    READ_POD( &pending_valid, pending_valid );
+    const bool zero = false, one = true;
+    if (!stream || (memcmp(&pending_valid, &zero, sizeof(bool)) &&
+                    memcmp(&pending_valid, &one, sizeof(bool))) ||
+        (is386 != 0 && is386 != 1 && is386 != 8)) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+    valid = pending_valid;
 }
 
 // TODO: This looks to be unused

@@ -258,6 +258,9 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
 * INT10 capture/import validates the actual fresh handler role and encoded
   native CB_IRET body after dependent Memory installation, without constraining
   legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* Task-state import checks valid's raw bool before TaskStateSegment copy and
+  bounds is386 to actual assignments 0/1/8 (the VM86 path uses1). Truncated,
+  invalid-bool and unsupported-kind archives dispose at CPU; no state repair.
 * CPU import checks the raw pmode/stack.big/code.big/trap_skip bool bytes
   before copying CPUBlock, avoiding invalid-bool evaluation even on disposable
   failure. Actual valid-CRC owner mutations reject at CPU in all three builds;

@@ -40,11 +40,22 @@ if os.environ.get('DOSBOX_TEST_CPU_BOOLS'):
  stack_start=pmode+1+table*2+ldt
  offsets=(pmode,stack_start+big,stack_start+stack,
           stack_start+stack+code+hlt+exception+direction)
- for offset in offsets:
+ extra_exprs=['sizeof(cpu.drx)+sizeof(cpu.trx)+sizeof(Segs)+sizeof(CPU_Cycles)+sizeof(CPU_CycleLeft)+sizeof(CPU_IODelayRemoved)',
+              'sizeof(cpu_tss.desc.saved)+sizeof(cpu_tss.selector)+sizeof(cpu_tss.base)+sizeof(cpu_tss.limit)',
+              'sizeof(cpu_tss.is386)']
+ extra=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
+                       *[arg for expr in extra_exprs for arg in ('-ex','p '+expr)]],
+                      capture_output=True,text=True,check=True)
+ after_trap,tss_prefix,is386_width=map(int,re.findall(r'\$\d+ = (\d+)',extra.stdout))
+ tss_is386=offsets[-1]+1+after_trap+tss_prefix
+ for offset in (*offsets,tss_is386+is386_width):
   def bad_cpu_bool(data,offset=offset):
    data=bytearray(data);assert data[offset] in (0,1)
    data[offset]=2;return bytes(data)
   cases.append(('CPU',bad_cpu_bool,False))
+ def bad_tss_kind(data):
+  data=bytearray(data);data[tss_is386:tss_is386+is386_width]=(2).to_bytes(is386_width,'little');return bytes(data)
+ cases.append(('CPU',bad_tss_kind,False))
 if os.environ.get('DOSBOX_TEST_DBOPL'):
  # Extract actual configured ABI extent, not a guessed packed Chip layout.
  import re
