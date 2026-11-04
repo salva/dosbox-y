@@ -18,13 +18,19 @@ public:
     Lease lease() const { return lease_; }
     Admission acquire(Expected expected, MachineService::Owner current,
                       MachineService::Relation relation, uint64_t epoch,
-                      bool owned_stop) {
+                      bool owned_stop, MachineService::Denial ancestry,
+                      uint64_t restored_invocation = 0) {
         if (busy()) return Admission::busy;
         if (!expected.token || expected.token != current.token ||
             relation != MachineService::Relation::Current) return Admission::wrong_owner;
         if (expected.epoch != epoch) return Admission::stale_epoch;
-        if (current.kind != MachineService::Kind::ShellExecGuest ||
-            current.depth != 2 || !owned_stop) return Admission::not_ready;
+        // The coordinator validates the complete Root -> ShellExec* grammar.
+        // Depth is neither invocation identity nor proof of known ancestors.
+        const bool shell = current.kind == MachineService::Kind::ShellExecGuest;
+        const bool root = current.kind == MachineService::Kind::RootGuest &&
+                          restored_invocation == expected.token;
+        if (ancestry != MachineService::Denial::None ||
+            (!shell && !root) || !owned_stop) return Admission::not_ready;
         if (generation_ == UINT64_MAX) return Admission::limit;
         lease_ = {expected.token, epoch, ++generation_};
         return Admission::ok;

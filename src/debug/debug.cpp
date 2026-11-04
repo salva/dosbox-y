@@ -18,6 +18,7 @@
 
 
 #include "dosbox.h"
+#include "restored_session.h"
 #if C_DEBUG
 #include <cctype>
 #include <cstdint>
@@ -5571,6 +5572,18 @@ static void DEBUG_ExecutionOwnerDeparting(uint64_t token) {
           request->completion==NativeDebug::Request::Completion::NativeBoundary))
         DEBUG_CleanupNativeExecution(*request);
     const auto attachment=request?request->attachment:NativeDebug::Attachment{};
+    if (RestoredSession::invocation().terminal() &&
+        RestoredSession::invocation().owns(token)) {
+        // A restored root has no native parent continuation. Unlike a natural
+        // EXEC departure, even a Lua native-boundary grant ends here.
+        if (request) DEBUG_CleanupNativeExecution(*request);
+        native_execution.settle(native_execution.decoderCalls(),false,
+            SegValue(cs),reg_eip,reg_ax,reg_bx,reg_cx,reg_dx,
+            NativeDebug::Terminal::ProgramExit);
+        native_execution.ownerDeparting(token);
+        DEBUG_ProjectNativeTerminal(attachment);
+        return;
+    }
     if (token==agent_target_owner && agent_target_exited)
         native_execution.settle(native_execution.decoderCalls(),false,0,0,0,0,0,0,NativeDebug::Terminal::ProgramExit);
     native_execution.ownerDeparting(token);
@@ -5637,7 +5650,9 @@ bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark) {
     if (!DEBUG_AdmitNativeState(attachment,expected)) return false;
     const auto current=DOSBOX_MachineServiceOwner();
     if (NativeControl::owner().acquire({expected.invocation,expected.checkpoint},current,
-        DOSBOX_MachineServiceRelation(expected.invocation),expected.checkpoint,true)!=NativeControl::Admission::ok)
+        DOSBOX_MachineServiceRelation(expected.invocation),expected.checkpoint,true,
+        DOSBOX_MachineContextAdmission(),
+        RestoredSession::invocation().owns(expected.invocation) ? expected.invocation : 0)!=NativeControl::Admission::ok)
         return false;
     const auto lease=NativeControl::owner().lease();
     struct Release { NativeControl::Lease lease;
@@ -5656,7 +5671,9 @@ bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Cont
         !DEBUG_AdmitNativeState(attachment, expected)) return false;
     const auto current = DOSBOX_MachineServiceOwner();
     if (NativeControl::owner().acquire({expected.invocation, expected.checkpoint}, current,
-            DOSBOX_MachineServiceRelation(expected.invocation), expected.checkpoint, true) !=
+            DOSBOX_MachineServiceRelation(expected.invocation), expected.checkpoint, true,
+            DOSBOX_MachineContextAdmission(),
+            RestoredSession::invocation().owns(expected.invocation) ? expected.invocation : 0) !=
             NativeControl::Admission::ok) return false;
     const auto lease = NativeControl::owner().lease();
     struct Release {
@@ -5969,6 +5986,7 @@ static LuaDriver::Response LocalDriverImage(const NativeFrontier::Descriptor &se
     case NativeFrontier::Kind::NativeReturn:image.boundary="native-return";break;
     case NativeFrontier::Kind::PartialParent:image.boundary="partial-parent";break;
     case NativeFrontier::Kind::LoopStop:image.boundary="loop-stop";break;
+    case NativeFrontier::Kind::RestoredHeld:image.boundary="restored-held";break;
     case NativeFrontier::Kind::ExitFence:image.boundary="exit-fence";break;
     }
     return image;
@@ -6238,6 +6256,7 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
                     // ordinary; boundary kind and entered decoder exclude the
                     // restricted wrapper/partial seams, not callback ancestry.
                     ((seam.kind!=NativeFrontier::Kind::LoopStop &&
+                      seam.kind!=NativeFrontier::Kind::RestoredHeld &&
                       seam.kind!=NativeFrontier::Kind::Decoder) ||
                      seam.decoder_entered ||
                      (DOSBOX_MachineServiceOwner().kind!=MachineService::Kind::RootGuest &&
@@ -6305,6 +6324,7 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
                       request.operation==LuaDriver::Operation::RunUntil) {
                 if(request.operation==LuaDriver::Operation::Over &&
                    ((seam.kind!=NativeFrontier::Kind::LoopStop &&
+                     seam.kind!=NativeFrontier::Kind::RestoredHeld &&
                      seam.kind!=NativeFrontier::Kind::Decoder) ||
                     seam.decoder_entered ||
                     (DOSBOX_MachineServiceOwner().kind!=MachineService::Kind::RootGuest &&
@@ -6381,6 +6401,18 @@ void DEBUG_CloseLocalLuaDriver() {
         native_execution.settle(native_execution.decoderCalls(),true);
     }
     if(const auto *terminal=native_execution.result(local_driver_attachment)) {
+        if (RestoredSession::invocation().terminal() &&
+            local_driver_operation==terminal->operation &&
+            terminal->terminal==NativeDebug::Terminal::ProgramExit) {
+            const auto facts=RestoredSession::invocation().exit();
+            LuaDriver::Response response;
+            response.reason="root_exit";response.boundary="restored-root-exit";
+            response.root_exit=true;response.root_psp=facts.root;
+            response.exit_code=facts.code;response.resident=facts.resident;
+            response.self_parent=facts.self_parent;
+            if(!local_driver_handoff.complete(std::move(response)))
+                E_Exit("Lua restored root terminal response lost");
+        }
         if(!native_execution.release(local_driver_attachment,terminal->operation))
             E_Exit("Lua driver close release failed");
     }
@@ -6626,7 +6658,8 @@ Bits DEBUG_DispatchNativeExecution(void) {
             // decoder returns, not in an adapter/evaluator activation.
             if (result>0) result=(Bits)DOSBOX_DispatchCallback(result);
             }
-        } catch (...) {
+        } catch (const RestoredSession::RootExit &) { throw; }
+        catch (...) {
             // Native unwind may already have settled this grant. Never clean
             // resources belonging to a later operation from an old A frame.
             if (!native_execution.ownsActive(operation)) throw;
@@ -8038,6 +8071,13 @@ void DEBUG_CheckExecuteBreakpoint(uint16_t seg, uint32_t off)
 static bool Debugger_ExecutionStop();
 static void ExecutionFinish(const char *reason);
 #endif
+void DEBUG_HoldRestoredStartup()
+{
+    DEBUG_EnterCommonStoppedState();
+    exitLoop=true;
+    DOSBOX_SetLoop(DEBUG_Loop);
+}
+
 Bitu DEBUG_EnableDebugger(void)
 {
 #if C_DEBUG_LUA
@@ -8144,9 +8184,13 @@ bool Debugger_LocalClaimStop(NativeDebug::Attachment attachment,
     const auto owner=DOSBOX_MachineServiceOwner();
     if(attachment.serial!=local_driver_attachment.serial ||
        !native_execution.canEnqueue() || !NativeFrontier::frontiers().ownsHold(seam) ||
-       seam.kind!=NativeFrontier::Kind::LoopStop || seam.decoder_entered ||
-       seam.callback_entered || owner.kind!=MachineService::Kind::ShellExecGuest ||
-       owner.depth!=2 || !DEBUG_AdmitNativeState(attachment,context) ||
+       (seam.kind!=NativeFrontier::Kind::LoopStop &&
+        seam.kind!=NativeFrontier::Kind::RestoredHeld) || seam.decoder_entered ||
+       seam.callback_entered ||
+       DOSBOX_MachineContextAdmission()!=MachineService::Denial::None ||
+       !(owner.kind==MachineService::Kind::ShellExecGuest ||
+         (RestoredSession::invocation().owns(context.invocation) && owner.kind==MachineService::Kind::RootGuest)) ||
+       !DEBUG_AdmitNativeState(attachment,context) ||
        Debugger_PredicateHeld() || live_error)return false;
     // Claim ownership only: preserve the actual hit and stopped machine image.
     live_stop_token=owner.token;live_stop_started=Debugger_LiveHostNow();
@@ -8338,8 +8382,10 @@ static void DEBUG_EnableStartupLuaStoppedState(void)
 	 * reports stopped.
 	 */
 	exitLoop = true;
-	CPU_CycleLeft += CPU_Cycles;
-	CPU_Cycles = 0;
+	if (control->opt_restore_state.empty()) {
+		CPU_CycleLeft += CPU_Cycles;
+		CPU_Cycles = 0;
+	}
 	DEBUG_EnterCommonStoppedState();
 }
 
@@ -8449,7 +8495,8 @@ void DEBUG_Init() {
         DEBUG_NativeConditionFrontier(opaque,seam);
 #if C_DEBUG_LUA
         if (control->lua_driver.script!=LuaDriver::Options::Script::None) LocalDriverFrontier(opaque,seam);
-        else if(seam.kind==NativeFrontier::Kind::LoopStop &&
+        else if((seam.kind==NativeFrontier::Kind::LoopStop ||
+                 seam.kind==NativeFrontier::Kind::RestoredHeld) &&
                 !seam.decoder_entered && !seam.callback_entered) {
             Debugger_EntryLaunchHold();
             Debugger_LuaLivePump();
