@@ -28,6 +28,8 @@ cases = (
      '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('vesa-service', {'DOSBOX_TEST_VIDEO': '1', 'DOSBOX_TEST_VESA_SERVICE':'1'},
      '0814:0101', 'code=42 resident=0 self-parent=0'),
+    ('mouse-service', {'DOSBOX_TEST_MOUSE': '1'},
+     '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('keyboard-service', {'DOSBOX_TEST_KEYBOARD': '1'},
      '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('search-held', {'DOSBOX_TEST_SEARCH_HELD': '1',
