@@ -20,8 +20,8 @@ Shell bindings; no-debug continuation/root runtime is not yet qualified.
 
 Reproduction: set `DOSBOX_TEST_BINARY` and optionally colon-separated
 `DOSBOX_TEST_CONSUMERS` to exact configured binaries; run `fresh-root-matrix.py`
-for 18 cases (search/handles/XMS/EMS/input/video/timer/root/child/TSR/self-parent),
-including capture-before-import active speaker, keyboard ring and video VRAM.
+for 21 cases (search/handles/XMS/EMS/input/video/VBE/timer/root/child/TSR/self-parent),
+including capture-before-import active speaker, keyboard ring, mouse cursor and video VRAM.
 These active cases do not rerun their setup on the restored target; they are
 not waveform/frame/physical-input parity. `fresh-receipt.py MATRIX OUTPUT_JSON`
 records exact current tracked source, configured headers/binaries and fixture
@@ -37,6 +37,11 @@ DOSBOX_TEST_ROOT_VALIDATION=1 DOSBOX_TEST_ROOT_PSP=0814` enables the current mat
 fixture's owner/binding/root cases. Metadata mismatch is not malformed-owner
 coverage. `progressive-install.py` replaces all-owner-before-effects assertions:
 owner failure is fatal even after earlier installation, never rollback success.
+`live-load-refusal.py` compiles the actual direct slot/file wrappers with no
+archive/guest dependency and checks unconditional fresh-launch refusal (reduced
+owner/log doubles). `callback-frontier.py` covers selected/ordinary callback
+ownership with admission doubled; `fresh-callback-entry.py` separately consumes
+the actual admission predicate and verifies pre-effect entry placement.
 
 Meaningful bounded author evidence and remaining obligations are in
 `docs/FRESH-RESTORE-CANDIDATE.md`. ZIP publication/close tests remain relevant,
