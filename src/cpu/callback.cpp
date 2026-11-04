@@ -26,6 +26,8 @@
 #include "logging.h"
 #include "bios.h"
 #include "cpu.h"
+#include "control.h"
+#include "restored_session.h"
 
 #if C_EMSCRIPTEN
 # include <emscripten.h>
@@ -110,7 +112,16 @@ void CALLBACK_DeAllocate(Bitu in) {
 }
 
 
+// Constructors can reach guest helpers indirectly (for example CPX font
+// unpacking). A fresh target may construct native owners, never execute their
+// bootstrap guest code. Refuse before changing registers, stack or cycles.
+static void RequireGuestCallbackEntry() {
+    if (!control->opt_restore_state.empty() && !RestoredSession::selected())
+        E_Exit("Fresh native construction unsupported: guest callback required");
+}
+
 void CALLBACK_Idle(void) {
+    RequireGuestCallbackEntry();
     NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 #if C_EMSCRIPTEN
 	void GFX_Events();
@@ -139,6 +150,7 @@ void CALLBACK_Idle(void) {
 }
 
 void CALLBACK_IdleNoInts(void) {
+    RequireGuestCallbackEntry();
     NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 #if C_EMSCRIPTEN
 	void GFX_Events();
@@ -178,6 +190,7 @@ static Bitu stop_handler(void) {
 Bitu FillFlags(void);
 
 void CALLBACK_RunRealFarInt(uint16_t seg,uint16_t off) {
+    RequireGuestCallbackEntry();
     NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 	FillFlags();
 
@@ -206,6 +219,7 @@ void CALLBACK_RunRealFarInt(uint16_t seg,uint16_t off) {
 }
 
 void CALLBACK_RunRealFar(uint16_t seg,uint16_t off) {
+    RequireGuestCallbackEntry();
     NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 	reg_sp-=4;
 	if (cpu.pmode && !(reg_flags & FLAG_VM)) {
@@ -230,6 +244,7 @@ void CALLBACK_RunRealFar(uint16_t seg,uint16_t off) {
 }
 
 void CALLBACK_RunRealInt_retcsip(uint8_t intnum,Bitu &rcs,Bitu &rip) {
+    RequireGuestCallbackEntry();
     NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false);
 	uint32_t oldeip=reg_eip;
 	uint16_t oldcs=SegValue(cs);
@@ -245,6 +260,7 @@ void CALLBACK_RunRealInt_retcsip(uint8_t intnum,Bitu &rcs,Bitu &rip) {
 }
 
 static void CALLBACK_RunRealIntOwned(uint8_t intnum,MachineService::Kind kind) {
+    RequireGuestCallbackEntry();
     // Natural shell EXEC is classified ancestry, not an ordinary callback suffix.
     NativeFrontier::Frontiers::Scope native_suffix(NativeFrontier::frontiers(),false,
                                                   kind!=MachineService::Kind::ShellExecGuest);

@@ -19,7 +19,13 @@ dosbox-x -conf matching.conf -restore-state capture.sav -lua-driver-code 'local 
 
 Startup constructs fresh native owners in original dependency order without
 running BIOS/DOS/ROM/EXEC/AUTOEXEC/shell guest code. Saved owner payload installs
-through the common capture/install codecs. Import precedes debugger and Lua
+through the common capture/install codecs. A constructor that requires guest
+callback execution (including CPX codepage decompression, such as the tested
+German-layout constructor) explicitly refuses at the callback entry boundary,
+before callback register/stack/cycle changes. It is not silently replayed and
+that layout is not claimed supported by this candidate. Ordinary boot and guest
+callbacks after restored root selection retain their existing behavior.
+Import precedes debugger and Lua
 FILE/INLINE evaluation. The initialized unused target is disposable: every
 failed, partial or uncertain import is fatal, even if no mutation was observed.
 No evaluator attaches and ordinary guest execution cannot continue on failure.
