@@ -4880,7 +4880,12 @@ NativeInput::EndpointContext native_context() {
     }
     NativeInput::EndpointContext c;c.host=native_host(nullptr);c.tick=PIC_Ticks;
     c.profile=native_profile_clock.generation();c.supported=valid&&p.supported();
-    c.running=!IsDebuggerActive();c.frame_exhausted=RENDER_CompletedFrameExhausted();
+#if C_DEBUG
+    c.running=!IsDebuggerActive();
+#else
+    c.running=true;
+#endif
+    c.frame_exhausted=RENDER_CompletedFrameExhausted();
     c.dispatch.edges={native_key,native_button,nullptr};c.dispatch.motion=native_motion;c.dispatch.submitted_motion=native_submitted_motion;
     c.dispatch.profile=native_profile_matches;
     return c;
