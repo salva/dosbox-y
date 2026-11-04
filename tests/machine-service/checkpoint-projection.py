@@ -27,14 +27,16 @@ extern "C" {
 }
 namespace MachineService {enum class Kind {ShellExecGuest};}
 struct Owner {unsigned token=7,depth=2;MachineService::Kind kind=MachineService::Kind::ShellExecGuest;};
-static Owner DOSBOX_MachineServiceOwner(){return {};}
+static unsigned owner_reads=0;
+static Owner DOSBOX_MachineServiceOwner(){++owner_reads;return {};}
 static unsigned DOSBOX_MachineServiceRelation(unsigned){return 0;}
+static unsigned DOSBOX_MachineContextAdmission(){return 0;}
 namespace NativeControl {
  enum class Admission {ok,denied};
  struct Lease {};
  struct Control {
   bool available=true,held=false;unsigned releases=0;
-  Admission acquire(std::pair<unsigned,unsigned>,Owner,unsigned,unsigned,bool) {
+  Admission acquire(std::pair<unsigned,unsigned>,Owner,unsigned,unsigned,bool,unsigned) {
    if(!available)return Admission::denied;
    assert(!held);held=true;return Admission::ok;
   }
@@ -49,7 +51,6 @@ static Context DEBUG_NativeExecutionContext(){return {};}
 namespace NativeDebug {enum class Frontend {Lua};}
 struct Attachment {unsigned serial=1;};
 static bool DEBUG_AdmitNativeState(Attachment,Context){return native_admitted;}
-static bool DEBUG_AdvanceNativeStateContext(Attachment,Context,NativeControl::Lease) {return true;}
 static Attachment local_attachment,live_attachment;
 static Attachment DEBUG_AttachNativeExecution(NativeDebug::Frontend,unsigned){return {};}
 static bool live_active=false;
@@ -61,9 +62,6 @@ static void LiveCheckpointArguments(lua_State *){}
 static bool GFX_CheckpointReady(){return true;}
 static bool KEYBOARD_CheckpointNeutral(){return true;}
 static bool Mouse_CheckpointNeutral(){return true;}
-static bool GFX_CheckpointRebase(unsigned,unsigned){return true;}
-static unsigned LiveNow(){return 1;}
-static bool Debugger_LiveCheckpointStop(unsigned){return true;}
 static int CPU_Core_Normal_Run=0,cpudecoder=0;
 struct DebuggerBreakpointInfo {};
 static unsigned Debugger_BreakpointList(DebuggerBreakpointInfo *,unsigned,unsigned *,bool){return 0;}
@@ -72,21 +70,20 @@ static std::string CheckpointMounts(){return std::string(1024,'m');}
 static std::string RunningProgram="fixture";
 static struct {unsigned psp(){return 3;}} dos;
 static unsigned PIC_Ticks=4;
-static uint64_t checkpoint_owner=0,checkpoint_epoch=0;
+static uint64_t checkpoint_epoch=0;
 static bool checkpoint_restored=false;
 class SaveState {
 public:
  using Checkpoint=std::map<std::string,std::string>;
  static SaveState &instance(){static SaveState state;return state;}
  bool checkpointSave(Checkpoint &out,size_t){assert(NativeControl::owner().held);out["fixture"]="bytes";return true;}
- bool checkpointLoad(const Checkpoint &){assert(NativeControl::owner().held);return true;}
+ bool checkpointLoad(const Checkpoint &){abort();}
 };
 struct LiveCheckpointImage {
  SaveState::Checkpoint parts;uint64_t owner=0;uint16_t psp=0;
  std::string program,mounts;
 };
 static std::map<std::string,LiveCheckpointImage> live_checkpoints;
-[[noreturn]] static void E_Exit(const char *) {throw std::runtime_error("fatal");}
 '''
 main = r'''
 static void invoke(lua_State *L,const char *op,bool expected,const char *error=nullptr) {
@@ -113,6 +110,10 @@ static int call_with_failure(lua_State *L) {
 }
 int main() {
  lua_State *L=lua_newstate(allocator,nullptr);assert(L);
+ // Refuse before inspecting native DOS state or acquiring a lease, even
+ // without a saved image. The source above is the actual Lua adapter.
+ invoke(L,"load",false,"checkpoint load requires a fresh disposable launch");
+ assert(owner_reads==0 && !NativeControl::owner().releases && live_checkpoints.empty());
  native_admitted=false;
  invoke(L,"save",false,"checkpoint native ownership unavailable");
  assert(!NativeControl::owner().releases && live_checkpoints.empty());
@@ -121,7 +122,9 @@ int main() {
  assert(!NativeControl::owner().releases && live_checkpoints.empty());
  NativeControl::owner().available=true;
  invoke(L,"save",true);assert(NativeControl::owner().releases==1);
- invoke(L,"load",true);assert(NativeControl::owner().releases==2 && checkpoint_restored && checkpoint_epoch==1);
+ const unsigned before_load=owner_reads;
+ invoke(L,"load",false,"checkpoint load requires a fresh disposable launch");
+ assert(owner_reads==before_load && NativeControl::owner().releases==1 && !checkpoint_restored && checkpoint_epoch==0);
  lua_close(L);
  L=lua_newstate(allocator,nullptr);assert(L);
  lua_pushcfunction(L,call_with_failure);lua_newtable(L);
@@ -146,8 +149,8 @@ int main() {
  const int load_result=lua_pcall(L,1,1,0);
  fail_allocation=false;
  assert(load_result==LUA_ERRMEM && allocation_failed && !NativeControl::owner().held);
- assert(checkpoint_restored && checkpoint_epoch==epoch+1);
- assert(NativeControl::owner().releases==releases+2);
+ assert(!checkpoint_restored && checkpoint_epoch==epoch);
+ assert(NativeControl::owner().releases==releases+1);
  lua_close(L);
  puts("actual Lua checkpoint projection PASS (native authority mocked)");
 }

@@ -2293,9 +2293,10 @@ int LiveCheckpoint(lua_State *L) {
         std::string text(v,n);lua_pop(L,1);return text;
     };
     const auto op=field("op"),id=field("id");
+    if(op=="load") {
+        deny="checkpoint load requires a fresh disposable launch";
+    } else {
     const auto owner=DOSBOX_MachineServiceOwner();
-    const auto found=live_checkpoints.find(id);
-    const LiveCheckpointImage *image=found==live_checkpoints.end()?nullptr:&found->second;
     // Startup/root can precede DOS drive/file initialization. Inspect native
     // DOS resources only for the suspended EXEC owner that can be admitted.
     auto mounts=owner.kind==MachineService::Kind::ShellExecGuest ? CheckpointMounts() : std::string();
@@ -2312,19 +2313,12 @@ int LiveCheckpoint(lua_State *L) {
     else if(!GFX_CheckpointReady() || !KEYBOARD_CheckpointNeutral() || !Mouse_CheckpointNeutral())
         deny="input/tasks not neutral";
     else if(mounts.empty())deny="unsupported mount, active directory search, or native file kind";
-    else if(op=="load" && (!image || owner.token!=image->owner ||
-            dos.psp()!=image->psp || image->program!=RunningProgram || mounts!=image->mounts))
-        deny="checkpoint owner/PSP/mount mismatch or missing";
-    else if(op=="load" && checkpoint_epoch>=uint64_t(LUA_MAXINTEGER))
-        deny="checkpoint context counter exhausted";
     if(!deny) {
     // Allocate metadata/map node before capture. Capture publishes bytes only
     // on success; a refused replacement retains the previous image.
     LiveCheckpointImage prepared;
-    if(op=="save") {
-        prepared.owner=owner.token;prepared.psp=dos.psp();
-        prepared.program=RunningProgram;prepared.mounts=mounts;
-    }
+    prepared.owner=owner.token;prepared.psp=dos.psp();
+    prepared.program=RunningProgram;prepared.mounts=mounts;
     {
     const auto context=DEBUG_NativeExecutionContext();
     if(live_active && !live_attachment.serial)
@@ -2332,39 +2326,22 @@ int LiveCheckpoint(lua_State *L) {
     const auto attachment=live_active?live_attachment:local_attachment;
     if(DEBUG_AdmitNativeState(attachment,context) &&
        NativeControl::owner().acquire({context.invocation,context.checkpoint},owner,
-           DOSBOX_MachineServiceRelation(context.invocation),context.checkpoint,true)==NativeControl::Admission::ok) {
+           DOSBOX_MachineServiceRelation(context.invocation),context.checkpoint,true,
+           DOSBOX_MachineContextAdmission())==NativeControl::Admission::ok) {
     admitted=true;
     const auto lease=NativeControl::owner().lease();
     struct ReleaseCheckpointLease {
         NativeControl::Lease lease;
         ~ReleaseCheckpointLease(){NativeControl::owner().release(lease);}
     } release{lease};
-    if(op=="save") {
-        auto &destination=live_checkpoints[id]; // allocate before capture/publication
-        ok=SaveState::instance().checkpointSave(prepared.parts,64u*1024u*1024u);
-        if(ok) destination=std::move(prepared);
-    } else {
-        ok=SaveState::instance().checkpointLoad(image->parts);
-        installed=ok;
-        if(ok && !DEBUG_AdvanceNativeStateContext(attachment,context,lease))
-            E_Exit("Restored checkpoint cannot retire prior native context");
-        if(ok) {
-            // Once original component installation succeeds, failure to rebuild
-            // host task bindings or establish the destination stop is fatal.
-            // A Lua error/result is catchable and must not leave this guest
-            // runnable after an installed checkpoint.
-            if(!GFX_CheckpointRebase(LiveNow(),PIC_Ticks))
-                E_Exit("Restored checkpoint cannot rebase native tasks");
-            if(!Debugger_LiveCheckpointStop(owner.token))
-                E_Exit("Restored checkpoint cannot establish native stop");
-            // Common original-owner installation marked the restored owner.
-        }
-    }
+    auto &destination=live_checkpoints[id]; // allocate before capture/publication
+    ok=SaveState::instance().checkpointSave(prepared.parts,64u*1024u*1024u);
+    if(ok) destination=std::move(prepared);
     }
     } // Release native lease before any allocating Lua result projection.
-    if(!ok)deny=!admitted?"checkpoint native ownership unavailable":
-        op=="load"?"checkpoint restore refused before installation":"save failed";
+    if(!ok)deny=!admitted?"checkpoint native ownership unavailable":"save failed";
     }
+    } // Save-only native admission; live loads never inspect guest resources.
     } // Destroy request strings and prepared metadata before projecting Lua.
     lua_newtable(L);
     lua_pushboolean(L,ok);lua_setfield(L,-2,"ok");
