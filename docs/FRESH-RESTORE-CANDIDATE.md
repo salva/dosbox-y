@@ -240,7 +240,12 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   `DOSBOX_TEST_PRESENTATION=1` on the consumer changes scaler/aspect/ratio/frame
   skipping without changing guest hardware. These four render properties are
   no longer compatibility identity; raster/font switches remain conservatively
-  constrained pending effective-owner identity. A disk-audio/Xvfb producer to
+  constrained pending effective-owner identity. Capture slot/file/remark,
+  autosave policy and the inert legacy force-load preference are excluded from
+  compatibility: changing them must not change initialized hardware identity.
+  `DOSBOX_TEST_CAPTURE_POLICY=1` exercises different consumer preferences in the
+  fresh matrix; `config-identity.py` checks the actual traversal with reduced
+  hash/section doubles and retains a memory-size distinction. A disk-audio/Xvfb producer to
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.

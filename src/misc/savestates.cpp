@@ -123,7 +123,10 @@ static std::string state_config_identity() {
                 property->propname=="frameskip")) continue;
             if (name=="dosbox" && (property->propname=="mcp_server" ||
                 property->propname=="captures" || property->propname=="saves" ||
-                property->propname=="compresssaveparts")) continue;
+                property->propname=="compresssaveparts" ||
+                property->propname=="saveslot" || property->propname=="savefile" ||
+                property->propname=="saveremark" || property->propname=="autosave" ||
+                property->propname=="forceloadstate")) continue;
             field(property->propname);
             field(property->GetValue().ToString());
         }
