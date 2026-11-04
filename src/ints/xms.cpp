@@ -755,6 +755,7 @@ class XMS: public Module_base {
 private:
 	CALLBACK_HandlerObject callbackhandler;
 public:
+    Bitu NativeCallbackSlot() { return callbackhandler.Get_callback(); }
 	XMS(Section* configuration):Module_base(configuration){
 		Section_prop * section=static_cast<Section_prop *>(configuration);
 #if !defined(OSFREE)
@@ -1066,7 +1067,93 @@ class SerializeXMS : public SerializeGlobalPOD
 public:
     SerializeXMS() : SerializeGlobalPOD("XMS")
     {
-        registerPOD(xms_handles);
+        // Do not consume unchecked bool representations or struct padding.
+        for (auto &handle : xms_handles) {
+            registerPOD(handle.size);
+            registerPOD(handle.mem);
+            registerPOD(handle.locked);
+            registerPOD(handle.free);
+        }
+    }
+
+private:
+    void binding(std::ostream *output, std::istream *input)
+    {
+        const uint32_t fields[] = {uint32_t(XMS_Active()), XMS_HANDLES, xms_callback,
+            uint32_t(XMS_Active() ? test->NativeCallbackSlot() : 0),CB_HOOKABLE,10};
+        for (const auto field : fields) {
+            if (output) output->write(reinterpret_cast<const char*>(&field), sizeof(field));
+            else {
+                uint32_t saved = 0;
+                if (!input->read(reinterpret_cast<char*>(&saved), sizeof(saved))) return;
+                if (saved != field) {
+                    input->setstate(std::ios::failbit);
+                    return;
+                }
+            }
+        }
+        if (!XMS_Active()) return;
+        // CB_HOOKABLE's first five bytes belong to the guest hook. Its native
+        // service body is fixed and must still dispatch the owning XMS slot.
+        const PhysPt body=Real2Phys(xms_callback)+5;
+        const auto slot=test->NativeCallbackSlot();
+        if (!slot || slot>=CB_MAX || CallBack_Handlers[slot]!=XMS_Handler ||
+            mem_readb(body)!=0xfe ||
+            mem_readb(body+1)!=0x38 || mem_readw(body+2)!=slot ||
+            mem_readb(body+4)!=0xcb) {
+            if (output) output->setstate(std::ios::failbit);
+            else input->setstate(std::ios::failbit);
+        }
+    }
+
+    void getBytes(std::ostream &stream) override
+    {
+        binding(&stream, nullptr);
+        if (!stream) return;
+        SerializeGlobalPOD::getBytes(stream);
+    }
+
+    void setBytes(std::istream &stream) override
+    {
+        binding(nullptr, &stream);
+        if (!stream) return;
+        SerializeGlobalPOD::setBytes(stream);
+        if (!stream || !XMS_Active()) return;
+        // Memory's owning consumer has already checked the handle chains.
+        // Here check what XMS arithmetic and release consumers require. Zero
+        // sized allocations may name the next free page without owning it.
+        const auto total = MEM_TotalPages();
+        for (unsigned int i = 1; i < XMS_HANDLES; ++i) {
+            const auto &handle = xms_handles[i];
+            if (handle.free) continue;
+            const Bitu pages = handle.size / 4u + (handle.size % 4u != 0);
+            if (handle.size > UINT32_MAX / 1024u || handle.mem < 0 ||
+                Bitu(handle.mem) >= total || pages > total - Bitu(handle.mem) ||
+                (pages && !handle.mem)) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
+            // XMS_MoveMemory uses base+offset, so this allocation must be a
+            // contiguous owned chain, not merely an in-range starting page.
+            for (Bitu page = 0; page < pages; ++page) {
+                const MemHandle current = handle.mem + MemHandle(page);
+                const MemHandle expected = page + 1 == pages ? -1 : current + 1;
+                if (MEM_NextHandle(current) != expected) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
+            }
+            for (unsigned int j = 1; pages && j < i; ++j) {
+                const auto &other = xms_handles[j];
+                if (other.free || !other.size) continue;
+                const Bitu other_pages = other.size / 4u + (other.size % 4u != 0);
+                if (Bitu(handle.mem) < Bitu(other.mem) + other_pages &&
+                    Bitu(other.mem) < Bitu(handle.mem) + pages) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
+            }
+        }
     }
 } dummy;
 }

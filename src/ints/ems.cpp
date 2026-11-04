@@ -1792,6 +1792,52 @@ private:
 	CALLBACK_HandlerObject call_vdma,call_vcpi,call_v86mon,call_win_vm86_ctl;
 
 public:
+    // Fixed semantic role order: EMS DOS header, VDMA, INT67, VCPI PM,
+    // Windows VM86 control, V86 monitor. No handler address is portable state.
+    bool NativeBindings(std::ostream *output, std::istream *input) {
+        const uint32_t fields[] = {ems_baseseg, oshandle_memsize_16kb,
+            uint32_t(call_vdma.Get_callback()), CB_IRET,
+            uint32_t(Real2Phys(call_vdma.Get_RealPointer())), 5,
+            uint32_t(call_int67), CB_IRET, uint32_t(PhysMake(ems_baseseg,4)), 5,
+            uint32_t(call_vcpi.Get_callback()), CB_RETF,
+            uint32_t(Real2Phys(call_vcpi.Get_RealPointer())), 5,
+            uint32_t(call_win_vm86_ctl.Get_callback()), CB_RETF,
+            uint32_t(Real2Phys(call_win_vm86_ctl.Get_RealPointer())), 5,
+            uint32_t(call_v86mon.Get_callback()), CB_IRET,
+            uint32_t(Real2Phys(call_v86mon.Get_RealPointer())), 5};
+        for (const auto field : fields) {
+            if (output) output->write(reinterpret_cast<const char *>(&field),sizeof(field));
+            else {
+                uint32_t saved=0;
+                if (!input->read(reinterpret_cast<char *>(&saved),sizeof(saved)) || saved!=field)
+                    return false;
+            }
+        }
+        const auto body = [](Bitu slot, PhysPt address, uint8_t suffix,
+                             CallBack_Handler handler) {
+            return slot && slot<CB_MAX && CallBack_Handlers[slot]==handler &&
+                mem_readb(address)==0xfe &&
+                mem_readb(address+1)==0x38 && mem_readw(address+2)==slot &&
+                mem_readb(address+4)==suffix;
+        };
+        if (!body(call_vdma.Get_callback(),Real2Phys(call_vdma.Get_RealPointer()),0xcf,INT4B_Handler))
+            return false;
+        if (call_int67 && !body(call_int67,PhysMake(ems_baseseg,4),0xcf,INT67_Handler)) return false;
+        if (call_vcpi.Get_callback() &&
+            !body(call_vcpi.Get_callback(),Real2Phys(call_vcpi.Get_RealPointer()),0xcb,VCPI_PM_Handler)) return false;
+        if (call_win_vm86_ctl.Get_callback() &&
+            !body(call_win_vm86_ctl.Get_callback(),Real2Phys(call_win_vm86_ctl.Get_RealPointer()),0xcb,WinVM86Ctl)) return false;
+        if (call_v86mon.Get_callback() &&
+            !body(call_v86mon.Get_callback(),Real2Phys(call_v86mon.Get_RealPointer()),0xcf,V86_Monitor)) return false;
+        if (vcpi.enabled) {
+            const PhysPt monitor=PhysPt(vcpi.private_area)+0x2e00;
+            if (!call_v86mon.Get_callback() ||
+                !body(call_v86mon.Get_callback(),monitor,0x66,V86_Monitor) ||
+                mem_readb(monitor+5)!=0xcf) return false;
+        }
+        return output ? bool(*output) : bool(*input);
+    }
+
 	RealPt Get_EMS_vm86control() {
 		if (ENABLE_V86_STARTUP && ENABLE_VCPI)
 			return call_win_vm86_ctl.Get_RealPointer();
@@ -2189,7 +2235,13 @@ class SerializeEMS : public SerializeGlobalPOD
 public:
     SerializeEMS() : SerializeGlobalPOD("EMS")
     {
-        registerPOD(emm_handles);
+        for (auto &handle : emm_handles) {
+            registerPOD(handle.pages);
+            registerPOD(handle.mem);
+            registerPOD(handle.name);
+            registerPOD(handle.saved_page_map);
+            registerPOD(handle.page_map);
+        }
         registerPOD(emm_mappings);
         registerPOD(emm_segmentmappings);
         registerPOD(GEMMIS_seg);
@@ -2199,6 +2251,72 @@ public:
         registerPOD(vcpi.private_area);
         registerPOD(vcpi.pic1_remapping);
         registerPOD(vcpi.pic2_remapping);
+    }
+
+private:
+    void getBytes(std::ostream &stream) override {
+        const uint32_t binding[] = {uint32_t(ems_type), uint32_t(EMM_PAGEFRAME),
+                                    uint32_t(call_int67)};
+        stream.write(reinterpret_cast<const char *>(binding), sizeof(binding));
+        if (!test || !test->NativeBindings(&stream,nullptr)) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        SerializeGlobalPOD::getBytes(stream);
+    }
+
+    void setBytes(std::istream &stream) override {
+        uint32_t binding[3] = {};
+        stream.read(reinterpret_cast<char *>(binding), sizeof(binding));
+        if (!stream || binding[0] != ems_type || binding[1] != EMM_PAGEFRAME ||
+            binding[2] != call_int67) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        if (!test || !test->NativeBindings(nullptr,&stream)) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        // GEMMIS is a lazily allocated native DOS table, not an arbitrary
+        // saved location at which the fresh device may publish host services.
+        const uint16_t fresh_gemmis = GEMMIS_seg;
+        const bool fresh_vcpi_enabled = vcpi.enabled;
+        const auto fresh_vcpi_interface = vcpi.pm_interface;
+        const auto fresh_vcpi_private_area = vcpi.private_area;
+        SerializeGlobalPOD::setBytes(stream);
+        if (!stream) return;
+        if (GEMMIS_seg != fresh_gemmis || vcpi.enabled != fresh_vcpi_enabled ||
+            vcpi.pm_interface != fresh_vcpi_interface ||
+            vcpi.private_area != fresh_vcpi_private_area) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        if (!EMS_Active()) return;
+        const Bitu total = MEM_TotalPages();
+        for (const auto &handle : emm_handles) {
+            if (handle.pages == NULL_HANDLE || !handle.pages) continue;
+            if (handle.mem <= 0 || Bitu(handle.mem) >= total ||
+                Bitu(handle.pages) > total / 4u ||
+                MEM_AllocatedPages(handle.mem) != Bitu(handle.pages) * 4u) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
+        }
+        const auto valid_mapping = [](const EMM_Mapping &map) {
+            if (map.handle == NULL_HANDLE || map.page == NULL_PAGE)
+                return map.handle == NULL_HANDLE && map.page == NULL_PAGE;
+            return map.handle < EMM_MAX_HANDLES &&
+                   emm_handles[map.handle].pages != NULL_HANDLE &&
+                   map.page < emm_handles[map.handle].pages;
+        };
+        for (const auto &map : emm_mappings)
+            if (!valid_mapping(map)) { stream.setstate(std::ios::failbit); return; }
+        for (const auto &map : emm_segmentmappings)
+            if (!valid_mapping(map)) { stream.setstate(std::ios::failbit); return; }
+        for (const auto &handle : emm_handles)
+            if (handle.saved_page_map)
+                for (const auto &map : handle.page_map)
+                    if (!valid_mapping(map)) { stream.setstate(std::ios::failbit); return; }
     }
 } dummy;
 }

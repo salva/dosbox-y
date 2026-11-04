@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include "dosbox.h"
+#include "restored_session.h"
 #include "logging.h"
 #include "regs.h"
 #include "control.h"
@@ -112,6 +113,55 @@ void ttf_reset();
 extern VideoModeBlock* CurMode;
 
 Bitu call_shellstop = 0;
+
+// Native shell roles in SHELL_Init order. IVT hooks are guest payload.
+static Bitu shellstop_handler(void);
+static Bitu INT23_Handler(void);
+static Bitu INT2E_Handler(void);
+namespace {
+class SerializeShellBindings : public SerializeGlobalPOD {
+    static bool bodies() {
+        if (!shell_psp || !call_shellstop || !call_int23 || !call_int2e ||
+            call_shellstop>=CB_MAX || call_int23>=CB_MAX || call_int2e>=CB_MAX)
+            return false;
+        // Compare host roles against this invocation's constructors, never
+        // against serialized pointers or human-readable callback descriptions.
+        if (CallBack_Handlers[call_shellstop]!=shellstop_handler ||
+            CallBack_Handlers[call_int23]!=INT23_Handler ||
+            CallBack_Handlers[call_int2e]!=INT2E_Handler) return false;
+        const auto body=[](PhysPt address,Bitu slot,bool sti,uint8_t ret) {
+            if (sti && mem_readb(address++)!=0xfb) return false;
+            return mem_readb(address)==0xfe && mem_readb(address+1)==0x38 &&
+                   mem_readw(address+2)==slot && mem_readb(address+4)==ret;
+        };
+        return body(CALLBACK_PhysPointer(call_shellstop),call_shellstop,false,0xcf) &&
+               body(PhysMake(shell_psp,8+((16+2)*16)),call_int23,false,0xcb) &&
+               body(PhysMake(shell_psp,8+((16+1)*16)),call_int2e,true,0xcf);
+    }
+    static void bindings(std::ostream *output,std::istream *input) {
+        // Owner-defined role, slot, type, physical location, encoded span.
+        const uint32_t fields[]={shell_psp,
+            uint32_t(call_shellstop),CB_IRET,uint32_t(CALLBACK_PhysPointer(call_shellstop)),5,
+            uint32_t(call_int23),CB_RETF,uint32_t(PhysMake(shell_psp,8+((16+2)*16))),5,
+            uint32_t(call_int2e),CB_IRET_STI,uint32_t(PhysMake(shell_psp,8+((16+1)*16))),6};
+        if (output && !bodies()) {output->setstate(std::ios::failbit);return;}
+        for (auto value:fields) {
+            if (output) output->write(reinterpret_cast<const char*>(&value),sizeof(value));
+            else {
+                uint32_t saved=0;
+                if (!input->read(reinterpret_cast<char*>(&saved),sizeof(saved))) return;
+                if (saved!=value) {input->setstate(std::ios::failbit);return;}
+            }
+        }
+        // Memory has already installed payload; never repair guest code here.
+        if (input && !bodies()) input->setstate(std::ios::failbit);
+    }
+public:
+    SerializeShellBindings():SerializeGlobalPOD("Shell bindings") {}
+    void getBytes(std::ostream &stream) override {bindings(&stream,nullptr);}
+    void setBytes(std::istream &stream) override {bindings(nullptr,&stream);}
+} shell_binding_codec;
+}
 /* Larger scope so shell_del autoexec can use it to
  * remove things from the environment */
 DOS_Shell * first_shell = nullptr;
@@ -2292,6 +2342,7 @@ void SHELL_Run() {
 		Reflect_Menu();
 #endif
 	}
+	catch (const RestoredSession::RootExit &) { throw; }
 	catch (...) {
 		delete first_shell;
 		first_shell = nullptr;//Make clear that it shouldn't be used anymore
@@ -2739,6 +2790,7 @@ void CONFIGSHELL_Run() {
 		Reflect_Menu();
 #endif
 	}
+	catch (const RestoredSession::RootExit &) { throw; }
 	catch (...) {
 		delete first_shell;
 		first_shell = nullptr;//Make clear that it shouldn't be used anymore
