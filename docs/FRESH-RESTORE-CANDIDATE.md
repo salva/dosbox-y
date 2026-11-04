@@ -255,6 +255,12 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.
+* `python3 tests/original-foundation/state-departure.py` captures an ordinary
+  terminating program, refuses used-target STATEREAD, compares repeated saved
+  owners unchanged, then explicitly RUNs the program back to its ordinary shell
+  and verifies its RETURN.TXT marker and clean process exit. No restored-root or
+  same-process reload support is inferred; fresh-startup terminal probes own
+  disposable-session exit coverage.
 * `python3 tests/original-foundation/mouse-consumption.py` extracts the actual
   mouse struct/codec with reduced transport doubles: default/user/NEC mask roles,
   every short stream, invalid roles, event/AUX/unlock bounds. The owner clears
