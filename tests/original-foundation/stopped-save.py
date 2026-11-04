@@ -8,8 +8,8 @@ w = pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root))
 binary = pathlib.Path(os.environ.get('DOSBOX_TEST_BINARY','src/dosbox-x')).resolve()
 (w/'TINY.COM').write_bytes(bytes.fromhex(os.environ.get('DOSBOX_TEST_PROGRAM_HEX','90 40 eb fc')))
 if os.environ.get('DOSBOX_TEST_EXEC_CHILD'):
- subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-child.asm')),'-o',str(w/'TINY.COM')],check=True)
- (w/'CHILD.COM').write_bytes(bytes.fromhex('b8 07 4c cd 21'))
+ subprocess.run(['nasm','-f','bin',*(['-DCHILD_TSR'] if os.environ.get('DOSBOX_TEST_CHILD_TSR') else []),str(pathlib.Path(__file__).with_name('fresh-child.asm')),'-o',str(w/'TINY.COM')],check=True)
+ (w/'CHILD.COM').write_bytes(bytes.fromhex(os.environ.get('DOSBOX_TEST_CHILD_HEX','b8 07 4c cd 21')))
 if os.environ.get('DOSBOX_TEST_XMS_SERVICE'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_XMS_HELD'):
@@ -24,7 +24,7 @@ if os.environ.get('DOSBOX_TEST_INT27'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-int27.asm')),'-o',str(w/'TINY.COM')],check=True)
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm')):
  if os.environ.get('DOSBOX_TEST_'+option):
-  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
+  subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
 slot_mode=bool(os.environ.get('DOSBOX_TEST_SLOT'))
 file_state = bool(os.environ.get('DOSBOX_TEST_FILE_STATE'))
 unsupported_devices = bool(os.environ.get('DOSBOX_TEST_UNSUPPORTED_DEVICES'))

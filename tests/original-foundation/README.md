@@ -1,3 +1,54 @@
+## Current candidate: fresh disposable restore (2026-11-04)
+
+The original-foundation baseline reports below are historical unless explicitly
+updated here. Candidate commit `448596413d47407283564b50684d3876fa8b7dc9`
+replaces live restore with `-restore-state <archive>` into an initialized unused
+startup target, before immediate debugger or Lua FILE/INLINE evaluation. A used
+process cannot load slot/file/memory/checkpoint state; STATEREAD reports
+fresh-launch-required. Repeated stopped STATEWRITE and slot capture remain.
+There is no host-content rollback or guest boot/program replay during import.
+Malformed/partial/uncertain import disposes its process; the source is unchanged.
+The target stays held until an explicit step/Run request. Host delay is not guest
+time, and host pacing is rebased only when continuation is actually activated.
+
+Build profiles now include `--enable-debug-lua` and `--disable-debug-lua`, plus
+Agent enabled/disabled. `C_DEBUG_LUA` and the real Lua evaluator are integrated;
+the older “no configure Lua option” paragraph below describes the earlier input,
+not this candidate. FILE/INLINE full Lua libraries/errors/finalizers/close are
+retained. No-debug builds compile but cross-heavy-debug import currently rejects
+Shell bindings; no-debug continuation/root runtime is not yet qualified.
+
+Reproduction: set `DOSBOX_TEST_BINARY` and optionally colon-separated
+`DOSBOX_TEST_CONSUMERS` to exact configured binaries; run `fresh-root-matrix.py`
+for 18 cases (search/handles/XMS/EMS/input/video/timer/root/child/TSR/self-parent),
+including capture-before-import active speaker, keyboard ring and video VRAM.
+These active cases do not rerun their setup on the restored target; they are
+not waveform/frame/physical-input parity. `fresh-receipt.py MATRIX OUTPUT_JSON`
+records exact current tracked source, configured headers/binaries and fixture
+inputs after a separately verified matrix completion.
+`fresh-startup-no-replay.py` with `DOSBOX_TEST_ARCHIVE` instruments the actual
+constructor→hold seam against guest dispatch/PIC queue/TIMER entry.
+`fresh-startup-lua.py`, `fresh-startup-terminal.py`, and
+`fresh-startup-close-failure.py` exercise held evaluator/finalizer, exact terminal
+response, and archive close failure. Malformed tests need matching producer
+hardware: `DOSBOX_TEST_AUDIO=1` for audio-enabled captures; optional
+`DOSBOX_TEST_CORE_TRUNCATION=1 DOSBOX_TEST_BINDINGS=1 DOSBOX_TEST_DBOPL=1
+DOSBOX_TEST_ROOT_VALIDATION=1 DOSBOX_TEST_ROOT_PSP=0814` enables the current matrix
+fixture's owner/binding/root cases. Metadata mismatch is not malformed-owner
+coverage. `progressive-install.py` replaces all-owner-before-effects assertions:
+owner failure is fatal even after earlier installation, never rollback success.
+
+Meaningful bounded author evidence and remaining obligations are in
+`docs/FRESH-RESTORE-CANDIDATE.md`. ZIP publication/close tests remain relevant,
+but old global Prepared/unchanged-used-target/live-load/exact-binary equality or
+flagged rollback expectations below do not describe current acceptance.
+Compatibility uses representation/engine/ABI, loaded immutable input and native
+binding checks, not whole-executable identity; effective hardware metadata is
+still incomplete/overrestrictive and not claimed fully accepted. No individual
+probe establishes arbitrary hardware or independent combined acceptance.
+
+## Historical baseline probe reports
+
 ## Retained archive output
 
 `python3 tests/original-foundation/state-archive-output.py` uses real minizip

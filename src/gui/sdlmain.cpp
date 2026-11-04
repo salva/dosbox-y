@@ -7703,6 +7703,10 @@ bool DOSBOX_parse_argv() {
             fprintf(stderr,"DOSBox-X project maintainer: joncampbell123 (The Great Codeholio)\n\n");
             fprintf(stderr,"Based on DOSBox by the DOSBox Team (See AUTHORS file)\n\n");
             fprintf(stderr,"Debugging options:\n\n");
+            fprintf(stderr,"  -restore-state <archive>                 Restore once into a fresh disposable startup target, held before debugger/Lua\n");
+            fprintf(stderr,"                                          Matching hardware/mounts required; failure disposes target, never live reload\n");
+            fprintf(stderr,"  -lua-driver-file <file>                  Evaluate Lua FILE after startup restore (Lua-enabled debug builds)\n");
+            fprintf(stderr,"  -lua-driver-code <code>                  Evaluate Lua INLINE after startup restore; explicit step/Run advances guest\n");
             fprintf(stderr,"  -debug                                  Set all logging levels to debug\n");
             fprintf(stderr,"  -early-debug                            Log early initialization messages in DOSBox-X (implies -console)\n");
             fprintf(stderr,"  -keydbg                                 Log all SDL key events\n");

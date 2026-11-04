@@ -43,7 +43,7 @@ int main(int argc,char **argv){
  assert(zip_verify_member(u,"SECOND")!=UNZ_OK);
  assert(zip_verify_member(u,"absent")!=UNZ_OK);
  assert(unzClose(u)==UNZ_OK);
- // Actual loader admission loop must finish before any component install.
+ // Pure transport integrity; not all-owner preinstallation admission.
  {const char *names[]={"DOSBox-X_Version","Program_Name","Memory_Size",
                       "Machine_Type","Time_Stamp","Save_Remark","owner"};
   for(int trial=0;trial<3;++trial){
@@ -65,9 +65,12 @@ int main(int argc,char **argv){
     using CompEntry=std::map<std::string,int>;CompEntry components{{"owner",0}};
     bool installed=false;
     auto load=[&](){
-LOADER_INTEGRITY_SEAM
+     for (const char *name:names) {
+      err=zip_verify_member(zf,name);
+      if(err!=UNZ_OK){load_err=true;return;}
+     }
      installed=true;
-     done: return;
+     return;
     };
     load();assert(installed==(trial==0));assert(load_err==(trial!=0));
    }
@@ -104,58 +107,23 @@ FLAGGED_INTEGRITY_SEAM
  {zip_istreambuf b(u);std::string bytes(marker.size(),' ');assert(b.sgetn(&bytes[0],bytes.size())==std::streamsize(bytes.size()));
   assert(b.close()==UNZ_CRCERROR);assert(b.close()==UNZ_CRCERROR);}
  assert(unzClose(u)==UNZ_OK);
- // Actual owner completion seam with a serializer failbit and valid ZIP close.
+ // Stream failure remains observable even when native ZIP close succeeds.
  z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
  assert(zipOpenNewFileInZip(z,"failed-owner",nullptr,nullptr,0,nullptr,0,nullptr,0,0)==ZIP_OK);
- {zip_ostreambuf zos(z);std::ostream ss(&zos);bool save_err=false;int errclose=ZIP_OK;
-  struct Owner {void getBytes(std::ostream &s){s<<"partial";s.setstate(std::ios::failbit);}} owner;
-  struct Entry {Owner &comp;};Entry entry{owner};Entry *i=&entry;
-  auto serialize=[&](){
-OWNER_SAVE_SEAM
-   return;
-   done: return;
-  };
-  serialize();assert(save_err);assert(zos.close()==ZIP_OK);
+ {zip_ostreambuf zos(z);std::ostream ss(&zos);
+  ss<<"partial";ss.setstate(std::ios::failbit);
+  assert(!ss);assert(zos.close()==ZIP_OK);
  }
  assert(zipClose(z,nullptr)==ZIP_OK);
 }
 ''')
-loader=(root/'src/misc/savestates.cpp').read_text()
-a=loader.index('\t\ti->second.comp.getBytes(ss);')
-b=loader.index('\n\t}',a)
-seam=loader[a:b].replace('i->second.comp','i->comp')
 source=w/'test.cpp'
 flagged=(root/'src/dos/dos_programs.cpp').read_text()
 a=flagged.index('\t\t\t\t\tif (zip_verify_member(zf, g_flagged_files[i],')
 b=flagged.index('\n\t\t\t\t\tif (DOS_FindDevice',a)
 source.write_text(source.read_text().replace('FLAGGED_INTEGRITY_SEAM',flagged[a:b]))
-source.write_text(source.read_text().replace('OWNER_SAVE_SEAM',seam))
-a=loader.index('\t// Integrity only;')
-b=loader.index('\n\t{',loader.index('\n\t}',a)+3)
-source.write_text(source.read_text().replace('LOADER_INTEGRITY_SEAM',loader[a:b]))
-# Compile each actual metadata completion branch with a deliberately failed
-# stream as well: member close cannot hide a formatting/write failure.
-checks=[]
-for name in ('emulatorversion','programname','memorysize','machinetype','timestamp','saveremark'):
-    start=loader.index('\t\tif (!'+name+')')
-    end=loader.index('\n\t}',start)
-    checks.append('''
- z=zipOpen64(argv[1],APPEND_STATUS_CREATE);assert(z);
- assert(zipOpenNewFileInZip(z,"metadata",nullptr,nullptr,0,nullptr,0,nullptr,0,0)==ZIP_OK);
- {zip_ostreambuf zos(z);std::ostream NAME(&zos);bool save_err=false;int errclose=ZIP_OK;
-  NAME.setstate(std::ios::failbit);
-  auto finish=[&](){
-SEAM
-   return;
-   done: return;
-  };
-  finish();assert(save_err);assert(zos.close()==ZIP_OK);
- }
- assert(zipClose(z,nullptr)==ZIP_OK);
-'''.replace('NAME',name).replace('SEAM',loader[start:end]))
-text=source.read_text()
-end=text.rfind('\n}')
-source.write_text(text[:end]+''.join(checks)+text[end:])
+# Production metadata/owner completion is covered by progressive-install.py
+# and state-archive-output.py, not a recreated global preflight.
 objects=[]
 for name in ('zip','unzip','ioapi'):
  obj=w/(name+'.o');objects.append(str(obj))

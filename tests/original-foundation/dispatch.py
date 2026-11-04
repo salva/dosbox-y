@@ -14,6 +14,17 @@ fixture = r'''
 #include "machine_service.h"
 #include "native_frontier.h"
 #include "native_slice_observer.h"
+#include "restored_session.h"
+struct Control {std::string opt_restore_state;} configuration,*control=&configuration;
+struct Dos {uint16_t psp()const{return 0x1234;}} dos;
+namespace RestoredSession {
+Invocation &invocation(){static Invocation owner;return owner;}
+bool selected(){return invocation().selected();}
+bool validRoot(uint16_t,bool){return true;}
+}
+unsigned ticksLast=0,ticksRemain=0,ticksRemainSpeedFrac=0,ticksAdded=0,ticksScheduled=0;
+int ticksDone=0;
+unsigned GetTicks(){return 73;}
 MachineService::Owner DOSBOX_MachineServiceOwner();
 using Bits=int; using Bitu=unsigned;
 constexpr unsigned CB_MAX=4;
@@ -26,14 +37,16 @@ bool DEBUG_NativeDecoderRestoresCore(){return true;}
 void DEBUG_NativeDecoderEntered(){++decoder_entries;}
 unsigned native_dispatches=0,owner_departures=0;
 void DEBUG_MachineOwnerDeparting(uint64_t){++owner_departures;}
+void DEBUG_MachineOwnerReturning(uint64_t){}
 Bits DEBUG_DispatchNativeExecution(){++native_dispatches;return 0;}
 unsigned entries=0;
 bool dosbox_allow_nonrecursive_page_fault=false;
 unsigned last_callback=9;
 bool fail=false;
+bool root_throw=false;
 int decoder() {assert(dosbox_allow_nonrecursive_page_fault);NativeFrontier::frontiers().reach(NativeFrontier::Kind::PartialParent,1);if(fail)throw 1;return 2;}
 int (*cpudecoder)()=decoder;
-unsigned handler() {assert(!dosbox_allow_nonrecursive_page_fault);assert(last_callback==2);NativeFrontier::frontiers().reach(NativeFrontier::Kind::PartialParent,1);if(fail)throw 2;return 3;}
+unsigned handler() {assert(!dosbox_allow_nonrecursive_page_fault);assert(last_callback==2);NativeFrontier::frontiers().reach(NativeFrontier::Kind::PartialParent,1);if(root_throw)throw RestoredSession::RootExit{{1,0x1234,42,false,false}};if(fail)throw 2;return 3;}
 unsigned (*CallBack_Handlers[CB_MAX])()={nullptr,nullptr,handler,nullptr};
 [[noreturn]] void E_Exit(const char*) {throw std::runtime_error("invalid callback");}
 '''
@@ -113,6 +126,12 @@ int main() {
   }
  }
  assert(entries==4); // Normal and throwing guest callbacks expose entry.
+ root_throw=true;fail=false;
+ try {DOSBOX_DispatchCallback(2);assert(false);}
+ catch(const RestoredSession::RootExit &exit){assert(exit.facts.root==0x1234 && exit.facts.code==42);}
+ root_throw=false;
+ assert(entries==5 && last_callback==9);
+ assert(NativeFrontier::frontiers().quiescent());
 #if C_DEBUG
  assert(decoder_entries==4 && decoder_flags_entered==4 && decoder_flags_left==4);
 #else
@@ -122,7 +141,7 @@ int main() {
  assert(DOSBOX_DispatchCallback(2)==3);
  fail=true;
  try{DOSBOX_DispatchCallback(2);assert(false);}catch(int n){assert(n==2);}
- assert(entries==4); // Debugger trampoline never exposes guest entry.
+ assert(entries==5); // Debugger trampoline never exposes guest entry.
  assert(last_callback==9 && dosbox_allow_nonrecursive_page_fault==incoming_allow);
  assert(slice_before==4 && slice_after==4);
  assert(NativeExecution::slice_observer().unbind(slice,nullptr));
@@ -133,8 +152,8 @@ subprocess.run(['g++','-DC_DEBUG=1','-std=c++14','-Wall','-Wextra','-Werror','-I
 subprocess.run([str(work / 'dispatch')],check=True)
 # Compile the same dispatcher with debug disabled; every valid callback is a
 # guest entry in that configuration, with no debugger symbol dependency.
-no_debug = fixture.replace('assert(entries==4); // Debugger trampoline never exposes guest entry.',
-                           'assert(entries==6); // No debugger trampoline in this build.')
+no_debug = fixture.replace('assert(entries==5); // Debugger trampoline never exposes guest entry.',
+                           'assert(entries==7); // No debugger trampoline in this build.')
 (work / 'dispatch-no-debug.cpp').write_text(no_debug)
 subprocess.run(['g++','-DC_DEBUG=0','-std=c++14','-Wall','-Wextra','-Werror','-I',str(root / 'include'),str(work / 'dispatch-no-debug.cpp'),'-o',str(work / 'dispatch-no-debug')],check=True)
 subprocess.run([str(work / 'dispatch-no-debug')],check=True)

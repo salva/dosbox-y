@@ -3,6 +3,7 @@
 ; No host delay is substituted for guest time. An absent timer stalls/fails.
 bits 16
 org 100h
+program_start:
     nop
     mov al,0b6h
     out 43h,al
@@ -13,6 +14,12 @@ org 100h
     in al,61h
     or al,3
     out 61h,al
+%ifdef CAPTURE_ACTIVE
+    jmp active_capture
+    times 100h-($-program_start) db 90h
+active_capture: ; IP=0200: restored PIT2/gate remain live, without replaying setup
+    nop
+%endif
     xor ax,ax
     mov es,ax
     mov bx,[es:046ch]

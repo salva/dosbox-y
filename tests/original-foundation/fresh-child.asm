@@ -19,7 +19,11 @@ org 100h
     jc failed
     mov ah,4dh
     int 21h
+%ifdef CHILD_TSR
+    cmp ax,0307h ; AH=3 resident child exit type, AL=7
+%else
     cmp ax,7
+%endif
     jne failed
     mov ax,4c2ah
     int 21h

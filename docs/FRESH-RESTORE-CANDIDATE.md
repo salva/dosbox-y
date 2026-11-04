@@ -8,12 +8,42 @@ used-target preservation/global preparation/live reload/replay prescriptions.
 
 ## Current bounded author receipt
 
+Combined production vertical committed as
+`448596413d47407283564b50684d3876fa8b7dc9`, tree
+`f73db16cf98aba8a0449d0cf58f9925222e25116` (89 files; owning codecs, original
+native constructor seam, startup install, typed root unwind, host pacing,
+fixtures and reduced consumer probes). Earlier native-role/no-replay receipts
+below are retained as intermediate inputs, not current binaries. Production
+is committed, not accepted as whole-brief complete.
+
+Exact committed source/header/config/build/binary/14-fixture receipt:
+`/work/dosbox-y/.saivage/work/cards/card-n-c-k-a/build/nov4-committed-fresh-startup-manifest.json`,
+SHA256 `e3fe80e059d3b93d5e1f1039e42cb46a232170d7d21110c36938b2598302eaf9`.
+Lua `989d405dd2488fc76a56d58d65b375b592a677d919ca852507108edd1392fd6c`,
+no-Agent `92c5d9325a0be37e32d764bf1d2e8514dd3a5e9dd9c60bfc0326fcb93688c985`,
+no-Lua `af0e031795befca2a3dd10e32457079539971dfd8010db8f22d4d996154b6c7d`.
+All3 rebuilt after pacing; matrix `run-xqmx7xvd` and actual no-replay guard
+passed. Boundaries/unqualified scope remain below. Documentation and CLI help now follow that combined vertical. The historical
+receipt above predates the CLI-help rebuild; it must not identify the current
+binaries. The current receipt and current bounded checks are recorded in the
+card status.
+
+Current fixture matrix additionally captures active speaker/PIT2/port61, BIOS
+keyboard ring, and text video mode/VRAM **before** import; no post-import setup
+recreates those witnesses. All18 cases × all3 configured binaries passed in
+`fresh-root-matrix/run-t48ngpwc` (`proc-bae231fe153e`). This proves the asserted
+native consumers, not waveform/frame/FIFO or all-hardware parity.
+The dated author successor is `docs/PLANS/FRESH-RESTORE-R2-SUCCESSOR-20261104.md`;
+it is not independent acceptance or adoption of revised product guarantees.
+
+### Historical native-binding slice
+
 Native-binding slice `e2b483eeac05715493f3e17e824e923dbd901554` checks actual fresh
 host handler roles as well as portable slot/type/location/body metadata in the
 shell/XMS/EMS owners. No host pointer is serialized as identity. Reduced tests
 replace every represented host handler with null/wrong roles and require both
 capture and consumption failure; legitimate IVT/XMS hook prefixes remain guest
-payload. Other core work remains dirty; this is not the combined vertical.
+payload. Other core work at that historical receipt was dirty; this slice was not the combined vertical.
 
 Exact source/header/config/binary/14-producer fixture receipt:
 `/work/dosbox-y/.saivage/work/cards/card-n-c-k-a/build/nov4-native-roles-source-config-binary-manifest.json`,
@@ -53,9 +83,12 @@ fixes a preexisting native-input debugger linkage. Cross-heavy-debug import
 failed Shell bindings before the expected frontend refusal, so no cross-debug
 compatibility or no-debug root runtime claim is made. Always-built native
 headers are now included outside the debug guard. No-debug logs are
-`build/no-debug-{configure,make,link-fix-make,restore}.log`; its build predates
-the pacing fix. Latest three binaries supersede the no-replay manifest; a
-new receipt is needed after coherent commit.
+`build/no-debug-{configure,make,link-fix-make,restore}.log`. No-debug was rebuilt
+after pacing/help (`build/no-debug-current-make.log`); matching-config import
+still fails Shell bindings (`build/no-debug-matching-diagnosis.log`), before
+frontend refusal. The first new diagnosis used a nonexistent config and failed
+Config_Identity; it was a setup failure, not the matching-config witness.
+No-debug continuation/root runtime remains separately unqualified.
 
 
 ### No-replay constructor correction (2026-11-04)
@@ -68,7 +101,8 @@ external-driver type classification now avoids status queries (commit
 `a8469b83013932c7d73d3f42d6d7b99a3762d81f`, regression
 `264448d98`); fresh construction skips BIOS date sampling because the saved DOS
 owner supplies date. Ordinary boot retains date sampling. The latter change is
-in the still-dirty shared startup slice, not a standalone committed vertical.
+included in combined commit `448596413d47407283564b50684d3876fa8b7dc9`,
+not a standalone clock-only commit.
 
 `proc-65b76358049e` and stronger guard `proc-064202b83e84` reached startup hold
 on no-Agent/no-Lua/Lua without RunMachine/normal decoder/PIC queue/TIMER/guest
