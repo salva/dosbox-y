@@ -161,6 +161,8 @@ void GFX_LosingFocus(void), GFX_ReleaseMouse(void), MAPPER_ReleaseAllKeys(void),
 bool systemmessagebox(char const * aTitle, char const * aMessage, char const * aDialogType, char const * aIconType, int aDefaultButton);
 extern std::string working_dir;
 
+static bool save_state_frontier();
+
 namespace
 {
 	std::string getTime(bool date=false)
@@ -278,6 +280,12 @@ namespace
 
 	void SaveGameState(bool pressed) {
 		if (!pressed) return;
+        // Autosave can arrive inside VGA/PIC dispatch. Refuse before focus/key
+        // release or UI work can pump events beneath that native callback.
+        if (!save_state_frontier()) {
+            LOG_MSG("Save refused: unsafe native continuation");
+            return;
+        }
 
 		GFX_LosingFocus();
 
@@ -738,6 +746,10 @@ static bool save_state_frontier() {
     return true;
 }
 void SaveState::save(size_t slot) {
+    if (!save_state_frontier()) {
+        LOG_MSG("Save refused: unsafe native continuation");
+        return;
+    }
     std::string remark = auto_save_state ? "Auto-save" : "";
 #if !defined(HX_DOS)
     if (!auto_save_state && !noremark_save_state) {

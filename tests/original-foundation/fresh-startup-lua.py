@@ -6,10 +6,17 @@ archive=pathlib.Path(os.environ['DOSBOX_TEST_ARCHIVE'])
 before=hashlib.sha256(archive.read_bytes()).hexdigest()
 conf=w/'fixture.conf'
 conf.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=false\n[midi]\nmididevice=none\n')
+subprocess.run(['cc','-shared','-fPIC','-x','c','-','-o',str(w/'restored_probe.so')]+
+ subprocess.check_output(['pkg-config','--cflags','--libs','lua5.4'],text=True).split(),
+ input='#include <lua.h>\nint luaopen_restored_probe(lua_State *L){lua_pushinteger(L,42);return 1;}\n',text=True,check=True)
+(w/'fromfile.lua').write_text('return 17')
 for mode in ('file','code'):
  a=w/(mode+'-one.sav');b=w/(mode+'-two.sav');done=w/(mode+'-closed')
  script=f'''local d=require('dosbox')
 assert(io and os and package and debug and coroutine)
+package.cpath='{w}/?.so;'..package.cpath
+assert(require('restored_probe')==42 and dofile('{w}/fromfile.lua')==17)
+assert(not pcall(function() error('restored-error-probe') end))
 local c=d.context()
 local r=d.registers(c)
 assert(d.save('{a}').effects.usable)
@@ -25,6 +32,8 @@ local x <close> = setmetatable({{}},{{__close=function() local f=assert(io.open(
   deadline=time.monotonic()+35
   while not done.exists() and time.monotonic()<deadline and p.poll() is None:time.sleep(.05)
   assert done.exists(),(w,mode,p.poll())
+  rc=p.wait(timeout=10)
+  assert rc==0,(w,mode,rc)
   with zipfile.ZipFile(archive) as source,zipfile.ZipFile(a) as one,zipfile.ZipFile(b) as two:
    import re
    cpu_prefix,descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(archive.parent/'layout.txt').read_text()))

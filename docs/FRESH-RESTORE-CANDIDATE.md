@@ -255,6 +255,16 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.
+* Slot/hotkey/autosave entry now checks the native frontier before focus/key/UI
+  work (and direct `SaveState::save` before its remark dialog), not just before
+  archive publication. `autosave-frontier.py` executes the actual entries in
+  debug/no-debug modes with reduced UI doubles and checks no denied-path effects.
+* Restored FILE/INLINE probes exercise real C `require`, `dofile`, Lua errors,
+  held repeated saving/host delay and successful process close. Set
+  `DOSBOX_TEST_BLOCKED_FINALIZER=1` on fresh-startup-terminal.py for a real C
+  finalizer block: terminal response/revoked lexical close precede the block;
+  process remains owned until invocation-local release, then revoked GC receipt
+  and disposal complete. This is not a host transport/frontend close race proof.
 * Mouse import checks raw bool object representations before evaluation and
   rejects nonfinite position/sensitivity/accumulator/timestamp values at the
   owning codec. `DOSBOX_TEST_MOUSE_SCALARS=1 fresh-startup-failure.py` adds real
