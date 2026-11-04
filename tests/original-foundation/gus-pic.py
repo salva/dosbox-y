@@ -41,6 +41,11 @@ serializer_fixture = r'''
 #include <sstream>
 #include <memory>
 #include <vector>
+#include <cmath>
+#include <iterator>
+template<class T> void readPOD(std::istream &s,T &v) {
+ s.read(reinterpret_cast<char*>(&v),sizeof(v));
+}
 struct SerializeGlobalPOD {
  static SerializeGlobalPOD *component;
  explicit SerializeGlobalPOD(const char*) {component=this;}
@@ -58,7 +63,7 @@ struct TickerBlock {TIMER_TickHandler handler;TickerBlock *next;};
 TickerBlock *firstticker=nullptr;
 unsigned long PIC_Ticks=123;
 Bitu PIC_IRQCheck=0,PIC_IRQCheckPending=0;
-struct {unsigned mask=0;} pics[2];
+struct PIC_Controller {unsigned mask=0;} pics[2];
 bool InEventService=false;
 pic_tickindex_t srv_lag=0;
 #define IS_PC98_ARCH false

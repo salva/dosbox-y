@@ -73,6 +73,9 @@ cases = (
 env = {key: value for key, value in os.environ.items()
        if not key.startswith('DOSBOX_TEST_')}
 env['DOSBOX_TEST_AUDIO'] = '1'
+# Consumer-only variation must survive the fixture-selection environment reset.
+consumer_policy = ({'DOSBOX_TEST_CAPTURE_POLICY': '1'}
+                   if os.environ.get('DOSBOX_TEST_CAPTURE_POLICY') else {})
 print(work, flush=True)
 for name, setup, ip, facts in cases:
     capture = subprocess.run(
@@ -94,6 +97,7 @@ for name, setup, ip, facts in cases:
             ['python3', str(here / 'fresh-startup.py')],
             env=dict(env, **({'DOSBOX_TEST_SEARCH_MATCHING_ENTRY': '1'}
                              if setup.get('DOSBOX_TEST_SEARCH_MATCHING_ENTRY') else {}),
+                     **consumer_policy,
                      DOSBOX_TEST_BINARY=binary,
                      DOSBOX_TEST_ARCHIVE=str(archive), DOSBOX_TEST_ROOT_EXIT='1',
                      DOSBOX_TEST_STEP_IP=ip, DOSBOX_TEST_ROOT_FACTS=facts),
