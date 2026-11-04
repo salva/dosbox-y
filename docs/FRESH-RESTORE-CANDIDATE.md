@@ -258,6 +258,10 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
 * INT10 capture/import validates the actual fresh handler role and encoded
   native CB_IRET body after dependent Memory installation, without constraining
   legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* CPU import checks the raw pmode/stack.big/code.big/trap_skip bool bytes
+  before copying CPUBlock, avoiding invalid-bool evaluation even on disposable
+  failure. Actual valid-CRC owner mutations reject at CPU in all three builds;
+  reduced decoder consumer covers these representations under ASan/UBSan.
 * Paging capture emits deterministic zero bytes for the existing discarded host
   TLB/cache-link wire extents rather than serializing host addresses. Import
   still rebuilds native caches. A real matrix attempt exposed first→second CPU

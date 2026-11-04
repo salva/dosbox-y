@@ -17,6 +17,7 @@ s='''
 #include <cassert>
 #include <cstdint>
 #include <sstream>
+#include <cstring>
 using CPU_Decoder=int();
 int CPU_Core_Normal_Run(){return 0;} int CPU_Core_Prefetch_Run(){return 0;}
 int CPU_Core_Simple_Run(){return 0;} int CPU_Core_Full_Run(){return 0;}
@@ -26,8 +27,10 @@ int CPU_Core_Dynrec_Trap_Run(){return 0;} int HLT_Decode(){return 0;}
 [[noreturn]] void E_Exit(const char*){throw 7;}
 '''+mapping+'''
 template<class T>void readPOD(std::istream &s,T &v){s.read(reinterpret_cast<char*>(&v),sizeof(v));}
-struct Pending{uint16_t decoder,hlt_decoder;struct{unsigned cpl=0,mpl=0;int direction=1;}state;};
+struct Pending{uint16_t decoder,hlt_decoder;struct{unsigned cpl=0,mpl=0;int direction=1;bool pmode=false,trap_skip=false;struct{bool big=false;}stack,code;}state;};
+unsigned bad_bool=0;
 bool consume(std::istream &stream){Pending storage;auto *p=&storage;
+ if(bad_bool){unsigned char invalid=2;bool *fields[]={&p->state.pmode,&p->state.stack.big,&p->state.code.big,&p->state.trap_skip};std::memcpy(fields[bad_bool-1],&invalid,1);}
 '''+check+'''return true;}
 std::string wire(uint16_t decoder,uint16_t hlt){std::string s;
  s.append(reinterpret_cast<const char*>(&decoder),2);s.append(reinterpret_cast<const char*>(&hlt),2);return s;}
@@ -51,6 +54,7 @@ int main(){
   for(unsigned n=0;n<4;++n){std::istringstream stream(bytes.substr(0,n));assert(!consume(stream));}
  }
  std::istringstream stale(wire(0,0));assert(!consume(stale));
+ for(bad_bool=1;bad_bool<=4;++bad_bool){std::istringstream s(wire(0,0xffff));assert(!consume(s));}
 }
 '''
 # Production uses defined(C_EMSCRIPTEN), so omit the macro on ordinary hosts.

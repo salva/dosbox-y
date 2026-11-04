@@ -23,6 +23,28 @@ if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # No unchanged-destination assumption: every attempt is a fresh process.
  for name in ('CPU','Memory'):
   cases.append((name,lambda b:b[:1],False))
+if os.environ.get('DOSBOX_TEST_CPU_BOOLS'):
+ # Derive serialized extents from this configured ABI; C++ object padding
+ # between CPUBlock members is not part of the field-by-field owner codec.
+ import re
+ exprs=['sizeof(cpu_regs)+sizeof(cpu.cpl)+sizeof(cpu.mpl)+sizeof(cpu.cr0)',
+        'sizeof(LinearPt)+sizeof(Bitu)',
+        'sizeof(LinearPt)+sizeof(Bitu)*2',
+        'sizeof(cpu.stack)', 'sizeof(cpu.code)', 'sizeof(cpu.hlt.cs)*2',
+        'sizeof(cpu.exception)', 'sizeof(cpu.direction)',
+        '(char*)&cpu.stack.big-(char*)&cpu.stack']
+ result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
+                        *[arg for expr in exprs for arg in ('-ex','p '+expr)]],
+                       capture_output=True,text=True,check=True)
+ pmode,table,ldt,stack,code,hlt,exception,direction,big=map(int,re.findall(r'\$\d+ = (\d+)',result.stdout))
+ stack_start=pmode+1+table*2+ldt
+ offsets=(pmode,stack_start+big,stack_start+stack,
+          stack_start+stack+code+hlt+exception+direction)
+ for offset in offsets:
+  def bad_cpu_bool(data,offset=offset):
+   data=bytearray(data);assert data[offset] in (0,1)
+   data[offset]=2;return bytes(data)
+  cases.append(('CPU',bad_cpu_bool,False))
 if os.environ.get('DOSBOX_TEST_DBOPL'):
  # Extract actual configured ABI extent, not a guessed packed Chip layout.
  import re
@@ -267,6 +289,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
 assert hashlib.sha256(source.read_bytes()).hexdigest()==original
 print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHANGED_BASIC_ROM') else 'malformed Mouse masks/truncated suffix, Pic/late Keyboard, late CRC settlement and missing late owner')+
       ('/truncated CPU and Memory' if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION') else '')+
+      ('/CPU pmode/stack/code/trap bool representations' if os.environ.get('DOSBOX_TEST_CPU_BOOLS') else '')+
       ('/DBOPL volume-wave-synth roles/LFO scalar bounds' if os.environ.get('DOSBOX_TEST_DBOPL') else '')+
       ('/active native search tag/path/truncation' if os.environ.get('DOSBOX_TEST_SEARCH_STATE') else '')+
       ('/native DOS file reopen' if os.environ.get('DOSBOX_TEST_FILE_STATE') else '')+

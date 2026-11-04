@@ -5065,7 +5065,16 @@ std::unique_ptr<Pending> prepare(std::istream& stream)
     readPOD(stream, p->interrupt);
     readPOD(stream, p->decoder);
     readPOD(stream, p->hlt_decoder);
-    if (!stream || !CPU_IndexDecoderType(p->decoder) ||
+    // Raw archive bools must be checked by representation before copying or
+    // evaluating CPUBlock (copying an invalid bool already invokes UB).
+    const auto validBool = [](const bool &value) {
+        const bool zero = false, one = true;
+        return !memcmp(&value, &zero, sizeof(value)) ||
+               !memcmp(&value, &one, sizeof(value));
+    };
+    if (!stream || !validBool(p->state.pmode) ||
+        !validBool(p->state.stack.big) || !validBool(p->state.code.big) ||
+        !validBool(p->state.trap_skip) || !CPU_IndexDecoderType(p->decoder) ||
         (p->decoder == 200 ? (p->hlt_decoder == 200 || !CPU_IndexDecoderType(p->hlt_decoder)) :
                              p->hlt_decoder != 0xffff) ||
         p->state.cpl > 3 || p->state.mpl > 3 ||
