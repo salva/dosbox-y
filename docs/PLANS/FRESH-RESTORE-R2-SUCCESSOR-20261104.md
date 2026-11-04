@@ -96,7 +96,11 @@ Approved r2 originals and review hashes remain unchanged.
 `fresh-startup-no-replay.py` and Lua/terminal/close consumers replace live-load,
 replay, unchanged-used-destination and all-owner-preflight assumptions. Transport
 CRC/EOF/close/publication, actual CPU/memory/PIC/paging/keyboard and native-owner
-safety remain covered; zip-stream is transport-only and progressive-install
+safety remain covered. The matrix now also consumes native INT33 reset/set/get
+position after explicit continuation, and captures an already-set cursor at
+IP0200 to check saved state without reinsertion. These are bounded service/state
+witnesses, not physical mouse routing, rendering, or complete native mouse
+callback binding qualification. zip-stream is transport-only and progressive-install
 checks actual common metadata/owner completion. Old pristine upstream slot
 probes still describe their baseline, not candidate live-load permission.
 
