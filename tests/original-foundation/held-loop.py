@@ -15,7 +15,13 @@ source = r'''
 using Bitu = unsigned;
 using LoopHandler = Bitu();
 #define C_DYNAMIC_X86 0
-static bool debug_running=false, check_rescroll=false;
+static bool debug_running=false, check_rescroll=false, debugging=false;
+static bool budget_expired=false, continuation_unavailable=false, enqueue_on_host=false;
+namespace NativeDebug {enum class State {Idle, Pending, Active};}
+static struct {NativeDebug::State value=NativeDebug::State::Idle;
+ NativeDebug::State state() const {return value;}} native_execution;
+static bool DEBUG_NativeExecutionBudgetExpired() {return budget_expired;}
+static bool DEBUG_ContinuationUnavailable() {return continuation_unavailable;}
 static bool logBuffSuppressConsoleNeedUpdate=false;
 static unsigned host=0, keys=0, irqs=0, draws=0, running=0, polls=0;
 static Bitu DEBUG_LastRunningUpdate=0;
@@ -29,7 +35,7 @@ static LoopHandler *current=DEBUG_Loop, *old_loop=normal;
 static LoopHandler *DOSBOX_GetLoop() {return current;}
 static void ControlServer_Poll() {++polls;}
 static unsigned SDL_GetTicks() {return 100;}
-static void GFX_Events() {++host;}
+static void GFX_Events() {++host; if(enqueue_on_host)native_execution.value=NativeDebug::State::Pending;}
 static void SDL_Delay(unsigned) {}
 static void SetCodeWinStart() {codeViewData.cursorPos=0;}
 static void DEBUG_DrawScreen() {++draws;}
@@ -53,6 +59,21 @@ int main() {
     assert(DEBUG_Loop()==17 && running==1 && host==101 && keys==101);
     current=normal;
     assert(DEBUG_Loop()==0 && running==1 && host==101);
+    current=DEBUG_Loop;debug_running=false;
+    budget_expired=true;
+    assert(DEBUG_Loop()==0 && host==101 && polls==103);
+    budget_expired=false;debugging=true;
+    native_execution.value=NativeDebug::State::Active;
+    assert(DEBUG_Loop()==0 && host==101 && polls==103);
+    native_execution.value=NativeDebug::State::Idle;debugging=false;
+    continuation_unavailable=true;
+    assert(DEBUG_Loop()==0 && host==102 && polls==103 && keys==101);
+    continuation_unavailable=false;
+    native_execution.value=NativeDebug::State::Pending;
+    assert(DEBUG_Loop()==0 && host==102 && polls==104 && keys==101);
+    native_execution.value=NativeDebug::State::Idle;enqueue_on_host=true;
+    assert(DEBUG_Loop()==0 && host==103 && polls==105 && keys==101);
+    assert(!irqs && running==1 && guest_cs==0x1234 && guest_ip==0x5678 && guest_tick==123);
 }
 '''
 (work / 'held.cpp').write_text(source)

@@ -5645,6 +5645,9 @@ bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeD
         native_execution.checkpointChanged(expected);
 }
 bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark) {
+    // Live restore is unsupported regardless of current owner/attachment. Do
+    // not attach a frontend or acquire a lease merely to report that fact.
+    if (load) return SaveState::instance().loadFrom(slot,nullptr);
     const auto attachment=DEBUG_AttachNativeExecution(NativeDebug::Frontend::Interactive,0);
     const auto expected=DEBUG_NativeExecutionContext();
     if (!DEBUG_AdmitNativeState(attachment,expected)) return false;
@@ -5657,16 +5660,13 @@ bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark) {
     const auto lease=NativeControl::owner().lease();
     struct Release { NativeControl::Lease lease;
         ~Release(){NativeControl::owner().release(lease);} } release{lease};
-    const bool success=load ? SaveState::instance().loadFrom(slot,nullptr) :
-        SaveState::instance().saveTo(slot,nullptr,nullptr,nullptr,remark);
-    if (success && load && !DEBUG_AdvanceNativeStateContext(attachment,expected,lease))
-        E_Exit("Restored slot cannot retire prior native context");
-    return success;
+    return SaveState::instance().saveTo(slot,nullptr,nullptr,nullptr,remark);
 }
 bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Context expected,
                            const std::string &path, bool load, StateArchive::Effects *effects,
                            const StateArchive::Budget *budget) {
     if (effects) *effects = {};
+    if (load) return SaveState::instance().loadFile(path);
     if (path.empty() || path.find('\0') != std::string::npos ||
         !DEBUG_AdmitNativeState(attachment, expected)) return false;
     const auto current = DOSBOX_MachineServiceOwner();
@@ -5680,11 +5680,8 @@ bool DEBUG_NativeStateFile(NativeDebug::Attachment attachment, NativeDebug::Cont
         NativeControl::Lease lease;
         ~Release() { NativeControl::owner().release(lease); }
     } release{lease};
-    const bool success = load ? SaveState::instance().loadFile(path) :
-        (effects ? SaveState::instance().saveFile(path, *effects, budget) : SaveState::instance().saveFile(path));
-    if (success && load && !DEBUG_AdvanceNativeStateContext(attachment, expected, lease))
-        E_Exit("Restored state cannot retire prior native context");
-    return success;
+    return effects ? SaveState::instance().saveFile(path, *effects, budget) :
+                     SaveState::instance().saveFile(path);
 }
 const NativeDebug::Result *DEBUG_NativeExecutionResult(NativeDebug::Attachment attachment) {
     return native_execution.result(attachment);
