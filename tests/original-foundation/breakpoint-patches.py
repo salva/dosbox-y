@@ -10,6 +10,8 @@ text = (root / 'src/debug/debug.cpp').read_text()
 def body(start):
     at = text.index(start)
     begin = text.index('{', at)
+    if start == 'CBreakpoint::CBreakpoint(void)':
+        begin = text.index('{', text.index('label{}', at) + len('label{}'))
     depth, end = 1, begin + 1
     while depth:
         depth += (text[end] == '{') - (text[end] == '}')
@@ -21,6 +23,18 @@ source = r'''
 #include <cassert>
 #include <stdexcept>
 #include <cstdarg>
+#include <cstring>
+enum class DebuggerBreakpointOwner {Unknown, Lua, Agent, Internal, Ncurses};
+enum class DebuggerTempBreakpointResult;
+enum class DebuggerBreakpointFailure;
+struct DebuggerAddress;
+struct DebuggerBreakpointInfo;
+constexpr unsigned DebuggerBreakpointLabelMax=64;
+struct {uint64_t serial=0;} instrumentation_attachment;
+void DEBUG_ObserveBuiltinAddress(uint64_t) {}
+#define SegValue(x) 0
+unsigned reg_eip=0;
+template<class... T> void Debugger_RecordBreakpointStop(T...) {}
 #define C_HEAVY_DEBUG 0
 using PhysPt = uint32_t;
 static uint8_t memory[65536];
@@ -45,11 +59,17 @@ source += '\n'.join(body(x) for x in [
     'CBreakpoint* CBreakpoint::FindOtherActiveBreakpoint(PhysPt adr',
     'bool CBreakpoint::DeleteBreakpoint(uint16_t seg',
     'bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)',
-    'bool CBreakpoint::DeleteById(uintptr_t id)',
-    'uintptr_t CBreakpoint::ConsumeLastTriggered(void)'])
+    'bool CBreakpoint::DeleteById(uint64_t id',
+    'uint64_t CBreakpoint::ConsumeLastTriggered(void)',
+    'void CBreakpoint::SetLabel('])
 source += r'''
 std::list<CBreakpoint*> CBreakpoint::BPoints;
-uintptr_t CBreakpoint::lastTriggered = 0, CBreakpoint::next_id = 1;
+uint64_t CBreakpoint::lastTriggered = 0, CBreakpoint::next_id = 1;
+static bool remove(uint64_t id) {
+    bool cleared=false;
+    assert(CBreakpoint::DeleteById(id,DebuggerBreakpointOwner::Unknown,&cleared));
+    return cleared;
+}
 int main() {
     // Each public deletion path must restore the actual instruction byte.
     for (unsigned route = 0; route < 4; ++route) {
@@ -128,6 +148,9 @@ int main() {
     assert(memory[0x1234] == 0xcc && diagnostics == 2 && writes > 0);
 }
 '''
+# Main consumes explicit cleared; already absent is a successful operation.
+head, main = source.split('int main() {', 1)
+source = head + 'int main() {' + main.replace('CBreakpoint::DeleteById(', 'remove(')
 (work / 'patches.cpp').write_text(source)
 subprocess.run(['g++', '-std=c++14', '-Wall', '-Wextra', '-Werror',
                 '-fsanitize=address,undefined', '-fno-pie', '-no-pie',
