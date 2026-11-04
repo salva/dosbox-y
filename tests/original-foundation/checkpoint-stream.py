@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Original component checkpoint adapter; no emulator admission qualification."""
+"""Bounded common capture and unconditional used-target checkpoint refusal."""
 import os, subprocess
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
 w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'checkpoint-stream'
 w.mkdir(exist_ok=True)
 source=(root/'src/misc/savestates.cpp').read_text()
-body=source[source.index('// Both transports use'):source.index('void SaveState::registerComponent(')]
+body=source[source.index('// Both transports use'):source.index('bool SaveState::install(')]
+body+=source[source.index('struct SaveState::MemoryOutput'):source.index('bool SaveState::ComponentOrder::operator()')]
+body+=source[source.index('bool SaveState::loadFile('):source.index('void SaveState::restoreFreshStartup(')]
+body+=source[source.index('bool SaveState::loadFrom('):source.index('bool SaveState::isEmpty(')]
 header=(root/'include/dosbox.h').read_text()
 adapters=header[header.index('    struct Output {'):header.index('    bool saveTo(size_t slot,')]
 (w/'test.cpp').write_text(r'''
@@ -19,13 +22,15 @@ adapters=header[header.index('    struct Output {'):header.index('    bool saveT
 #include <cstdio>
 #include "src/misc/state_checkpoint_stream.h"
 #define C_DEBUG 0
+static void LOG_MSG(const char *,...) {}
+struct Section_line {std::string data;};
+struct Control {Section_line devices;Section_line *GetSection(const char *) {return &devices;}} control_value;
+static Control *control=&control_value;
 static std::map<std::string,std::string> state_identity() {
  return {{"Archive_Revision","test-revision"},{"Build_Identity","test-build"},{"Config_Identity","test-config"}};
 }
 static bool frontier_ready=true;
 static bool save_state_frontier() {return frontier_ready;}
-struct Fatal {};
-[[noreturn]] static void E_Exit(const char *,...) {throw Fatal();}
 class SaveState {
 public:
  using Error=std::string;
@@ -35,6 +40,8 @@ public:
  std::map<std::string,Entry> components;
  bool checkpointSave(Checkpoint &,size_t);
  bool checkpointLoad(const Checkpoint &);
+ bool loadFile(const std::string &) const;
+ bool loadFrom(size_t,const std::string *) const;
 '''+adapters+r'''
 };
 '''+body+r'''
@@ -64,14 +71,18 @@ int main() {
   auto wrong=parts;wrong[identity.first]="mismatch";
   assert(!state.checkpointLoad(wrong));assert(a.installs==count_before);
  }
- a.value=1;b.value=2;assert(state.checkpointLoad(parts));assert(a.value==42 && b.value==42);
+ a.value=1;b.value=2;
+ assert(!state.checkpointLoad(parts));assert(a.value==1 && b.value==2);
  auto missing=parts;missing.erase("b");auto count=a.installs;
  assert(!state.checkpointLoad(missing));assert(a.installs==count);
- parts["b"]="x";
- bool fatal=false;try {state.checkpointLoad(parts);}catch(Fatal&){fatal=true;}assert(fatal);
- parts["b"]=std::string(sizeof(int)+1,'x');fatal=false;
- try {state.checkpointLoad(parts);}catch(Fatal&){fatal=true;}assert(fatal);
- puts("original checkpoint adapter PASS (native admission not exercised)");
+ parts["b"]="x";assert(!state.checkpointLoad(parts));
+ parts["b"]=std::string(sizeof(int)+1,'x');assert(!state.checkpointLoad(parts));
+ assert(!state.loadFile("nonexistent.sav"));
+ assert(!state.loadFile(""));
+ assert(!state.loadFrom(0,nullptr));
+ assert(!state.loadFrom(size_t(-1),nullptr));
+ assert(!a.installs && !b.installs);
+ puts("bounded capture and all direct used-target imports refuse without owner effects PASS");
 }
 ''')
 subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror','-I'+str(root),str(w/'test.cpp'),'-o',str(w/'test')],check=True)

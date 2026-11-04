@@ -255,6 +255,12 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.
+* `python3 tests/original-foundation/checkpoint-stream.py` checks bounded common
+  memory capture and failure publication, plus unconditional direct file/slot
+  and checkpoint used-target refusal without invoking any owner installer.
+  `progressive-install.py` separately covers actual common startup install
+  traversal failures with reduced transports; real disposable startup and late
+  owner failures are exercised by fresh-startup-failure.py.
 * `python3 tests/original-foundation/state-departure.py` captures an ordinary
   terminating program, refuses used-target STATEREAD, compares repeated saved
   owners unchanged, then explicitly RUNs the program back to its ordinary shell
