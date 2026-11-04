@@ -283,7 +283,9 @@ uint32_t DOS_CheckExtDevice(const char *name, bool already_flag) {
 				if(already_flag) {
 					for(no = 0 ; no < DOS_DEVICES ; no++) {
 						if(Devices[no]) {
-							if(Devices[no]->GetInformation() & DeviceInfoFlags::ExternalDevice) {
+                            // Native class identity is not an I/O query. CON's
+                            // GetInformation probes INT16 and may run guest code.
+							if(dynamic_cast<DOS_ExtDevice *>(Devices[no])) {
 								if(((DOS_ExtDevice *)Devices[no])->CheckSameDevice(seg, real_readw(seg, off + 6), real_readw(seg, off + 8))) {
 									return 0;
 								}
@@ -840,7 +842,9 @@ uint8_t DOS_FindDevice(char const * name) {
 	DOS_CheckOpenExtDevice(name_part);
 	for(int index = DOS_DEVICES - 1 ; index >= 0 ; index--) {
 		if(Devices[index]) {
-			if(Devices[index]->GetInformation() & DeviceInfoFlags::ExternalDevice) {
+        // Same native-type classification as DOS_CheckExtDevice: never poll
+        // CON status merely to decide whether this is an external driver.
+			if(dynamic_cast<DOS_ExtDevice *>(Devices[index])) {
 				if(WildFileCmp(name_part, Devices[index]->name)) {
 					if(DOS_CheckExtDevice(name_part, false) != 0) {
 						return index;
