@@ -47,6 +47,7 @@ bool DEBUG_IsNativeDebuggerCallback(Bits callback);
 bool DEBUG_NativeExecutionBudgetExpired(void);
 void DEBUG_RefreshPage(char scroll);
 Bitu DEBUG_EnableDebugger(void);
+void DEBUG_HoldRestoredStartup();
 // Fatal DOS-corruption diagnostic UI only: no recursive machine execution.
 void DEBUG_WaitNoExecute(void);
 #if C_DEBUG
@@ -87,10 +88,8 @@ bool DEBUG_NativePhaseExecuting(void);
 struct DebuggerPhaseResult;
 const DebuggerPhaseResult *DEBUG_NativePhaseResult(NativeDebug::Attachment attachment, uint64_t operation);
 NativeDebug::Context DEBUG_NativeExecutionContext(void);
-bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeDebug::Context expected,
-                                    NativeControl::Lease held);
-// Synchronous original-engine operation under the selected native stop/lease.
-// A successful restore retires the supplied context before returning.
+// Synchronous original-engine capture under the selected native stop/lease.
+// Live imports refuse before native attachment/admission; use fresh startup.
 int DEBUG_MachineOwnerExitStatus();
 void DEBUG_StateInstalled();
 bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark);

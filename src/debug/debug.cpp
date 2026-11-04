@@ -5639,11 +5639,6 @@ bool DEBUG_AdmitNativeState(NativeDebug::Attachment attachment, NativeDebug::Con
     return expected.invocation && expected.checkpoint &&
         expected.invocation==current.invocation && expected.checkpoint==current.checkpoint;
 }
-bool DEBUG_AdvanceNativeStateContext(NativeDebug::Attachment attachment, NativeDebug::Context expected,
-                                    NativeControl::Lease held) {
-    return DEBUG_AdmitNativeState(attachment,expected,&held) &&
-        native_execution.checkpointChanged(expected);
-}
 bool DEBUG_NativeStateSlot(size_t slot, bool load, const std::string &remark) {
     // Live restore is unsupported regardless of current owner/attachment. Do
     // not attach a frontend or acquire a lease merely to report that fact.
