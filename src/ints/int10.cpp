@@ -1945,6 +1945,16 @@ namespace
 {
 class SerializeInt10 : public SerializeGlobalPOD
 {
+    static bool nativeBody() {
+        // Guest IVT hooks remain legitimate; the native trampoline must still
+        // dispatch to this fresh owner. PC-98 has no INT10 service.
+        if (!call_10) return IS_PC98_ARCH;
+        if (call_10 >= CB_MAX || CallBack_Handlers[call_10] != INT10_Handler)
+            return false;
+        const PhysPt address = CALLBACK_PhysPointer(call_10);
+        return mem_readb(address) == 0xfe && mem_readb(address+1) == 0x38 &&
+               mem_readw(address+2) == call_10 && mem_readb(address+4) == 0xcf;
+    }
     void bindings(std::ostream *output, std::istream *input) const {
         // Native ROM locations are not mutable guest state. Keep the fresh
         // owner's references rather than overwriting them from RAM metadata.
@@ -1975,6 +1985,7 @@ class SerializeInt10 : public SerializeGlobalPOD
 public:
     SerializeInt10() : SerializeGlobalPOD("Int10") {}
     void getBytes(std::ostream &stream) override {
+        if (!nativeBody()) { stream.setstate(std::ios::failbit); return; }
         bindings(&stream,nullptr);
         WRITE_POD(&int10.vesa_setmode,int10.vesa_setmode);
         WRITE_POD(&int10.text_row,int10.text_row);
@@ -1982,6 +1993,7 @@ public:
     void setBytes(std::istream &stream) override {
         bindings(nullptr,&stream);
         if (!stream) return;
+        if (!nativeBody()) { stream.setstate(std::ios::failbit); return; }
         READ_POD(&int10.vesa_setmode,int10.vesa_setmode);
         READ_POD(&int10.text_row,int10.text_row);
     }

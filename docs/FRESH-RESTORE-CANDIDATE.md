@@ -255,6 +255,14 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
   dummy-audio/video consumer passes held saves and explicit root continuation
   across all three configured builds with emulated sound enabled. This is not
   waveform/frame parity or completion of the broader §3 identity replacement.
+* INT10 capture/import validates the actual fresh handler role and encoded
+  native CB_IRET body after dependent Memory installation, without constraining
+  legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* Paging capture emits deterministic zero bytes for the existing discarded host
+  TLB/cache-link wire extents rather than serializing host addresses. Import
+  still rebuilds native caches. A real matrix attempt exposed first→second CPU
+  cache-byte drift (not guest advance) before this repair; unchanged second→third
+  archives did not erase that failure. The corrected 18×all3 matrix is separate.
 * Slot/hotkey/autosave entry now checks the native frontier before focus/key/UI
   work (and direct `SaveState::save` before its remark dialog), not just before
   archive publication. `autosave-frontier.py` executes the actual entries in

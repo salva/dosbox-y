@@ -1497,11 +1497,17 @@ void POD_Save_CPU_Paging( std::ostream& stream )
 //	WRITE_POD( &paging.wp, paging.wp );
 	WRITE_POD( &paging.base, paging.base );
 
-	WRITE_POD( &paging.tlb.read, paging.tlb.read );
-	WRITE_POD( &paging.tlb.write, paging.tlb.write );
-	WRITE_POD( &paging.tlb.phys_page, paging.tlb.phys_page );
-
-	WRITE_POD( &paging.links, paging.links );
+    // Host TLB pointers and cache links are rebuilt on import, never archive
+    // identity or guest continuation. Keep the existing wire extents but emit
+    // deterministic zero bytes instead of ASLR addresses/stale cache contents.
+    const char zeros[4096] = {};
+    size_t remaining = sizeof(paging.tlb.read) + sizeof(paging.tlb.write) +
+                       sizeof(paging.tlb.phys_page) + sizeof(paging.links);
+    while (remaining && stream) {
+        const auto count = std::min(remaining, sizeof(zeros));
+        stream.write(zeros, count);
+        remaining -= count;
+    }
 //	WRITE_POD( &paging.ur_links, paging.ur_links );
 //	WRITE_POD( &paging.krw_links, paging.krw_links );
 //	WRITE_POD( &paging.kr_links, paging.kr_links );

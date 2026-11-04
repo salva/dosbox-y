@@ -38,7 +38,10 @@ void PAGING_InitTLB() {
 }
 template<class T> void readPOD(std::istream& s,T& v) {s.read((char*)&v,sizeof(v));}
 template<class T> void put(std::ostream& s,const T& v) {s.write((const char*)&v,sizeof(v));}
+#define WRITE_POD(p,v) put(stream,v)
 '''
+start_save = text.index('void POD_Save_CPU_Paging( std::ostream& stream )')
+source += text[start_save:start].split('// save state support',1)[0]
 source += text[start:end]
 source += r'''
 std::string wire(unsigned char enabled=1,unsigned faults=0,bool badbase=false) {
@@ -81,6 +84,13 @@ int main() {
  assert(paging.tlb.read[0]==0 && paging.links.used==0);
  std::istringstream off(wire(0,80));POD_Load_CPU_Paging(off);
  assert(off && rebuilds==2 && !paging.enabled && pf_queue.used==80);
+ std::ostringstream first;POD_Save_CPU_Paging(first);
+ std::memset(&paging.tlb,0xab,sizeof(paging.tlb));paging.links.used=~0u;
+ std::ostringstream second;POD_Save_CPU_Paging(second);
+ assert(first.str()==second.str());
+ const auto cache_begin=sizeof(paging.cr3)+sizeof(paging.cr2)+sizeof(paging.base);
+ const auto cache_size=sizeof(paging.tlb.read)+sizeof(paging.tlb.write)+sizeof(paging.tlb.phys_page)+sizeof(paging.links);
+ assert(first.str().substr(cache_begin,cache_size)==std::string(cache_size,'\0'));
 }
 '''
 path = work / 'consumer.cpp'

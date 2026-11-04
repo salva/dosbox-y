@@ -113,6 +113,19 @@ if os.environ.get('DOSBOX_TEST_BINDINGS'):
   data=bytearray(data);data[offset]^=1
   return bytes(data)
  cases.extend(('Memory',mutation,False) for mutation in (wrong_xms_body,wrong_ems_body))
+if os.environ.get('DOSBOX_TEST_INT10_BODY'):
+ with zipfile.ZipFile(source) as z:
+  shell=struct.unpack('<13I',z.read('Shell bindings'))
+  slot=struct.unpack_from('<I',z.read('Int10'))[0]
+ import re
+ _,int10_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
+ # Same producer callback arena, encoded slot locations; no host addresses.
+ address=shell[3]+(slot-shell[1])*32
+ def wrong_int10_body(data):
+  data=bytearray(data);offset=int10_descriptor+address
+  assert data[offset:offset+2]==b'\xfe\x38'
+  data[offset]^=1;return bytes(data)
+ cases.append(('Memory',wrong_int10_body,False))
 if os.environ.get('DOSBOX_TEST_ROOT_VALIDATION'):
  # The producer fixture exposes its actual root explicitly; corrupt installed
  # guest PSP/MCB bytes, not the binding metadata. DOS must reject after Memory.
@@ -237,6 +250,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
            'Invalid saved PIC state' if owner=='Pic' else
            'Invalid saved CPU state' if owner=='CPU' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else
+           'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_INT10_BODY') and mutate is wrong_int10_body else
            'Invalid saved memory state' if owner=='Memory' and not (os.environ.get('DOSBOX_TEST_BINDINGS') and mutate in (wrong_native_body,wrong_xms_body,wrong_ems_body)) else
            'failed during installation')
  assert expected in diagnosis.stdout,diagnosis.stdout
@@ -245,6 +259,8 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
    if mutate is mutation:assert name in diagnosis.stdout,diagnosis.stdout
  if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations:
   assert 'Dos' in diagnosis.stdout,diagnosis.stdout
+ if owner=='Memory' and os.environ.get('DOSBOX_TEST_INT10_BODY') and mutate is wrong_int10_body:
+  assert 'Int10' in diagnosis.stdout,diagnosis.stdout
  assert not marker.exists(),(label,'evaluator ran after failed restore')
  assert 'Restored session ended:' not in text
  assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
@@ -255,6 +271,7 @@ print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHA
       ('/active native search tag/path/truncation' if os.environ.get('DOSBOX_TEST_SEARCH_STATE') else '')+
       ('/native DOS file reopen' if os.environ.get('DOSBOX_TEST_FILE_STATE') else '')+
       ('/BIOS-shell-XMS-EMS bindings/native shell-XMS-EMS bodies' if os.environ.get('DOSBOX_TEST_BINDINGS') else '')+
+      ('/Int10 native trampoline body' if os.environ.get('DOSBOX_TEST_INT10_BODY') else '')+
       ('/PSP signature/MCB ownership/parent/stack/vector' if os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') else '')+
       ('/representation-build-config metadata' if os.environ.get('DOSBOX_TEST_METADATA') else '')+
       ' reject/exit1; source and attempt archives unchanged')
