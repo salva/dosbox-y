@@ -1995,11 +1995,11 @@ void DOSBOX_SetupConfigSections(void) {
 
     Pint = secprop->Add_int("saveslot", Property::Changeable::WhenIdle,1);
     Pint->SetMinMax(1,100);
-    Pint->Set_help("Select the default save slot (1-100) to save/load states.");
+    Pint->Set_help("Select the default save slot (1-100) for capture, information or deletion. Loading requires a fresh -restore-state launch.");
     Pint->SetBasic(true);
 
     Pstring = secprop->Add_path("savefile", Property::Changeable::WhenIdle,"");
-    Pstring->Set_help("Select the default save file to save/load states. If specified it will be used instead of the save slot.");
+    Pstring->Set_help("Select the default save file for capture. If specified it will be used instead of the save slot. Loading requires a fresh -restore-state launch.");
     Pstring->SetBasic(true);
 
     Pbool = secprop->Add_bool("video debug at startup", Property::Changeable::WhenIdle,false);
@@ -2010,7 +2010,7 @@ void DOSBOX_SetupConfigSections(void) {
     Pbool->SetBasic(true);
 
     Pbool = secprop->Add_bool("forceloadstate", Property::Changeable::WhenIdle,false);
-    Pbool->Set_help("If set, DOSBox-X will load a saved state even if it finds there is a mismatch in the DOSBox-X version, machine type, program name and/or the memory size.");
+    Pbool->Set_help("Legacy preference retained for configuration compatibility. It cannot enable live loading or bypass fresh-startup compatibility and native-binding checks.");
     Pbool->SetBasic(true);
 
     Pbool = secprop->Add_bool("compresssaveparts", Property::Changeable::WhenIdle,true);

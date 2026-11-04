@@ -89,6 +89,16 @@ still fails Shell bindings (`build/no-debug-matching-diagnosis.log`), before
 frontend refusal. The first new diagnosis used a nonexistent config and failed
 Config_Identity; it was a setup failure, not the matching-config witness.
 No-debug continuation/root runtime remains separately unqualified.
+A matching-config cross-heavy-debug archive currently differs at least in shell
+callback slots: producer 74/75/76 versus no-debug fresh target 73/74/75.
+`DEBUG_Init()` allocates a debugger callback before native construction, so
+frontend build choice currently changes native slot identity. Refusal is correct
+for those mismatched bindings; it is not proof that same-layout no-debug root
+continuation works, nor permission to remap callbacks or omit binding checks.
+`program-root-unwind.py` compiles the actual PROGRAMS_Handler with a polymorphic
+host-only double under ASan/UBSan: RootExit retains exact terminal facts and
+skips deletion/return; ordinary throw and return delete exactly once. The
+integrated polymorphic DOS_Shell-root consumer remains owed.
 
 
 ### No-replay constructor correction (2026-11-04)
