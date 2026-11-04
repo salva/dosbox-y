@@ -154,11 +154,25 @@ if os.environ.get('DOSBOX_TEST_INT10_BODY'):
  _,int10_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
  # Same producer callback arena, encoded slot locations; no host addresses.
  address=shell[3]+(slot-shell[1])*32
- def wrong_int10_body(data):
+ def wrong_int10_body(data,address=address):
   data=bytearray(data);offset=int10_descriptor+address
   assert data[offset:offset+2]==b'\xfe\x38'
   data[offset]^=1;return bytes(data)
  cases.append(('Memory',wrong_int10_body,False))
+if os.environ.get('DOSBOX_TEST_VESA_BODY'):
+ import re,struct
+ with zipfile.ZipFile(source) as z:
+  fields=struct.unpack('<30I',z.read('Int10')[:120])
+ _,vesa_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
+ start=(fields[17]>>16)*16+(fields[17]&0xffff)
+ end=(fields[19]>>16)*16+(fields[19]&0xffff)+fields[20]
+ assert 0xc0000 <= start < end < 0xd0000,(start,end)
+ # Wait code, native real dispatch and PM interface header/tail are all
+ # constructor-controlled; valid CRC cannot authorize a changed binding body.
+ for address in (start,start+23,(fields[18]>>16)*16+(fields[18]&0xffff),end-1):
+  def wrong_vesa_body(data,address=address):
+   data=bytearray(data);data[vesa_descriptor+address]^=1;return bytes(data)
+  cases.append(('Memory',wrong_vesa_body,False))
 if os.environ.get('DOSBOX_TEST_ROOT_VALIDATION'):
  # The producer fixture exposes its actual root explicitly; corrupt installed
  # guest PSP/MCB bytes, not the binding metadata. DOS must reject after Memory.
@@ -284,6 +298,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
            'Invalid saved CPU state' if owner=='CPU' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_INT10_BODY') and mutate is wrong_int10_body else
+           'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_VESA_BODY') and mutate.__name__=='wrong_vesa_body' else
            'Invalid saved memory state' if owner=='Memory' and not (os.environ.get('DOSBOX_TEST_BINDINGS') and mutate in (wrong_native_body,wrong_xms_body,wrong_ems_body)) else
            'failed during installation')
  assert expected in diagnosis.stdout,diagnosis.stdout
@@ -293,6 +308,8 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations:
   assert 'Dos' in diagnosis.stdout,diagnosis.stdout
  if owner=='Memory' and os.environ.get('DOSBOX_TEST_INT10_BODY') and mutate is wrong_int10_body:
+  assert 'Int10' in diagnosis.stdout,diagnosis.stdout
+ if owner=='Memory' and os.environ.get('DOSBOX_TEST_VESA_BODY') and mutate.__name__=='wrong_vesa_body':
   assert 'Int10' in diagnosis.stdout,diagnosis.stdout
  assert not marker.exists(),(label,'evaluator ran after failed restore')
  assert 'Restored session ended:' not in text
@@ -305,6 +322,7 @@ print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHA
       ('/active native search tag/path/truncation' if os.environ.get('DOSBOX_TEST_SEARCH_STATE') else '')+
       ('/native DOS file reopen' if os.environ.get('DOSBOX_TEST_FILE_STATE') else '')+
       ('/BIOS-shell-XMS-EMS bindings/native shell-XMS-EMS bodies' if os.environ.get('DOSBOX_TEST_BINDINGS') else '')+
+      ('/VBE wait/real/PM constructor body' if os.environ.get('DOSBOX_TEST_VESA_BODY') else '')+
       ('/Int10 native trampoline body' if os.environ.get('DOSBOX_TEST_INT10_BODY') else '')+
       ('/PSP signature/MCB ownership/parent/stack/vector' if os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') else '')+
       ('/representation-build-config metadata' if os.environ.get('DOSBOX_TEST_METADATA') else '')+

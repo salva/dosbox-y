@@ -258,6 +258,12 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
 * INT10 capture/import validates the actual fresh handler role and encoded
   native CB_IRET body after dependent Memory installation, without constraining
   legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* VBE now checks actual fresh rmWindow/pmWindow/pmStart/pmPalette callback
+  handler roles and the original constructor's exact wait/real/PM interface
+  bytes after Memory installation (also capture). Reset clears the owner-local
+  expected extent. Mutable mode lists/fonts and guest IVT hooks are outside it.
+  No parallel codec/registry or serialized host pointer is added. This does not
+  qualify all video ROM spans or physical output.
 * CPU import now directly consumes checked fields in its original owning
   reader; the remaining heap Pending/prepare/install CPU snapshot is removed.
   Nonserialized initialized configuration stays native and failed partial

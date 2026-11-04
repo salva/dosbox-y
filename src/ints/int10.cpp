@@ -1941,6 +1941,7 @@ void INT10_Init() {
 }
 
 //save state support
+bool VESA_NativeInterfaceValid();
 namespace
 {
 class SerializeInt10 : public SerializeGlobalPOD
@@ -1985,7 +1986,7 @@ class SerializeInt10 : public SerializeGlobalPOD
 public:
     SerializeInt10() : SerializeGlobalPOD("Int10") {}
     void getBytes(std::ostream &stream) override {
-        if (!nativeBody()) { stream.setstate(std::ios::failbit); return; }
+        if (!nativeBody() || !VESA_NativeInterfaceValid()) { stream.setstate(std::ios::failbit); return; }
         bindings(&stream,nullptr);
         WRITE_POD(&int10.vesa_setmode,int10.vesa_setmode);
         WRITE_POD(&int10.text_row,int10.text_row);
@@ -1993,7 +1994,7 @@ public:
     void setBytes(std::istream &stream) override {
         bindings(nullptr,&stream);
         if (!stream) return;
-        if (!nativeBody()) { stream.setstate(std::ios::failbit); return; }
+        if (!nativeBody() || !VESA_NativeInterfaceValid()) { stream.setstate(std::ios::failbit); return; }
         READ_POD(&int10.vesa_setmode,int10.vesa_setmode);
         READ_POD(&int10.text_row,int10.text_row);
     }

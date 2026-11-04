@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stddef.h>
+#include <vector>
 
 #include "dosbox.h"
 #include "logging.h"
@@ -84,6 +85,21 @@ static struct {
 	Bitu pmPalette;
 } callback = {0};
 
+// Constructor-owned VBE interface code, not mutable mode data or IVT hooks.
+// Remember its exact generated extent, including callback slots, to check the
+// consumed RAM image against this fresh owner's actual native bindings.
+static PhysPt native_interface_start = 0;
+static std::vector<uint8_t> native_interface_body;
+
+static void VESA_SetupNativeInterfaceBody(PhysPt start, PhysPt end) {
+    native_interface_start = start;
+    native_interface_body.resize(end - start);
+    for (size_t n = 0; n < native_interface_body.size(); ++n)
+        native_interface_body[n] = phys_readb(start + n);
+}
+
+
+
 void CALLBACK_DeAllocate(Bitu in);
 
 static char string_oem[]="S3 Incorporated. Trio64";
@@ -139,6 +155,8 @@ struct MODE_INFO{
 #endif
 
 void VESA_OnReset_Clear_Callbacks(void) {
+    native_interface_body.clear();
+    native_interface_start = 0;
     if (callback.rmWindow != 0) {
         CALLBACK_DeAllocate(callback.rmWindow);
         callback.rmWindow = 0;
@@ -1231,6 +1249,25 @@ Bitu INT10_WriteVESAModeList(Bitu max_modes) {
     return modecount;
 }
 
+bool VESA_NativeInterfaceValid() {
+    if (native_interface_body.empty())
+        return !callback.rmWindow && !callback.pmWindow &&
+               !callback.pmStart && !callback.pmPalette;
+    const auto role = [](Bitu slot, Bitu (*handler)(void)) {
+        return slot && slot < CB_MAX && CallBack_Handlers[slot] == handler;
+    };
+    if (!role(callback.rmWindow, VESA_SetWindow)) return false;
+    if (int10.rom.pmode_interface) {
+        if (!role(callback.pmWindow, VESA_PMSetWindow) ||
+            !role(callback.pmStart, VESA_PMSetStart) ||
+            !role(callback.pmPalette, VESA_PMSetPalette)) return false;
+    } else if (callback.pmWindow || callback.pmStart || callback.pmPalette) return false;
+    for (size_t n = 0; n < native_interface_body.size(); ++n)
+        if (phys_readb(native_interface_start + n) != native_interface_body[n])
+            return false;
+    return true;
+}
+
 void INT10_SetupVESA(void) {
 	Bitu i,modecount=0;
 
@@ -1329,5 +1366,7 @@ void INT10_SetupVESA(void) {
 		phys_writew( Real2Phys(int10.rom.pmode_interface) + 6, 0);
 		int10.rom.pmode_interface_size=int10.rom.used - RealOff( int10.rom.pmode_interface );
 	}
+    VESA_SetupNativeInterfaceBody(Real2Phys(int10.rom.wait_retrace),
+                                 PhysMake(0xc000,int10.rom.used));
 }
 
