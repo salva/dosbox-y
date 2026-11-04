@@ -10,9 +10,9 @@ t=(root/'src/cpu/cpu.cpp').read_text()
 a=t.index('uint16_t CPU_FindDecoderType(')
 b=t.index('extern void POD_Save_CPU_Flags',a)
 mapping=t[a:b]
-a=t.index('    readPOD(stream, p->decoder);')
-b=t.index('    return p;',a)
-check=t[a:b]
+a=t.index('    readPOD(stream, decoder);')
+b=t.index('    cpu.hlt.old_decoder =',a)
+check=t[a:b].replace('E_Exit("Invalid saved CPU state");','return false;')
 s='''
 #include <cassert>
 #include <cstdint>
@@ -27,10 +27,10 @@ int CPU_Core_Dynrec_Trap_Run(){return 0;} int HLT_Decode(){return 0;}
 [[noreturn]] void E_Exit(const char*){throw 7;}
 '''+mapping+'''
 template<class T>void readPOD(std::istream &s,T &v){s.read(reinterpret_cast<char*>(&v),sizeof(v));}
-struct Pending{uint16_t decoder,hlt_decoder;struct{unsigned cpl=0,mpl=0;int direction=1;bool pmode=false,trap_skip=false;struct{bool big=false;}stack,code;}state;};
+struct CPU{unsigned cpl=0,mpl=0;int direction=1;bool pmode=false,trap_skip=false;struct{bool big=false;}stack,code;};
 unsigned bad_bool=0;
-bool consume(std::istream &stream){Pending storage;auto *p=&storage;
- if(bad_bool){unsigned char invalid=2;bool *fields[]={&p->state.pmode,&p->state.stack.big,&p->state.code.big,&p->state.trap_skip};std::memcpy(fields[bad_bool-1],&invalid,1);}
+bool consume(std::istream &stream){CPU cpu;uint16_t decoder=0xffff,hlt_decoder=0xffff;
+ if(bad_bool){unsigned char invalid=2;bool *fields[]={&cpu.pmode,&cpu.stack.big,&cpu.code.big,&cpu.trap_skip};std::memcpy(fields[bad_bool-1],&invalid,1);}
 '''+check+'''return true;}
 std::string wire(uint16_t decoder,uint16_t hlt){std::string s;
  s.append(reinterpret_cast<const char*>(&decoder),2);s.append(reinterpret_cast<const char*>(&hlt),2);return s;}

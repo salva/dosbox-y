@@ -5026,77 +5026,52 @@ void getBytes(std::ostream& stream) override
 	POD_Save_CPU_Paging(stream);
 }
 
-struct Pending {
-    decltype(cpu_regs) regs;
-    CPUBlock state;
-    decltype(Segs) segments;
-    decltype(CPU_Cycles) cycles, left, io;
-    TaskStateSegment tss;
-    decltype(lastint) interrupt;
-    uint16_t decoder, hlt_decoder;
-    void install() {
-        cpu_regs = regs;
-        cpu = state;
-        cpu.hlt.old_decoder = decoder == 200 ? CPU_IndexDecoderType(hlt_decoder) : nullptr;
-        Segs = segments;
-        CPU_Cycles = cycles;
-        CPU_CycleLeft = left;
-        CPU_IODelayRemoved = io;
-        cpu_tss = tss;
-        lastint = interrupt;
-        selectDecoder(decoder);
-    }
-};
-std::unique_ptr<Pending> prepare(std::istream& stream)
+void setBytes(std::istream& stream) override
 {
-    std::unique_ptr<Pending> p(new Pending);
-    p->state = cpu; // Nonserialized destination configuration is retained.
-    p->tss = cpu_tss;
-    readPOD(stream, p->regs);
-    readPOD(stream, p->state.cpl);
-    readPOD(stream, p->state.mpl);
-    readPOD(stream, p->state.cr0);
-    readPOD(stream, p->state.pmode);
-    p->state.gdt.LoadState(stream);
-    p->state.idt.LoadState(stream);
-    readPOD(stream, p->state.stack);
-    readPOD(stream, p->state.code);
-    readPOD(stream, p->state.hlt.cs);
-    readPOD(stream, p->state.hlt.eip);
-    readPOD(stream, p->state.exception);
-    readPOD(stream, p->state.direction);
-    readPOD(stream, p->state.trap_skip);
-    readPOD(stream, p->state.drx);
-    readPOD(stream, p->state.trx);
-    readPOD(stream, p->segments);
-    readPOD(stream, p->cycles);
-    readPOD(stream, p->left);
-    readPOD(stream, p->io);
-    p->tss.LoadState(stream);
-    readPOD(stream, p->interrupt);
-    readPOD(stream, p->decoder);
-    readPOD(stream, p->hlt_decoder);
-    // Raw archive bools must be checked by representation before copying or
-    // evaluating CPUBlock (copying an invalid bool already invokes UB).
+    // Progressive owning consumption into an unused disposable target. Its
+    // nonserialized CPU configuration stays native; no prior image is kept.
+    readPOD(stream, cpu_regs);
+    readPOD(stream, cpu.cpl);
+    readPOD(stream, cpu.mpl);
+    readPOD(stream, cpu.cr0);
+    readPOD(stream, cpu.pmode);
+    cpu.gdt.LoadState(stream);
+    cpu.idt.LoadState(stream);
+    readPOD(stream, cpu.stack);
+    readPOD(stream, cpu.code);
+    readPOD(stream, cpu.hlt.cs);
+    readPOD(stream, cpu.hlt.eip);
+    readPOD(stream, cpu.exception);
+    readPOD(stream, cpu.direction);
+    readPOD(stream, cpu.trap_skip);
+    readPOD(stream, cpu.drx);
+    readPOD(stream, cpu.trx);
+    readPOD(stream, Segs);
+    readPOD(stream, CPU_Cycles);
+    readPOD(stream, CPU_CycleLeft);
+    readPOD(stream, CPU_IODelayRemoved);
+    cpu_tss.LoadState(stream);
+    readPOD(stream, lastint);
+    uint16_t decoder = 0xffff, hlt_decoder = 0xffff;
+    readPOD(stream, decoder);
+    readPOD(stream, hlt_decoder);
+    // No decoder dispatch or raw bool evaluation before these checks. Failure
+    // disposes this process, including partially installed owner fields.
     const auto validBool = [](const bool &value) {
         const bool zero = false, one = true;
         return !memcmp(&value, &zero, sizeof(value)) ||
                !memcmp(&value, &one, sizeof(value));
     };
-    if (!stream || !validBool(p->state.pmode) ||
-        !validBool(p->state.stack.big) || !validBool(p->state.code.big) ||
-        !validBool(p->state.trap_skip) || !CPU_IndexDecoderType(p->decoder) ||
-        (p->decoder == 200 ? (p->hlt_decoder == 200 || !CPU_IndexDecoderType(p->hlt_decoder)) :
-                             p->hlt_decoder != 0xffff) ||
-        p->state.cpl > 3 || p->state.mpl > 3 ||
-        (p->state.direction != 1 && p->state.direction != -1)) return {};
-    return p;
-}
-void setBytes(std::istream& stream) override
-{
-    auto p = prepare(stream);
-    if (!p) E_Exit("Invalid saved CPU state");
-    p->install();
+    if (!stream || !validBool(cpu.pmode) ||
+        !validBool(cpu.stack.big) || !validBool(cpu.code.big) ||
+        !validBool(cpu.trap_skip) || !CPU_IndexDecoderType(decoder) ||
+        (decoder == 200 ? (hlt_decoder == 200 || !CPU_IndexDecoderType(hlt_decoder)) :
+                          hlt_decoder != 0xffff) ||
+        cpu.cpl > 3 || cpu.mpl > 3 ||
+        (cpu.direction != 1 && cpu.direction != -1))
+        E_Exit("Invalid saved CPU state");
+    cpu.hlt.old_decoder = decoder == 200 ? CPU_IndexDecoderType(hlt_decoder) : nullptr;
+    selectDecoder(decoder);
     POD_Load_CPU_Flags(stream);
     POD_Load_CPU_Paging(stream);
     if (stream) PAGING_SetWP((cpu.cr0 & CR0_WRITEPROTECT) != 0);

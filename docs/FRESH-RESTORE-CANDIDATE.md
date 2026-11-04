@@ -258,6 +258,11 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
 * INT10 capture/import validates the actual fresh handler role and encoded
   native CB_IRET body after dependent Memory installation, without constraining
   legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* CPU import now directly consumes checked fields in its original owning
+  reader; the remaining heap Pending/prepare/install CPU snapshot is removed.
+  Nonserialized initialized configuration stays native and failed partial
+  consumption is terminal, not a preservation transaction. Decoder/HLT and raw
+  bool/CPL/MPL/direction checks precede dispatch; cache rebuild remains shared.
 * Task-state import checks valid's raw bool before TaskStateSegment copy and
   bounds is386 to actual assignments 0/1/8 (the VM86 path uses1). Truncated,
   invalid-bool and unsupported-kind archives dispose at CPU; no state repair.
