@@ -8,7 +8,10 @@ work=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'breakpoint-identity'
 work.mkdir(exist_ok=True)
 text=(root/'src/debug/debug.cpp').read_text()
 def body(start):
-    at=text.index(start); begin=text.index('{',at); depth=1; end=begin+1
+    at=text.index(start); begin=text.index('{',at)
+    if start=='CBreakpoint::CBreakpoint(void)':
+        begin=text.index('{',text.index('label{}',at)+len('label{}'))
+    depth=1; end=begin+1
     while depth:
         depth += (text[end]=='{')-(text[end]=='}'); end+=1
     return text[at:end]
@@ -17,6 +20,11 @@ source=r'''
 #include <list>
 #include <cassert>
 #include <stdexcept>
+#include <string>
+enum class DebuggerBreakpointOwner {Unknown, Lua, Agent};
+#define SegValue(x) 0
+unsigned reg_eip=0;
+template<class... T> void Debugger_RecordBreakpointStop(T...) {}
 #define C_HEAVY_DEBUG 1
 #define BKPNT_UNKNOWN 0
 #define BKPNT_INTERRUPT 1
@@ -25,9 +33,9 @@ using PhysPt=uint32_t;
 void E_Exit(const char*) { throw std::runtime_error("fatal"); }
 class CBreakpoint {
 public:
- int type,location,segment,offset,intNr,ahValue,alValue; bool active,once;
- uintptr_t id;
- static uintptr_t next_id,lastTriggered;
+ int type,location,segment,offset,intNr,ahValue,alValue; bool active,once,enabled;
+ uint64_t id; DebuggerBreakpointOwner owner; uint64_t hit_count; std::string label;
+ static uint64_t next_id,lastTriggered;
  static std::list<CBreakpoint*> BPoints;
  CBreakpoint();
  uintptr_t GetId() const {return id;}
@@ -44,19 +52,33 @@ public:
  uint16_t GetValue() const {return ahValue;}
  uint16_t GetOther() const {return alValue;}
  bool GetOnce() const {return once;}
- static bool DeleteById(uintptr_t);
- static uintptr_t ConsumeLastTriggered();
+ DebuggerBreakpointOwner GetOwner() const{return owner;}
+ void IncrementHitCount(){++hit_count;}
+ uint64_t GetHitCount() const{return hit_count;}
+ const std::string &GetLabel() const{return label;}
+ static bool DeleteById(uint64_t,DebuggerBreakpointOwner,bool*);
+ static bool Remove(uint64_t id){bool cleared=false;assert(DeleteById(id,DebuggerBreakpointOwner::Unknown,&cleared));return cleared;}
+ static uint64_t ConsumeLastTriggered();
 };
-uintptr_t CBreakpoint::next_id=1,CBreakpoint::lastTriggered=0;
+uint64_t CBreakpoint::next_id=1,CBreakpoint::lastTriggered=0;
 std::list<CBreakpoint*> CBreakpoint::BPoints;
 '''
-source+='\n'.join(body(x) for x in ['CBreakpoint::CBreakpoint(void)', 'bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)', 'bool CBreakpoint::DeleteById(uintptr_t id)', 'uintptr_t CBreakpoint::ConsumeLastTriggered(void)', 'bool CBreakpoint::CheckIntBreakpoint(PhysPt adr', 'bool CBreakpoint::DeleteByIndex(uint16_t index)', 'void CBreakpoint::DeleteAll()', 'bool CBreakpoint::DeleteBreakpoint(uint16_t seg, uint32_t off)'])
+source+='\n'.join(body(x) for x in ['CBreakpoint::CBreakpoint(void)', 'bool CBreakpoint::DeleteBreakpoint(CBreakpoint* breakpoint)', 'bool CBreakpoint::DeleteById(uint64_t id', 'uint64_t CBreakpoint::ConsumeLastTriggered(void)', 'bool CBreakpoint::CheckIntBreakpoint(PhysPt adr', 'bool CBreakpoint::DeleteByIndex(uint16_t index)', 'void CBreakpoint::DeleteAll()', 'bool CBreakpoint::DeleteBreakpoint(uint16_t seg, uint32_t off)'])
 source+=r'''
 CBreakpoint* CBreakpoint::FindPhysBreakpoint(uint16_t seg,uint32_t off,bool once) {
  for(auto bp:BPoints)if(bp->segment==seg && bp->offset==int(off) && bp->once==once)return bp;
  return nullptr;
 }
 int main() {
+ // Foreign-owner deletion refuses without clearing or consuming the receipt;
+ // a matching owner removes once, and absent identities succeed un-cleared.
+ auto *owned=new CBreakpoint;owned->owner=DebuggerBreakpointOwner::Lua;
+ const auto owned_id=owned->GetId();CBreakpoint::BPoints.push_back(owned);
+ CBreakpoint::lastTriggered=owned_id;bool cleared=true;
+ assert(!CBreakpoint::DeleteById(owned_id,DebuggerBreakpointOwner::Agent,&cleared)&&!cleared);
+ assert(CBreakpoint::ConsumeLastTriggered()==owned_id);
+ assert(CBreakpoint::DeleteById(owned_id,DebuggerBreakpointOwner::Lua,&cleared)&&cleared);
+ assert(CBreakpoint::DeleteById(owned_id,DebuggerBreakpointOwner::Lua,&cleared)&&!cleared);
  // Real interrupt matching and one-shot retirement preserve a value receipt,
  // including wildcard AH/AL and misses; Activate is an inert owner double.
  for(bool once:{false,true}) {
@@ -103,6 +125,9 @@ int main() {
  assert(fatal && CBreakpoint::BPoints.empty());
 }
 '''
+# Assertions consume explicit cleared, not successful already-absent outcome.
+# Activation and stop recording remain reduced doubles.
+source=source.replace('CBreakpoint::DeleteById(id)', 'CBreakpoint::Remove(id)').replace('CBreakpoint::DeleteById(old)', 'CBreakpoint::Remove(old)').replace('CBreakpoint::DeleteById(0)', 'CBreakpoint::DeleteById(0,DebuggerBreakpointOwner::Unknown,nullptr)').replace('UINTPTR_MAX','UINT64_MAX')
 (work/'identity.cpp').write_text(source)
 subprocess.run(['g++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie',str(work/'identity.cpp'),'-o',str(work/'identity')],check=True)
 subprocess.run([str(work/'identity')],check=True)
