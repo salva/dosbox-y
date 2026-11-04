@@ -258,6 +258,10 @@ Tests use `SAIVAGE_CARD_WORK_ROOT`, `DOSBOX_TEST_BINARY`, and producer fixtures:
 * INT10 capture/import validates the actual fresh handler role and encoded
   native CB_IRET body after dependent Memory installation, without constraining
   legitimate guest IVT hooks. Valid-CRC RAM body damage must fail at Int10.
+* The integrated root matrix additionally executes INT10 VBE mode query/set
+  and the returned far bank-switch callback (mode101/bank0), then text-mode
+  VRAM/readback, reaching root42 across Lua/no-Agent/no-Lua consumers. This is a
+  real native VBE entry consumer, not full protected-mode or raster parity.
 * VBE now checks actual fresh rmWindow/pmWindow/pmStart/pmPalette callback
   handler roles and the original constructor's exact wait/real/PM interface
   bytes after Memory installation (also capture). Reset clears the owner-local

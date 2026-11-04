@@ -4,6 +4,29 @@ bits 16
 org 100h
 program_start:
     nop
+%ifdef VESA_SERVICE
+    push cs
+    pop es
+    mov di,mode_info
+    mov ax,4f01h
+    mov cx,101h
+    int 10h
+    cmp ax,004fh
+    jne failed
+    ; Execute the returned ROM real-mode bank callback, not only INT10.
+    ; Mode13-compatible bank zero is valid with the matching SVGA hardware.
+    mov ax,4f02h
+    mov bx,101h
+    int 10h
+    cmp ax,004fh
+    jne failed
+    mov ax,4f05h
+    xor bx,bx
+    xor dx,dx
+    call far [mode_info+12]
+    cmp ax,004fh
+    jne failed
+%endif
     mov ax,0003h
     int 10h
     mov ax,0b800h
@@ -34,3 +57,6 @@ failed:
     mov ax,4c63h
     int 21h
 witness dw 0
+%ifdef VESA_SERVICE
+mode_info times 256 db 0
+%endif
