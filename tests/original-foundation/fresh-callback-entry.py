@@ -10,6 +10,12 @@ s = (root / 'src/cpu/callback.cpp').read_text()
 start = s.index('static void RequireGuestCallbackEntry() {')
 end = s.index('\n}\n', start) + 3
 predicate = s[start:end]
+machine = (root / 'src/dosbox.cpp').read_text()
+body = machine.split('void DOSBOX_RunMachine(MachineService::Kind kind){', 1)[1]
+start = body.index('    if (!control->opt_restore_state.empty()')
+end = body.index('    MachineService::Coordinator::Scope')
+dispatch = body[start:end]
+assert 'RestoredSession::selected()' in dispatch and 'Kind::RootGuest' in dispatch
 # Each helper must reject before its native-suffix scope, flags, stack,
 # registers, cycle accounting, events or machine dispatch. This is a bounded
 # entry-order assertion, not an integrated constructor/no-replay qualification.
@@ -27,12 +33,23 @@ source = r'''
 struct Control {std::string opt_restore_state;} storage, *control=&storage;
 namespace RestoredSession {bool active=false;bool selected(){return active;}}
 void E_Exit(const char *s){throw std::runtime_error(s);}
-''' + predicate + r'''
+''' + predicate + '''
+namespace MachineService {enum class Kind {RootGuest,FaultGuest,DiskGuest,Unclassified};}
+void dispatch(MachineService::Kind kind) {
+''' + dispatch + '''
+}
+''' + r'''
 int effects=0;
 void entry(){RequireGuestCallbackEntry();++effects;}
 int main(){
  entry();assert(effects==1);
+ dispatch(MachineService::Kind::DiskGuest);
  control->opt_restore_state="input.sav";
+ dispatch(MachineService::Kind::RootGuest);
+ for (auto kind : {MachineService::Kind::FaultGuest, MachineService::Kind::DiskGuest,
+                   MachineService::Kind::Unclassified}) {
+  try {dispatch(kind);assert(false);}catch(const std::runtime_error &){}
+ }
  try {entry();assert(false);}catch(const std::runtime_error &e){
   assert(std::string(e.what()).find("guest callback required")!=std::string::npos);
  }

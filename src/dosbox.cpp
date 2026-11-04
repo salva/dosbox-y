@@ -852,6 +852,12 @@ MachineService::Relation DOSBOX_MachineServiceRelation(uint64_t token) { return 
 
 void DOSBOX_RunMachine(void) { DOSBOX_RunMachine(MachineService::Kind::Unclassified); }
 void DOSBOX_RunMachine(MachineService::Kind kind){
+    // Callback helpers reject before their register/stack setup. Also fence
+    // direct disk/page-fault dispatch: native construction/import must never
+    // enter the guest, even through a transitive non-callback owner.
+    if (!control->opt_restore_state.empty() && !RestoredSession::selected() &&
+        kind != MachineService::Kind::RootGuest)
+        E_Exit("Fresh native construction unsupported: nested guest dispatch required");
     MachineService::Coordinator::Scope machine_owner(machine_service,kind
 #if C_DEBUG
         ,DEBUG_MachineOwnerDeparting

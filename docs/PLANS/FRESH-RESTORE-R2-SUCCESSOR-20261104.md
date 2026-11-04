@@ -24,7 +24,10 @@ callback execution (including CPX codepage decompression, such as the tested
 German-layout constructor) explicitly refuses at the callback entry boundary,
 before callback register/stack/cycle changes. It is not silently replayed and
 that layout is not claimed supported by this candidate. Ordinary boot and guest
-callbacks after restored root selection retain their existing behavior.
+callbacks after restored root selection retain their existing behavior. Direct
+nested machine dispatch (disk/page-fault/unclassified) also refuses before machine
+ownership/attachment while the target remains unused; the top-level RootGuest
+entry alone can select its validated immutable root before dispatch.
 Import precedes debugger and Lua
 FILE/INLINE evaluation. The initialized unused target is disposable: every
 failed, partial or uncertain import is fatal, even if no mutation was observed.
