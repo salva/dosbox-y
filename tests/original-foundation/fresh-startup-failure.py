@@ -79,6 +79,38 @@ if os.environ.get('DOSBOX_TEST_MOUSE_BINDINGS'):
    def wrong_mouse_body(data,address=address,n=n):
     data=bytearray(data);data[mouse_descriptor+address+n]^=1;return bytes(data)
    cases.append(('Memory',wrong_mouse_body,False))
+if os.environ.get('DOSBOX_TEST_DOS_TABLES'):
+ # DOS tables are the final Dos suffix. Observe actual configured owner
+ # values at held import; verify the entire fixed binding prefix occurs once.
+ import re
+ expressions=('dos.tables.mediaid','dos.tables.tempdta','dos.tables.tempdta_fcbdelete',
+  'dos.tables.dbcs','dos.tables.filenamechar','dos.tables.collatingseq',
+  'dos.tables.upcase','dos.tables.dpb','dos.tables.dpb_size','dos.tables.mediaid_offset',
+  'DOS_TableUpCase','DOS_TableLowCase','DOS_PRIVATE_SEGMENT','DOS_PRIVATE_SEGMENT_END',
+  'DOS_DriveDataListHead',"'dos_tables.cpp'::call_casemap",'DOS_SDA_SEG','DOS_SDA_OFS',
+  'DOS_SDA_SEG_SIZE','DOS_INFOBLOCK_SEG','DOS_CONDRV_SEG','DOS_CDS_SEG','DOS_IHSEG','cmd_line_seg')
+ script=w/'dos-tables.gdb'
+ script.write_text('set pagination off\nset confirm off\nset breakpoint pending on\nbreak DEBUG_HoldRestoredStartup\nrun\n'+
+  '\n'.join('p (unsigned int)'+expr for expr in expressions)+'\nquit\n')
+ config=w/'dos-tables.conf'
+ config.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound='+('false' if os.environ.get('DOSBOX_TEST_AUDIO') else 'true')+'\n[midi]\nmididevice=none\n')
+ result=subprocess.run(['gdb','-q','-batch','-x',str(script),'--args',os.environ['DOSBOX_TEST_BINARY'],
+  '-conf',str(config),'-restore-state',str(source)],capture_output=True,text=True,
+  env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),timeout=45)
+ (w/'dos-tables.log').write_text(result.stdout+result.stderr)
+ values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
+ assert result.returncode==0 and len(values)==24,(result.stdout,result.stderr)
+ with zipfile.ZipFile(source) as z:data=z.read('Dos')
+ needle=struct.pack('<24I',*values);offset=data.find(needle)
+ assert offset>=0 and data.find(needle,offset+1)<0
+ for n in range(len(needle)):
+  def wrong_dos_table(data,n=n,table_offset=offset):
+   data=bytearray(data);data[table_offset+n]^=1;return bytes(data)
+  cases.append(('Dos',wrong_dos_table,False))
+ # All short suffixes, including allocator role records/country/cursor, must
+ # fail after earlier DOS/file/memory owners have already been consumed.
+ for n in range(offset,len(data)):
+  cases.append(('Dos',lambda data,n=n:data[:n],False))
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
  # No unchanged-destination assumption: every attempt is a fresh process.
@@ -300,7 +332,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  missing=owner=='Keyboard' and mutate(b'') is None
  label=str(case_index)+'-'+owner+('-CRC' if corrupt_crc else '-missing' if missing else '')
  archive=w/(label+'.sav')
- with zipfile.ZipFile(source) as src,zipfile.ZipFile(archive,'w',zipfile.ZIP_STORED) as dst:
+ with zipfile.ZipFile(source) as src,zipfile.ZipFile(archive,'w',zipfile.ZIP_STORED if corrupt_crc else zipfile.ZIP_DEFLATED) as dst:
   for name in src.namelist():
    data=src.read(name)
    payload=mutate(data) if name==owner else data
@@ -375,12 +407,14 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  else:
   assert 'SaveState::install' in diagnosis.stdout,diagnosis.stdout
  expected=('Fresh restore failed' if owner in metadata else
+           'failed during installation' if owner=='Dos' and os.environ.get('DOSBOX_TEST_DOS_TABLES') else
            'Invalid save-state DOS drive state' if owner=='Dos' and os.environ.get('DOSBOX_TEST_SEARCH_STATE') else
            'Cannot restore save-state DOS file: native open failed' if owner=='Dos' else
            'State member unavailable after installation started' if missing else
            'settlement failed after installation' if corrupt_crc else
            'Invalid saved PIC state' if owner=='Pic' else
            'Invalid saved CPU state' if owner=='CPU' else
+           'failed during installation' if owner=='Dos' else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_mouse_body' else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_shell_body' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else

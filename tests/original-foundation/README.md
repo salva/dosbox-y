@@ -54,6 +54,13 @@ in valid-CRC Memory archives. Each attempt must fail/dispose before evaluation;
 INT33/backdoor overlay is checked in its final constructed form. Guest IVT
 hooks are outside these spans. PC98's separate INT15 role is not certified here;
 these checks do not establish physical mouse routing parity.
+`DOSBOX_TEST_DOS_TABLES=1` observes the actual configured 24-field DOS table
+binding prefix in held GDB startup, corrupts each of its bytes, and truncates at
+every remaining Dos suffix byte (allocator records/country/private cursor).
+All are actual valid-CRC import/disposal consumers after earlier owner effects,
+not solely reduced-layout validation. Ordinary malformed archives use ZIP
+DEFLATED to retain full evidence compactly; the deliberate CRC corruption case
+stays ZIP_STORED so its direct data-byte corruption remains exact.
 The scalar probe does not assume a packed mouse struct or double-width PIC time.
 `progressive-install.py` replaces all-owner-before-effects assertions:
 owner failure is fatal even after earlier installation, never rollback success.
