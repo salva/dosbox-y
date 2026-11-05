@@ -11,6 +11,26 @@ cases=[('Mouse',lambda b:b[:-1],False),
        ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
        ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
+if os.environ.get('DOSBOX_TEST_DOS_CALLBACKS'):
+ import re
+ config=w/'dos-callbacks.conf'
+ config.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound='+('false' if os.environ.get('DOSBOX_TEST_AUDIO') else 'true')+'\n[midi]\nmididevice=none\n')
+ script=w/'dos-callbacks.gdb'
+ script.write_text('set pagination off\nset confirm off\nbreak DEBUG_HoldRestoredStartup\nrun\n'+''.join(
+     f"p 'dos.cpp'::test->native_callback[{role}].address\np 'dos.cpp'::test->native_callback[{role}].body.size()\n" for role in range(9))+'quit\n')
+ result=subprocess.run(['gdb','-q','-batch','-x',str(script),'--args',os.environ['DOSBOX_TEST_BINARY'],
+     '-conf',str(config),'-restore-state',str(source)],capture_output=True,text=True,timeout=45,
+     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'))
+ (w/'dos-callbacks.log').write_text(result.stdout+result.stderr)
+ values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
+ assert result.returncode==0 and len(values)==18,(result.stdout,result.stderr)
+ _,memory_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
+ for address,size in zip(values[::2],values[1::2]):
+  assert address and 0<size<128,(address,size)
+  for n in range(size):
+   def wrong_dos_callback(data,address=address,n=n):
+    data=bytearray(data);data[memory_descriptor+address+n]^=1;return bytes(data)
+   cases.append(('Memory',wrong_dos_callback,False))
 if os.environ.get('DOSBOX_TEST_MOUSE_SCALARS'):
  # These first fields are fixed uint16/uint16/bool/bool, with no registered PODs.
  # Keep ZIP CRC valid and consume the malformed representation in the real owner.
@@ -415,6 +435,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
            'Invalid saved PIC state' if owner=='Pic' else
            'Invalid saved CPU state' if owner=='CPU' else
            'failed during installation' if owner=='Dos' else
+           'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_dos_callback' else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_mouse_body' else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_shell_body' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else

@@ -902,13 +902,14 @@ CALLBACK_HandlerObject::~CALLBACK_HandlerObject(){
 	Uninstall();
 }
 
-void CALLBACK_HandlerObject::Install(CallBack_Handler handler,Bitu type,const char* description){
+Bitu CALLBACK_HandlerObject::Install(CallBack_Handler handler,Bitu type,const char* description){
 	if(!installed) {
 		installed=true;
 		m_type=SETUP;
 		m_callback=CALLBACK_Allocate();
-		CALLBACK_Setup(m_callback,handler,type,description);
+		return CALLBACK_Setup(m_callback,handler,type,CALLBACK_PhysPointer(m_callback),description);
 	} else E_Exit("Callback handler object already installed");
+    return 0;
 }
 void CALLBACK_HandlerObject::Install(CallBack_Handler handler,Bitu type,PhysPt addr,const char* description){
 	if(!installed) {

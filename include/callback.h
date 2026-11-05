@@ -96,8 +96,8 @@ public:
 	}
 	~CALLBACK_HandlerObject();
 
-	//Install and allocate a callback.
-	void Install(CallBack_Handler handler,Bitu type,const char* description);
+	// Install and allocate a callback; return the generated code span length.
+	Bitu Install(CallBack_Handler handler,Bitu type,const char* description);
 	void Install(CallBack_Handler handler,Bitu type,PhysPt addr,const char* description);
 
 	void Uninstall();

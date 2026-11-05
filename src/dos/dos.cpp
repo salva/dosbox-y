@@ -20,6 +20,7 @@
  */
 
 
+#include <vector>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -4194,9 +4195,45 @@ void InitBdevBuf(void) {
 class DOS:public Module_base{
 private:
 	CALLBACK_HandlerObject callback[9];
+    // Constructor-owned callback roles, not IVT values: legitimate guest hooks
+    // remain allowed. Certify the generated spans after Memory installation as
+    // well as at capture; never reconstruct native handlers from archive data.
+    struct NativeCallback {
+        Bitu slot = 0;
+        CallBack_Handler handler = nullptr;
+        PhysPt address = 0;
+        std::vector<uint8_t> body;
+    } native_callback[9];
+    void InstallCallback(unsigned role, CallBack_Handler handler, Bitu type,
+                         const char *description) {
+        const auto size = callback[role].Install(handler, type, description);
+        auto &native = native_callback[role];
+        native.slot = callback[role].Get_callback();
+        native.handler = handler;
+        native.address = CALLBACK_PhysPointer(native.slot);
+        native.body.resize(size);
+        for (Bitu n = 0; n < size; ++n)
+            native.body[n] = mem_readb(native.address + n);
+    }
 	RealPt int30,int31;
 
 public:
+    bool NativeCallbacksIntact() {
+        for (unsigned role = 0; role < 9; ++role) {
+            const auto &native = native_callback[role];
+            const auto slot = callback[role].Get_callback();
+            if (!slot) {
+                if (native.slot || !native.body.empty()) return false;
+                continue;
+            }
+            if (slot >= CB_MAX || native.slot != slot ||
+                native.body.empty() || CallBack_Handlers[slot] != native.handler ||
+                native.address != CALLBACK_PhysPointer(slot)) return false;
+            for (size_t n = 0; n < native.body.size(); ++n)
+                if (mem_readb(native.address + n) != native.body[n]) return false;
+        }
+        return true;
+    }
 	void DOS_Write_HMA_CPM_jmp(void) {
 		// HMA mirror of CP/M entry point.
 		// this is needed for "F01D:FEF0" to be a valid jmp whether or not A20 is enabled
@@ -4598,10 +4635,10 @@ public:
 				DOS_PRIVATE_SEGMENT,DOS_PRIVATE_SEGMENT_END,
 				(unsigned long)(MEM_ConventionalPages() << (12 - 4)));
 
-		callback[0].Install(DOS_20Handler,CB_IRET,"DOS Int 20");
+		InstallCallback(0,DOS_20Handler,CB_IRET,"DOS Int 20");
 		callback[0].Set_RealVec(0x20);
 
-		callback[1].Install(DOS_21Handler,CB_INT21,"DOS Int 21");
+		InstallCallback(1,DOS_21Handler,CB_INT21,"DOS Int 21");
 		callback[1].Set_RealVec(0x21);
 		//Pseudo code for int 21
 		// sti
@@ -4609,19 +4646,19 @@ public:
 		// iret
 		// retf  <- int 21 4c jumps here to mimic a retf Cyber
 
-		callback[2].Install(DOS_25Handler,CB_RETF_STI,"DOS Int 25");
+		InstallCallback(2,DOS_25Handler,CB_RETF_STI,"DOS Int 25");
 		callback[2].Set_RealVec(0x25);
 
-		callback[3].Install(DOS_26Handler,CB_RETF_STI,"DOS Int 26");
+		InstallCallback(3,DOS_26Handler,CB_RETF_STI,"DOS Int 26");
 		callback[3].Set_RealVec(0x26);
 
-		callback[4].Install(DOS_27Handler,CB_IRET,"DOS Int 27");
+		InstallCallback(4,DOS_27Handler,CB_IRET,"DOS Int 27");
 		callback[4].Set_RealVec(0x27);
 
 		if (section->Get_bool("dos idle api")) {
-			callback[5].Install(INT28_HANDLER,CB_INT28,"DOS idle");
+			InstallCallback(5,INT28_HANDLER,CB_INT28,"DOS idle");
 		} else {
-			callback[5].Install(NULL,CB_IRET,"DOS idle");
+			InstallCallback(5,NULL,CB_IRET,"DOS idle");
 		}
 		callback[5].Set_RealVec(0x28);
 
@@ -4630,22 +4667,22 @@ public:
 			// the same as CON device output. Apparently the reason Touhou Project has been unable
 			// to clear the screen is that it uses INT 29h to directly send ANSI codes rather than
 			// standard I/O calls to write to the CON device.
-			callback[6].Install(INT29_HANDLER,CB_IRET,"CON Output Int 29");
+			InstallCallback(6,INT29_HANDLER,CB_IRET,"CON Output Int 29");
 #if defined(USE_TTF)
 		} else if (IS_DOSV || ttf_dosv) {
 #else
 		} else if (IS_DOSV) {
 #endif
 			int29h_data.ansi.attr = 0x07;
-			callback[6].Install(DOS_29Handler,CB_IRET,"CON Output Int 29");
+			InstallCallback(6,DOS_29Handler,CB_IRET,"CON Output Int 29");
 		} else if (section->Get_bool("ansi.sys")) { // NTS: DOS CON device is not yet initialized, therefore will not return correct value of "is ANSI.SYS installed"?
 			// ANSI.SYS is installed, and it does hook INT 29h as well. Route INT 29h through it.
-			callback[6].Install(INT29_HANDLER,CB_IRET,"CON Output Int 29");
+			InstallCallback(6,INT29_HANDLER,CB_IRET,"CON Output Int 29");
 		} else {
 			// Use the DOSBox SVN callback code that takes the byte and shoves it off to INT 10h.
 			// NTS: This is where DOSBox SVN is wrong. DOSBox SVN treats INT 29h as a straight call
 			//      to INT 10h BUT it also emulates ANSI.SYS and escape codes.
-			callback[6].Install(NULL,CB_INT29,"CON Output Int 29");
+			InstallCallback(6,NULL,CB_INT29,"CON Output Int 29");
 			// pseudocode for CB_INT29:
 			//	push ax
 			//	mov ah, 0x0e
@@ -4657,11 +4694,11 @@ public:
 
 		if (!IS_PC98_ARCH) {
 			/* DOS installs a handler for INT 1Bh */
-			callback[7].Install(BIOS_1BHandler,CB_IRET,"BIOS 1Bh MS-DOS handler");
+			InstallCallback(7,BIOS_1BHandler,CB_IRET,"BIOS 1Bh MS-DOS handler");
 			callback[7].Set_RealVec(0x1B);
 		}
 
-		callback[8].Install(DOS_CPMHandler,CB_CPM,"DOS/CPM Int 30-31");
+		InstallCallback(8,DOS_CPMHandler,CB_CPM,"DOS/CPM Int 30-31");
 		int30=RealGetVec(0x30);
 		int31=RealGetVec(0x31);
 		mem_writeb(0x30*4,(uint8_t)0xea);		// jmpf
@@ -5959,6 +5996,10 @@ namespace
 		private:
 			void getBytes(std::ostream& stream) override
 			{
+				if (!test || !test->NativeCallbacksIntact()) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
 				SerializeGlobalPOD::getBytes(stream);
 
 				//***********************************************
@@ -6004,6 +6045,10 @@ namespace
 
 			void setBytes(std::istream& stream) override
 			{
+				if (!test || !test->NativeCallbacksIntact()) {
+                    stream.setstate(std::ios::failbit);
+                    return;
+                }
 				SerializeGlobalPOD::setBytes(stream);
                 if (!stream) return;
 
