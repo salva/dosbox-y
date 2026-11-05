@@ -47,8 +47,14 @@ comparison and speaker continuation, not execution of the injected hook bodies.
 Metadata mismatch is not malformed-owner
 coverage. `DOSBOX_TEST_MOUSE_FINITE=1` derives actual configured mouse field
 offsets through GDB and repacks ±infinity/NaN for all 14 consumed float fields
-and hidden_at (IEEE double or x87 extended native Linux ABI);
-it does not assume a packed mouse struct or double-width PIC time.
+and hidden_at (IEEE double or x87 extended native Linux ABI).
+`DOSBOX_TEST_MOUSE_BINDINGS=1` observes the six original-constructed mouse
+callback spans in a held startup under GDB, then corrupts each controlled byte
+in valid-CRC Memory archives. Each attempt must fail/dispose before evaluation;
+INT33/backdoor overlay is checked in its final constructed form. Guest IVT
+hooks are outside these spans. PC98's separate INT15 role is not certified here;
+these checks do not establish physical mouse routing parity.
+The scalar probe does not assume a packed mouse struct or double-width PIC time.
 `progressive-install.py` replaces all-owner-before-effects assertions:
 owner failure is fatal even after earlier installation, never rollback success.
 `live-load-refusal.py` compiles the actual direct slot/file wrappers with no

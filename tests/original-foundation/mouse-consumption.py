@@ -7,6 +7,7 @@ work=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'mouse-consumption';work.mkdir(e
 t=(root/'src/ints/mouse.cpp').read_text()
 state=t[t.index('static struct {\n    uint8_t buttons;'):t.index('} mouse;')+len('} mouse;')]
 codec=t[t.index('class SerializeMouse :'):t.index('} dummy;',t.index('class SerializeMouse :'))+len('} dummy;')]
+roles=t[t.index('struct MouseNativeRole {'):t.index('void MOUSE_Unsetup_DOS(void)')]
 source=r'''
 #include <cassert>
 #include <cstdint>
@@ -36,12 +37,29 @@ struct SerializeGlobalPOD {
 };
 void PC98_Mouse_SaveState(std::ostream&){}
 void PC98_Mouse_LoadState(std::istream&){}
-'''+state+'\n'+codec+r'''
+using Bitu=uint32_t;using PhysPt=uint32_t;using CallBack_Handler=Bitu(*)();
+constexpr Bitu CB_MAX=128;
+Bitu call_int33=0,call_mouse_bd=0,call_int74=0,int74_ret_callback=0,call_ps2=0,call_uir=0;
+CallBack_Handler CallBack_Handlers[CB_MAX]={};
+uint8_t ram[4096]={};
+uint8_t phys_readb(PhysPt a){assert(a<sizeof ram);return ram[a];}
+PhysPt CALLBACK_PhysPointer(Bitu s){return s*32;}
+Bitu CALLBACK_Setup(Bitu s,CallBack_Handler h,Bitu,PhysPt a,const char*){CallBack_Handlers[s]=h;ram[a]=uint8_t(s);return 1;}
+Bitu handler(){return 0;}
+'''+roles+'\n'+state+'\n'+codec+r'''
 std::string save(){std::ostringstream out;static_cast<SerializeGlobalPOD&>(dummy).getBytes(out);assert(out);return out.str();}
 bool load(const std::string&s){std::istringstream in(s);static_cast<SerializeGlobalPOD&>(dummy).setBytes(in);return bool(in);}
 int main(){
+ Bitu *slots[]={&call_int33,&call_mouse_bd,&call_int74,&int74_ret_callback,&call_ps2,&call_uir};
+ for(unsigned role=0;role<6;++role){*slots[role]=role+1;MouseSetupRole(role,*slots[role],handler,1,"fixture");}
  mouse.screenMask=defaultScreenMask;mouse.cursorMask=defaultCursorMask;
  auto valid=save();assert(load(valid));assert(mouse.screenMask==defaultScreenMask && mouse.cursorMask==defaultCursorMask);
+ for(unsigned role=0;role<6;++role){
+  auto &native=mouse_native_roles[role];
+  CallBack_Handlers[native.slot]=nullptr;assert(!load(valid));CallBack_Handlers[native.slot]=handler;
+  ram[native.address]^=1;assert(!load(valid));ram[native.address]^=1;
+  ++*slots[role];assert(!load(valid));--*slots[role];assert(load(valid));
+ }
  for(auto cursor:{defaultCursorMask,userdefCursorMask,defaultCursorMaskNEC}) {
   mouse.screenMask=userdefScreenMask;mouse.cursorMask=cursor;auto s=save();
   assert(load(s));assert(mouse.screenMask==userdefScreenMask && mouse.cursorMask==cursor);

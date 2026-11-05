@@ -118,7 +118,55 @@ static Bitu call_int33 = 0;
 static Bitu call_int74 = 0;
 static Bitu call_ps2, call_uir = 0;
 
+// Original constructor-owned code, not guest IVT hooks. Memory carries the
+// bytes; the Mouse consumer checks only these small controlled native spans.
+struct MouseNativeRole {
+    Bitu slot = 0;
+    CallBack_Handler handler = nullptr;
+    PhysPt address = 0;
+    std::vector<uint8_t> body;
+};
+static MouseNativeRole mouse_native_roles[6];
+
+static void MouseRememberRole(unsigned role, Bitu slot, CallBack_Handler handler,
+                              PhysPt address, Bitu size) {
+    auto &native = mouse_native_roles[role];
+    native.slot = slot;
+    native.handler = handler;
+    native.address = address;
+    native.body.resize(size);
+    for (size_t n = 0; n < native.body.size(); ++n)
+        native.body[n] = phys_readb(address + n);
+}
+
+static void MouseSetupRole(unsigned role, Bitu slot, CallBack_Handler handler,
+                           Bitu type, const char *description) {
+    const auto address = CALLBACK_PhysPointer(slot);
+    const auto size = CALLBACK_Setup(slot, handler, type, address, description);
+    MouseRememberRole(role, slot, handler, address, size);
+}
+
+static bool MouseNativeBindingsValid() {
+    const Bitu slots[] = {call_int33, call_mouse_bd, call_int74,
+                         int74_ret_callback, call_ps2, call_uir};
+    for (unsigned role = 0; role < 6; ++role) {
+        const auto &native = mouse_native_roles[role];
+        if (!slots[role]) {
+            if (native.slot || !native.body.empty()) return false;
+            continue;
+        }
+        if (native.slot != slots[role] || native.slot >= CB_MAX ||
+            !native.handler || CallBack_Handlers[native.slot] != native.handler ||
+            native.body.empty()) return false;
+        for (size_t n = 0; n < native.body.size(); ++n)
+            if (phys_readb(native.address + n) != native.body[n]) return false;
+    }
+    return true;
+}
+
 void MOUSE_Unsetup_DOS(void) {
+    mouse_native_roles[0] = {};
+    mouse_native_roles[1] = {};
     if (call_mouse_bd != 0) {
         CALLBACK_DeAllocate(call_mouse_bd);
         call_mouse_bd = 0;
@@ -130,6 +178,7 @@ void MOUSE_Unsetup_DOS(void) {
 }
 
 void MOUSE_Unsetup_BIOS(void) {
+    for (unsigned role = 2; role < 6; ++role) mouse_native_roles[role] = {};
     if (int74_ret_callback != 0) {
         CALLBACK_DeAllocate(int74_ret_callback);
         int74_ret_callback = 0;
@@ -2534,7 +2583,7 @@ void BIOS_PS2Mouse_Startup(Section *sec) {
 
     // Callback for ps2 irq
     call_int74=CALLBACK_Allocate();
-    CALLBACK_Setup(call_int74,&INT74_Handler,CB_IRQ12,"int 74");
+    MouseSetupRole(2,call_int74,&INT74_Handler,CB_IRQ12,"int 74");
     // pseudocode for CB_IRQ12:
     //  sti
     //  push ds
@@ -2553,7 +2602,7 @@ void BIOS_PS2Mouse_Startup(Section *sec) {
     //  retf
 
     int74_ret_callback=CALLBACK_Allocate();
-    CALLBACK_Setup(int74_ret_callback,&INT74_Ret_Handler,CB_IRQ12_RET,"int 74 ret");
+    MouseSetupRole(3,int74_ret_callback,&INT74_Ret_Handler,CB_IRQ12_RET,"int 74 ret");
     // pseudocode for CB_IRQ12_RET:
     //  cli
     //  mov al, 0x20
@@ -2575,13 +2624,13 @@ void BIOS_PS2Mouse_Startup(Section *sec) {
     useps2callback = false; ps2callbackinit = false;
     if (call_ps2 == 0)
         call_ps2 = CALLBACK_Allocate();
-    CALLBACK_Setup(call_ps2,&PS2_Handler,CB_RETF,"ps2 bios callback");
+    MouseSetupRole(4,call_ps2,&PS2_Handler,CB_RETF,"ps2 bios callback");
     ps2_callback=CALLBACK_RealPointer(call_ps2);
 
     // Callback for mouse user routine return
     if (call_uir == 0)
         call_uir = CALLBACK_Allocate();
-    CALLBACK_Setup(call_uir,&UIR_Handler,CB_RETF_CLI,"mouse uir ret");
+    MouseSetupRole(5,call_uir,&UIR_Handler,CB_RETF_CLI,"mouse uir ret");
     uir_callback=CALLBACK_RealPointer(call_uir);
 }
 
@@ -2670,14 +2719,19 @@ void MOUSE_Startup(Section *sec) {
 
     // i33loc=RealMake(CB_SEG+1,(call_int33*CB_SIZE)-0x10);
     i33loc=RealMake(DOS_GetMemory(0x1,"i33loc")-1,0x10);
-    CALLBACK_Setup(call_int33,&INT33_Handler,CB_MOUSE,Real2Phys(i33loc),"Mouse");
+    const auto int33_size = CALLBACK_Setup(call_int33,&INT33_Handler,CB_MOUSE,Real2Phys(i33loc),"Mouse");
 
     // Wasteland needs low(seg(int33))!=0 and low(ofs(int33))!=0
     real_writed(0,0x33<<2,i33loc);
 
     call_mouse_bd=CALLBACK_Allocate();
-    CALLBACK_Setup(call_mouse_bd,&MOUSE_BD_Handler,CB_RETF8,
-        PhysMake(RealSeg(i33loc),RealOff(i33loc)+2),"MouseBD");
+    const auto bd_address = PhysMake(RealSeg(i33loc),RealOff(i33loc)+2);
+    const auto bd_size = CALLBACK_Setup(call_mouse_bd,&MOUSE_BD_Handler,CB_RETF8,
+        bd_address,"MouseBD");
+    // The backdoor overlays bytes inside CB_MOUSE; remember the final combined
+    // constructor image, never its transient pre-overlay contents.
+    MouseRememberRole(0,call_int33,&INT33_Handler,Real2Phys(i33loc),int33_size);
+    MouseRememberRole(1,call_mouse_bd,&MOUSE_BD_Handler,bd_address,bd_size);
     // pseudocode for CB_MOUSE (including the special backdoor entry point):
     //  jump near i33hd
     //  callback MOUSE_BD_Handler
@@ -3012,7 +3066,8 @@ private:
 		else if( mouse.cursorMask == userdefCursorMask ) cursorMask_idx = 0x01;
         else if (mouse.cursorMask == defaultCursorMaskNEC) cursorMask_idx = 0x02;
 
-        if (screenMask_idx > 1 || cursorMask_idx > 2 || !validScalars()) {
+        if (screenMask_idx > 1 || cursorMask_idx > 2 || !validScalars() ||
+            !MouseNativeBindingsValid()) {
             stream.setstate(std::ios::failbit);
             return;
         }
@@ -3103,7 +3158,8 @@ private:
 		READ_POD( &screenMask_idx, screenMask_idx );
 		READ_POD( &cursorMask_idx, cursorMask_idx );
 
-        if (!stream || !validScalars() || screenMask_idx > 1 || cursorMask_idx > 2 ||
+        if (!stream || !validScalars() || !MouseNativeBindingsValid() ||
+            screenMask_idx > 1 || cursorMask_idx > 2 ||
             mouse.events > QUEUE_SIZE || aux_pkt_len > sizeof(aux_pkt) ||
             mouse.ps2_unlock_idx >= UNLOCK_SEQ_INTELLIMOUSE.size()) {
             stream.setstate(std::ios::failbit);

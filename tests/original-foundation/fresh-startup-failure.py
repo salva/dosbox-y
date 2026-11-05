@@ -51,6 +51,34 @@ if os.environ.get('DOSBOX_TEST_MOUSE_FINITE'):
   def bad_mouse_tick(data,encoded=encoded):
    data=bytearray(data);data[prefix+hidden_offset:prefix+hidden_offset+hidden_width]=encoded;return bytes(data)
   cases.append(('Mouse',bad_mouse_tick,False))
+if os.environ.get('DOSBOX_TEST_MOUSE_BINDINGS'):
+ import re
+ commands=[]
+ for role in range(6):
+  commands += ['-ex',f"p 'mouse.cpp'::mouse_native_roles[{role}].address",
+               '-ex',f"p 'mouse.cpp'::mouse_native_roles[{role}].body.size()"]
+ # Constructor values require running to held restored startup first.
+ script=w/'mouse-bindings.gdb'
+ script.write_text('set pagination off\nset confirm off\nset breakpoint pending on\nbreak DEBUG_HoldRestoredStartup\nrun\n'+
+     '\n'.join(commands[n+1] for n in range(0,len(commands),2))+'\nquit\n')
+ # Use the same initialized matching target arguments as the failure runner.
+ binding_config=w/'mouse-bindings.conf'
+ binding_config.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound='+('false' if os.environ.get('DOSBOX_TEST_AUDIO') else 'true')+'\n[midi]\nmididevice=none\n')
+ # Native role addresses are also visible in an ordinary initialized paused
+ # producer; using the archive startup avoids any bootstrap guest execution.
+ env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy')
+ result=subprocess.run(['gdb','-q','-batch','-x',str(script),'--args',os.environ['DOSBOX_TEST_BINARY'],
+     '-conf',str(binding_config),'-restore-state',str(source)],env=env,capture_output=True,text=True,timeout=45)
+ (w/'mouse-bindings.log').write_text(result.stdout+result.stderr)
+ values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
+ assert result.returncode==0 and len(values)==12,(result.stdout,result.stderr)
+ _,mouse_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
+ for address,size in zip(values[::2],values[1::2]):
+  assert address and 0<size<128,(address,size)
+  for n in range(size):
+   def wrong_mouse_body(data,address=address,n=n):
+    data=bytearray(data);data[mouse_descriptor+address+n]^=1;return bytes(data)
+   cases.append(('Memory',wrong_mouse_body,False))
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
  # No unchanged-destination assumption: every attempt is a fresh process.
@@ -353,6 +381,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
            'settlement failed after installation' if corrupt_crc else
            'Invalid saved PIC state' if owner=='Pic' else
            'Invalid saved CPU state' if owner=='CPU' else
+           'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_mouse_body' else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_shell_body' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_INT10_BODY') and mutate is wrong_int10_body else
