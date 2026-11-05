@@ -76,7 +76,12 @@ int main(){
  assert(load(valid));mouse.screenMask=nullptr;std::ostringstream out;static_cast<SerializeGlobalPOD&>(dummy).getBytes(out);assert(out.fail());
 }
 '''
-p=work/'consumer.cpp';p.write_text(source)
-subprocess.run(['c++','-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined',str(p),'-o',str(work/'consumer')],check=True)
-subprocess.run([str(work/'consumer')],check=True)
+# Exercise both pic.h ABI choices rather than silently equating the configured
+# x86 long-double tick representation with double.
+for tick_type in ('double','long double'):
+ p=work/('consumer-'+tick_type.replace(' ','-')+'.cpp')
+ p.write_text(source.replace('using pic_tickindex_t=double;',f'using pic_tickindex_t={tick_type};'))
+ binary=p.with_suffix('')
+ subprocess.run(['c++','-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined',str(p),'-o',str(binary)],check=True)
+ subprocess.run([str(binary)],check=True)
 print('Mouse actual struct/codec: mask roles incl NEC, every truncation, invalid bool representations/nonfinite scalars/roles/events/AUX/unlock bounds passed')
