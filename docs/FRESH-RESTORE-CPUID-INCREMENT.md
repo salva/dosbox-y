@@ -1,5 +1,28 @@
 # Initialized CPUID vendor increment — author affected handoff
 
+## Corrected author fixture evidence (test-only successor)
+
+Production remains exactly2c0c159d; no rebuild or production mutation. Corrected
+fresh-effective-cpuid.py to supported `-lua-driver-code`, enabled explicitly with
+DOSBOX_TEST_LUA_EVALUATOR=1 for Lua builds. A matching-hardware control using the
+same selector/script must exit0 and create the marker; mismatch must exit1 with
+Config_Identity/disposal and no marker. Archive hash checked across both.
+No-Lua runs omit evaluator selection and make no Lua-gate claim. FPU probe did
+NOT share the unknown-switch defect: it previously requested no evaluator at
+all. It now uses the same explicit Lua mode, with false/387 refusal plus each
+matching true control, retaining real SB held/step/Run/root42 positives.
+
+Reproduce each fresh-effective-{cpuid,fpu}.py with exact Lua binary and
+DOSBOX_TEST_LUA_EVALUATOR=1; run each on no-Lua binary without that variable.
+proc-068eb1cc932c exit0: Lua CPUID effective-cpuid-nobaivz5, no-Lua CPUID
+ effective-cpuid-dq0f60lo, Lua FPU effective-fpu-xjmwosi0, no-Lua FPU
+ effective-fpu-ynfl46ko, under card-n-c-k-a work root. All negatives, positive
+controls and meaningful continuation pass; diff-check passes. No broad E2E
+rerun needed for unchanged production; k-b status3 exact production approval
+and full E2E remain applicable. Earlier unknown-selector marker absence is
+not retrospectively promoted. This correction is author evidence for separate
+affected adjudication, not independent self-approval.
+
 Selected from actual CPU initialization and CPU_CPUID leaf-zero consumption,
 not a catalogue sweep. `cpuid string` is truncated to twelve initialized bytes
 and padded with spaces; empty uses GenuineIntel. Requested text equality wrongly
@@ -16,7 +39,10 @@ application entry through real debugger, then default -> explicit GenuineIntel
 and GenuineIntelIgnoredSuffix positives observe/save/host-delay/save, explicitly
 step and Run to actual CPUID check/root42/disposal. AuthenticAMD is a genuine
 different initialized vendor; mismatch rejects Config_Identity, exit1/disposable
-failure, archive unchanged, requested INLINE marker absent. This is not an
+failure, archive unchanged. The original author probe used unknown
+`-lua-driver-inline`: absent marker there was NOT evaluator-gate proof.
+Independent supported-CODE coverage is retained in adjudication below; corrected
+fixture and current author evidence follow it. This is not an
 all-CPU or universal vendor-instruction qualification. Existing cputype guard
 remains; below-486 CPUID support is not generalized.
 

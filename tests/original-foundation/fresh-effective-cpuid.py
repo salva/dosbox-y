@@ -23,9 +23,19 @@ conf=work/'mismatch.conf'
 conf.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\ncpuid string=AuthenticAMD\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n')
 marker=work/'evaluator-ran'
 script="local f=assert(io.open("+repr(str(marker))+",'w')); f:write('ran'); f:close()"
-r=subprocess.run([env['DOSBOX_TEST_BINARY'],'-conf',str(conf),'-restore-state',str(archive),'-lua-driver-inline',script],env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=40)
+args=[env['DOSBOX_TEST_BINARY'],'-conf',str(conf),'-restore-state',str(archive)]
+if os.environ.get('DOSBOX_TEST_LUA_EVALUATOR'):
+ args += ['-lua-driver-code',script]
+r=subprocess.run(args,env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=40)
 (work/'mismatch.log').write_text(r.stdout)
 assert r.returncode==1 and 'Config_Identity: incompatible or malformed' in r.stdout,r.stdout
 assert 'disposable target cannot continue' in r.stdout and not marker.exists(),r.stdout
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
-print('default/explicit/truncated vendor: held/step/CPUID/root42 PASS; differing initialized vendor refused/disposed; no evaluator; source unchanged',flush=True)
+if os.environ.get('DOSBOX_TEST_LUA_EVALUATOR'):
+ # Matching hardware proves this exact supported evaluator actually runs.
+ conf.write_text(conf.read_text().replace('AuthenticAMD','GenuineIntel'))
+ control=subprocess.run(args,env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=40)
+ (work/'evaluator-control.log').write_text(control.stdout)
+ assert control.returncode==0 and marker.read_text()=='ran',control.stdout
+ assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
+print('default/explicit/truncated vendor: held/step/CPUID/root42 PASS; differing initialized vendor refused/disposed; source unchanged; evaluator gate tested only with DOSBOX_TEST_LUA_EVALUATOR=1',flush=True)
