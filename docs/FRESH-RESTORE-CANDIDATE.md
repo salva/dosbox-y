@@ -31,6 +31,12 @@ all3 builds and ordinary no-CD stopped-save/fresh-root consumers pass. **Mounted
 CD positive restoration and lazy buffer/header reconstruction remain unqualified**;
 this is not a claim that configured CD inventory alone is sufficient.
 
+Mounted CD load now propagates failed native StopAudio/PlayAudioMSF results
+through stream failure, so an unsuccessful native reconstruction cannot be
+reported as a successful install. `mscdex-resource-consumption.py` consumes the
+actual loader's stopped/playing/paused success and failed-resource branches
+with reduced UBSan doubles; it is not a mounted-CD end-to-end witness.
+
 ## Current bounded author receipt
 
 Combined production vertical committed as
