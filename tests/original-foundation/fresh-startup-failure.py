@@ -25,6 +25,11 @@ if os.environ.get('DOSBOX_TEST_DOS_CALLBACKS'):
  values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
  assert result.returncode==0 and len(values)==18,(result.stdout,result.stderr)
  _,memory_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
+ # XMS also writes the DOS CP/M far-jump mirror in physical HMA.
+ for n in range(5):
+  def wrong_hma_cpm(data,n=n):
+   data=bytearray(data);data[memory_descriptor+0x1000c0+n]^=1;return bytes(data)
+  cases.append(('Memory',wrong_hma_cpm,False))
  for address,size in zip(values[::2],values[1::2]):
   assert address and 0<size<128,(address,size)
   for n in range(size):
@@ -446,7 +451,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
            'Invalid saved PIC state' if owner=='Pic' else
            'Invalid saved CPU state' if owner=='CPU' else
            'failed during installation' if owner=='Dos' else
-           'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_dos_callback' else
+           'failed during installation' if owner=='Memory' and mutate.__name__ in ('wrong_dos_callback','wrong_hma_cpm') else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_mouse_body' else
            'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_shell_body' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else

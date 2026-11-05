@@ -4204,6 +4204,8 @@ private:
         PhysPt address = 0;
         std::vector<uint8_t> body;
     } native_callback[9];
+    // XMS writes this second native entry after DOS construction.
+    std::vector<uint8_t> native_hma_cpm_body;
     void InstallCallback(unsigned role, CallBack_Handler handler, Bitu type,
                          const char *description) {
         const auto size = callback[role].Install(handler, type, description);
@@ -4232,6 +4234,8 @@ public:
             for (size_t n = 0; n < native.body.size(); ++n)
                 if (mem_readb(native.address + n) != native.body[n]) return false;
         }
+        for (size_t n = 0; n < native_hma_cpm_body.size(); ++n)
+            if (phys_readb(0x1000c0u + n) != native_hma_cpm_body[n]) return false;
         return true;
     }
 	void DOS_Write_HMA_CPM_jmp(void) {
@@ -4248,6 +4252,10 @@ public:
 
 			mem_writeb(0x1000C0,(uint8_t)0xea);		// jmpf
 			mem_unalignedwrited(0x1000C0+1,callback[8].Get_RealPointer());
+
+            native_hma_cpm_body.resize(5);
+            for (size_t n = 0; n < native_hma_cpm_body.size(); ++n)
+                native_hma_cpm_body[n] = phys_readb(0x1000c0u + n);
 
 			if (!was_a20) XMS_EnableA20(false);
 		}
