@@ -53,10 +53,21 @@ int main(){
   auto bad=valid;bad[mouse_offset+offset]=char(2);assert(!load(bad));
  }
  for(size_t offset:{size_t(4),size_t(5)}){auto bad=valid;bad[offset]=char(2);assert(!load(bad));}
- for(size_t offset:{offsetof(decltype(mouse),x),offsetof(decltype(mouse),senv_x),offsetof(decltype(mouse),pixelPerMickey_y)}) {
-  for(float value:{std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}) {
+ const size_t float_fields[]={offsetof(decltype(mouse),add_x),offsetof(decltype(mouse),add_y),
+  offsetof(decltype(mouse),mickey_accum_x),offsetof(decltype(mouse),mickey_accum_y),
+  offsetof(decltype(mouse),x),offsetof(decltype(mouse),y),
+  offsetof(decltype(mouse),ps2x),offsetof(decltype(mouse),ps2y),
+  offsetof(decltype(mouse),mickeysPerPixel_x),offsetof(decltype(mouse),mickeysPerPixel_y),
+  offsetof(decltype(mouse),pixelPerMickey_x),offsetof(decltype(mouse),pixelPerMickey_y),
+  offsetof(decltype(mouse),senv_x),offsetof(decltype(mouse),senv_y)};
+ for(size_t offset:float_fields) {
+  for(float value:{std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}) {
    auto bad=valid;memcpy(&bad[mouse_offset+offset],&value,sizeof(value));assert(!load(bad));
   }
+ }
+ for(pic_tickindex_t value:{std::numeric_limits<pic_tickindex_t>::infinity(),
+     -std::numeric_limits<pic_tickindex_t>::infinity(),std::numeric_limits<pic_tickindex_t>::quiet_NaN()}) {
+  auto bad=valid;memcpy(&bad[mouse_offset+offsetof(decltype(mouse),hidden_at)],&value,sizeof(value));assert(!load(bad));
  }
  for(unsigned which=0;which<2;++which){auto bad=valid;bad[bad.size()-1-which]=char(255);assert(!load(bad));assert(!mouse.screenMask && !mouse.cursorMask);}
  assert(load(valid));mouse.events=QUEUE_SIZE+1;auto bad=save();assert(!load(bad));
