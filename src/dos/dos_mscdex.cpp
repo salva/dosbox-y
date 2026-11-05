@@ -332,6 +332,8 @@ public:
 	uint16_t				defaultBufSeg = 0;
 #if !defined(OSFREE)
 	uint16_t		rootDriverHeaderSeg = 0;
+    uint16_t nativeStrategy = 0, nativeInterrupt = 0;
+    bool NativeCallbacksIntact() const;
 #endif
 
 	char*			name = NULL;
@@ -570,6 +572,8 @@ int CMscdex::AddDrive(uint16_t _drive, char* physicalPath, uint8_t& subUnit)
 		devHeader.SetInterrupt(off);
 		
 		rootDriverHeaderSeg = seg;
+        nativeStrategy = call_strategy;
+        nativeInterrupt = call_interrupt;
 	} else if (GetNumDrives() == 0) {
 		DOS_DeviceHeader devHeader(PhysMake(rootDriverHeaderSeg,0));
 		uint16_t off = sizeof(DOS_DeviceHeader::sDeviceHeader);
@@ -1785,8 +1789,32 @@ void MSCDEX_Init() {
 	AddVMEventFunction(VM_EVENT_DOS_EXIT_BEGIN,AddVMEventFunctionFuncPair(MSCDEX_DOS_ShutDown));
 }
 
+#if !defined(OSFREE)
+bool CMscdex::NativeCallbacksIntact() const {
+    if (!rootDriverHeaderSeg) return !nativeStrategy && !nativeInterrupt;
+    const uint16_t slots[] = {nativeStrategy, nativeInterrupt};
+    const CallBack_Handler handlers[] = {MSCDEX_Strategy_Handler, MSCDEX_Interrupt_Handler};
+    const PhysPt base = PhysMake(rootDriverHeaderSeg, sizeof(DOS_DeviceHeader::sDeviceHeader));
+    for (unsigned role = 0; role < 2; ++role) {
+        const auto slot = slots[role];
+        const PhysPt address = base + role * 5;
+        if (!slot || slot >= CB_MAX || CallBack_Handlers[slot] != handlers[role] ||
+            mem_readb(address) != 0xfe || mem_readb(address + 1) != 0x38 ||
+            mem_readw(address + 2) != slot || mem_readb(address + 4) != 0xcb)
+            return false;
+    }
+    return true;
+}
+#endif
+
 void CMscdex::SaveState( std::ostream& stream )
 {
+#if !defined(OSFREE)
+    if (!NativeCallbacksIntact()) {
+        stream.setstate(std::ios::failbit);
+        return;
+    }
+#endif
 	// - pure data
 	WRITE_POD( &defaultBufSeg, defaultBufSeg );
 #if !defined(OSFREE)
@@ -1806,7 +1834,7 @@ void CMscdex::LoadState( std::istream& stream )
     // These are native service allocations, not relocatable archive pointers.
     if (saved_buffer != defaultBufSeg
 #if !defined(OSFREE)
-        || saved_header != rootDriverHeaderSeg
+        || saved_header != rootDriverHeaderSeg || !NativeCallbacksIntact()
 #endif
     ) stream.setstate(std::ios::failbit);
 }

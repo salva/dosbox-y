@@ -19,6 +19,18 @@ rejects before install, exit1, unchanged source. This is one resolved owner,
 Metadata meaning changed, so preceding archives' Config_Identity does not
 qualify this increment; no migration or override is provided.
 
+## MSCDEX constructor callback increment (2026-11-05)
+
+The original lazy device-header constructor now retains its strategy/interrupt
+slots; capture and post-Memory load check both handlers and their ten generated
+controlled bytes. No new wire metadata or raw host addresses are introduced;
+mutable header links/drive letters and guest IVT hooks are not compared.
+`tests/original-foundation/mscdex-callback-consumption.py` consumes the actual
+check with reduced UBSan doubles (absent/slot/handler/every byte). Configured
+all3 builds and ordinary no-CD stopped-save/fresh-root consumers pass. **Mounted
+CD positive restoration and lazy buffer/header reconstruction remain unqualified**;
+this is not a claim that configured CD inventory alone is sufficient.
+
 ## Current bounded author receipt
 
 Combined production vertical committed as
