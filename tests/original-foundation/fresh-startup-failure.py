@@ -17,16 +17,17 @@ if os.environ.get('DOSBOX_TEST_DOS_CALLBACKS'):
  config.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound='+('false' if os.environ.get('DOSBOX_TEST_AUDIO') else 'true')+'\n[midi]\nmididevice=none\n')
  script=w/'dos-callbacks.gdb'
  script.write_text('set pagination off\nset confirm off\nbreak DEBUG_HoldRestoredStartup\nrun\n'+''.join(
-     f"p 'dos.cpp'::test->native_callback[{role}].address\np 'dos.cpp'::test->native_callback[{role}].body.size()\n" for role in range(9))+'quit\n')
+     f"p 'dos.cpp'::test->native_callback[{role}].address\np 'dos.cpp'::test->native_callback[{role}].body.size()\n" for role in range(9))+"p 'dos.cpp'::test->native_hma_cpm_body.size()\nquit\n")
  result=subprocess.run(['gdb','-q','-batch','-x',str(script),'--args',os.environ['DOSBOX_TEST_BINARY'],
      '-conf',str(config),'-restore-state',str(source)],capture_output=True,text=True,timeout=45,
      env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'))
  (w/'dos-callbacks.log').write_text(result.stdout+result.stderr)
  values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
- assert result.returncode==0 and len(values)==18,(result.stdout,result.stderr)
+ assert result.returncode==0 and len(values)==19 and values[-1] in (0,5),(result.stdout,result.stderr)
+ hma_size=values.pop()
  _,memory_descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
  # XMS also writes the DOS CP/M far-jump mirror in physical HMA.
- for n in range(5):
+ for n in range(hma_size):
   def wrong_hma_cpm(data,n=n):
    data=bytearray(data);data[memory_descriptor+0x1000c0+n]^=1;return bytes(data)
   cases.append(('Memory',wrong_hma_cpm,False))
