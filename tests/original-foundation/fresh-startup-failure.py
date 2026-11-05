@@ -116,6 +116,18 @@ if os.environ.get('DOSBOX_TEST_BINDINGS'):
   return bytes([data[0]^1])+data[1:]
  for name in ('BIOS layout','Shell bindings','XMS','EMS'):
   cases.append((name,wrong_binding,False))
+ if os.environ.get('DOSBOX_TEST_SHELL_BINDING_FIELDS'):
+  # Each role has independent slot/type/location/span identity. Mutate every
+  # uint32 field with valid ZIP CRC; a count-only check would miss most cases.
+  with zipfile.ZipFile(source) as z:
+   shell_binding=z.read('Shell bindings')
+  assert len(shell_binding)==13*4
+  for offset in range(0,len(shell_binding),4):
+   def wrong_shell_field(data,offset=offset):
+    data=bytearray(data);data[offset]^=1;return bytes(data)
+   cases.append(('Shell bindings',wrong_shell_field,False))
+  for length in range(len(shell_binding)):
+   cases.append(('Shell bindings',lambda data,length=length:data[:length],False))
  # The metadata still matches. Corrupt one owner-controlled trampoline byte
  # inside the saved RAM; Shell bindings must catch this after Memory installs.
  with zipfile.ZipFile(source) as z:
