@@ -32,9 +32,11 @@
 #include <unistd.h>
 
 #include <stdio.h>
+#include <limits.h>
 #include <algorithm>
-#include <string>
 #include <vector>
+#include <string>
+#include <sstream>
 #include <atomic>
 #include <cctype>
 #include <iomanip>
@@ -128,12 +130,20 @@ struct socket_t{
 		sock.uds= lhs;
 		return *this;
 	}
+	operator int &() { return sock.uds; }
 	sa_family_t &sun_family= address.domain.sun_family;
 	char ( &sun_path )[ sizeof( address.domain.sun_path ) ]= address.domain.sun_path;
 	sockaddr_un &fd= address.domain;
 	#endif
 };
 // }}} 
+
+static 	bool	isInt( std::string& tSockProp ) {/* {{{ */
+		for( char c:tSockProp )
+			if( !std::isdigit( c ) )
+				return false;
+		return true;
+	}/* }}} */
 
 class Monitor { /* {{{ */
 	// Parser and programs constructs {{{
@@ -282,9 +292,9 @@ static int CB_ListenTCP( void *tData ) {/* {{{ */
 
 	bool updateUDSServer() {/* {{{ */
 		#ifdef LINUX
-		int bytes_received= 0;
 		while ( _isRunning ) {
 			_client= accept( _server,nullptr,nullptr );
+			int bytes_received= 0;
 			char buffer[ INPUT_LENGTH ];
 
 			messageClient( _client,std::string( "DOSBox-X " )+VERSION+" monitor - type \'help\' for a list of commands\n" );
@@ -295,25 +305,21 @@ static int CB_ListenTCP( void *tData ) {/* {{{ */
 			while ( ( bytes_received= read( _client.sock,buffer,INPUT_LENGTH ) ) >0 ) {
 				if( bytes_received && '\0' !=buffer[ bytes_received-1 ] )
 					buffer[ bytes_received-1 ] = '\0';
-
-				prompt( _client.as_int() );		
 				
 				CommandLine cli;
 				cmd_tokens_t user_input= cli.processCommandLine( buffer );
+				if( !user_input.empty() ) {
 
-				if( user_input.empty() ) continue;
+					auto processCommand= std::find_if( _commands->begin(),_commands->end(),
+						[ & ]( const CommandExec& item ){	
+								return item.command == user_input.at( 0 );});
 
-				auto processCommand= std::find_if( _commands->begin(),_commands->end(),
-					[ & ]( const CommandExec& item ){	
-							return item.command == user_input.at( 0 );});
-
-				if( processCommand !=_commands->end() ){
-					( _run.*( processCommand->exec ) )( *ptr_monitor,user_input );
-
-					prompt( _client.as_int() );		
+					if( processCommand !=_commands->end() ){
+						( _run.*( processCommand->exec ) )( *ptr_monitor,user_input );
+					}
 				}
+				prompt( _client.as_int() );
 			}
-
 			if( bytes_received ==-1 ) {
 				return EXIT_FAILURE;
 			}
@@ -346,10 +352,9 @@ static int CB_ListenTCP( void *tData ) {/* {{{ */
 			prompt( _client.as_tcp() );
 
 			char buffer[ INPUT_LENGTH ];
-			memset(buffer,'\0',sizeof( char )*INPUT_LENGTH);
+			memset( buffer,'\0',sizeof( char )*INPUT_LENGTH );
 
 			int bytes_received= SDLNet_TCP_Recv( _client,buffer,INPUT_LENGTH );	
-
 			if( bytes_received && '\0' !=buffer[ bytes_received-1 ] )
 				buffer[ bytes_received-1 ] = '\0';
 			
@@ -358,7 +363,6 @@ static int CB_ListenTCP( void *tData ) {/* {{{ */
 				LOG_MSG( "MONITOR client disconnected unexpectedly or connection lost.\n" );
 			}
 			else {
-
 				CommandLine  cli;
 				cmd_tokens_t user_input= cli.processCommandLine( buffer );
 
@@ -442,25 +446,31 @@ static int CB_ListenTCP( void *tData ) {/* {{{ */
 		SDLNet_TCP_Send( tClient,tMessage.c_str(),tMessage.size() );
 	}/* }}} */
 
-	static	Monitor& OpenMonitor( std::string tLocation="" ) {/* {{{ */
+	static	int	StartMonitor( std::string tLocation= "" ) {/* {{{ */
+		if( tLocation.empty() || !tLocation.compare( "off" ) ) return EXIT_FAILURE;
+
+		std::stringstream locstream( tLocation );
+		int port_no= -1;
+		if( locstream>> port_no && port_no >USHRT_MAX ) return EXIT_FAILURE;
+
+		OpenMonitor( tLocation );
+		return EXIT_SUCCESS;
+	}/* }}} */
+
+	protected:
+
+	static	Monitor&	OpenMonitor( std::string tLocation= "" ) {/* {{{ */
 		static Monitor m;
 
 		if( false ==m._isRunning ) {
-			bool isPort= true;
-			if( tLocation.compare( "on" ) ) tLocation= "4444"; /* If the monitor is not running we'll give it a default state on localhost. */
-			else {
-				for( char c:tLocation )
-					if( !std::isdigit( c ) ) {
-						isPort=false;
-						break;
-					}
-			}	
-			int ( *run )( void* );
-
 			if( m._pThread ) m.onServerClose();
+			if( !tLocation.compare( "on" ) ) tLocation= "4444"; /* If the monitor is not running we'll give it a default state on localhost. */
+
+			bool isPort= isInt( tLocation );
+			int ( *run )( void* )= nullptr;
 
 			#ifdef WIN32
-			if( false ==isPort &&  EXIT_SUCCESS ==m.startServer( 4444  ) )
+			if( EXIT_SUCCESS ==m.startServer( std::stoi( tLocation ) ) )
 				run=CB_ListenTCP;
 			#else
 			if( isPort && ( EXIT_SUCCESS ==m.startServer( std::stoi( tLocation ) ) ) ) {
@@ -476,7 +486,10 @@ static int CB_ListenTCP( void *tData ) {/* {{{ */
 			m._pThread= SDL_CreateThread( run,"dosbox-x monitor",&m );
 			SDL_DetachThread( m._pThread );
 			#else
-			m._pThread= SDL_CreateThread( run,(void*)&m );
+			if( nullptr !=run )
+				m._pThread= SDL_CreateThread( run,(void*)&m );
+			else
+				exit(1);
 			#endif	
 		}
 
