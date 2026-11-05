@@ -110,6 +110,11 @@ cases = (
 env = {key: value for key, value in os.environ.items()
        if not key.startswith('DOSBOX_TEST_')}
 env['DOSBOX_TEST_AUDIO'] = '1'
+# Optional timing qualification changes the producer and every matching
+# consumer, never just the saved archive's metadata or the continuation oracle.
+for key in ('DOSBOX_TEST_AUTO_CYCLES', 'DOSBOX_TEST_HELD_DELAY'):
+    if key in os.environ:
+        env[key] = os.environ[key]
 # Consumer-only variation must survive the fixture-selection environment reset.
 consumer_policy = ({'DOSBOX_TEST_CAPTURE_POLICY': '1'}
                    if os.environ.get('DOSBOX_TEST_CAPTURE_POLICY') else {})
