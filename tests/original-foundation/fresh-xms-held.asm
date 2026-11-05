@@ -1,6 +1,8 @@
 ; Save with an allocated/locked XMS handle and meaningful extended-memory data.
 ; The consuming fresh process must keep the lock, read the data, then dispose
 ; the allocation via the reconstructed service. root99 means failed assertion.
+; GUEST_HOOK installs and executes a legitimate far-jump hook in the five-byte
+; XMS prefix. On fresh continuation it must count all three native calls.
 bits 16
 org 100h
     nop
@@ -8,6 +10,13 @@ org 100h
     int 2fh
     mov [entry],bx
     mov [entry+2],es
+%ifdef GUEST_HOOK
+    ; Replace only the guest-owned five-byte prefix; chain to dispatch at +5.
+    mov byte [es:bx],0eah
+    mov word [es:bx+1],hook
+    mov ax,cs
+    mov [es:bx+3],ax
+%endif
     mov ah,9
     mov dx,16
     call far [entry]
@@ -33,6 +42,9 @@ org 100h
     jmp checkpoint
  times 100h-($-$$) db 90h
 checkpoint: ; IP0200
+%ifdef GUEST_HOOK
+    mov word [hook_calls],0
+%endif
     mov ax,cs
     mov [destination_segment],ax
     mov si,read_move
@@ -52,6 +64,10 @@ checkpoint: ; IP0200
     call far [entry]
     cmp ax,1
     jne failed
+%ifdef GUEST_HOOK
+    cmp word [hook_calls],3 ; read, unlock, free through the restored hook
+    jne failed
+%endif
     mov ax,4c2ah
     int 21h
 failed:
@@ -75,3 +91,15 @@ source_handle: dw 0
  dw 0
  dw readback
 destination_segment: dw 0
+%ifdef GUEST_HOOK
+hook:
+    inc word [cs:hook_calls]
+    push word [cs:entry+2]
+    push word [cs:entry]
+    push bp
+    mov bp,sp
+    add word [ss:bp+2],5
+    pop bp
+    retf
+hook_calls dw 0
+%endif

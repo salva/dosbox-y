@@ -6,6 +6,25 @@ reviewed packet is `/work/dosbox-y/docs/PLANS/FRESH-TARGET-RESTORE-DESIGN.md`,
 SHA256 `7204d48e1ab8212c7fb7cb19072786f0bd7022eda0db18122e0f50ab49be23ba`.
 Production vertical: `448596413d47407283564b50684d3876fa8b7dc9`.
 
+## Executed guest hook and physical monitor consumers
+
+`fresh-xms-held.asm` with `-DGUEST_HOOK` installs a far jump in the guest-owned
+five-byte XMS prefix, chains to the native dispatch at +5, and retains an
+allocated/locked XMS handle and A55A payload. After fresh restore, observation and
+two saves remain held; explicit continuation must execute the restored hook for
+read/unlock/free (exactly three calls), validate the payload and end root42.
+Lua/no-Agent/no-Lua consumers passed on production `0af9c8efe`. This is execution
+of one legitimate hook, not generic hook/provider compatibility. The matrix now
+includes this case (27 cases); the previously completed 26×3 matrix does not
+include it.
+
+`fresh-startup-failure.py` with `DOSBOX_TEST_EMS_MONITOR=1` obtains the fresh
+physical VCPI allocation from the configured binary, then valid-CRC corrupts
+each of its six controlled IRETD-body bytes above 1MiB with saved A20 disabled.
+All three configured consumers reject/dispose without evaluator, preserve source
+and attempt archives, and also retain the script's core/late-owner/CRC coverage.
+The actual-codec reduced test remains separate from this integrated witness.
+
 ## Contract and use
 
 Preconfigure matching emulated hardware and mounts, then launch:
