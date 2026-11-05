@@ -42,3 +42,39 @@ E2E preservation. Previous k-b status2 independently approves finite aa1bbbee
 FPU increment only (verified reused builds, not rebuild), not this delta.
 Broader native extents, other effective hardware, no-debug, close races, ingress
 and §7 reconciliation remain unfinished; no design/provider/Run gate added.
+
+## Independent affected adjudication (card-n-c-k-b)
+
+APPROVE bounded production 2c0c159d32cb1be094a62bca97bd8b00c237e97d,
+tree a8dcc174c072a789d390e7b4053fac1dbbb4481a; not broader goal acceptance.
+Reused and independently hashed the exact author Lua/no-Lua binaries above;
+config.h/config.status/Makefile hashes remain those independently recorded for
+aa1b in test-card accepted status v2. No independent rebuild claimed.
+
+CPU initialization clears the sentinel, copies at most12 bytes and space-pads;
+leaf-zero returns those bytes in EBX/EDX/ECX or the GenuineIntel default.
+CPU_StateCpuidVendor matches that consumer, including default/truncation/padding.
+Only requested cpuid-string contribution changes; FPU and other guards remain.
+
+Independent proc-1052eafac0e8 exit0 ran focused CPUID on both exact profiles,
+focused FPU on Lua, then complete four-workload Lua E2E. Test-card evidence:
+effective-cpuid-mirdzu7d, effective-cpuid-3a27_gex, effective-fpu-bz1pqesd,
+e2e-milestone-07glcwci. Native root42 and FILE/INLINE42 plus lexical/GC context
+revocation independently checked in proc-000ee072c69e. Actual guest fixture
+checks all three vendor registers, not just archive metadata.
+
+Nonblocking test-evidence finding: fresh-effective-cpuid.py requests the unknown
+switch -lua-driver-inline; supported inline selection is -lua-driver-code
+(include/lua_driver_options.h). Its absent marker alone does not prove a real
+evaluator was requested. Original owner should correct that fixture argument.
+Assessor did not repair it: independent proc-636556db1d58 used the supported
+CODE selector and established AuthenticAMD rejection/exit1/no evaluator/source
+unchanged. Same command verified old-aa1 archive rejection without migration,
+and varied positive control to another suffix, seven-second hold, live-load
+refusal and zero exit-prefix steps; actual CPUID/root42 passed. Evidence under
+test-card cpuid-independent-bdif95qc; full process captures in its work root.
+
+No implementation defect found or repaired. Prior804/aa1 runtime evidence
+retains exact-input applicability, not promoted wholesale. All newly owned
+processes settled; historical unknown resources untouched. Wider native extents,
+effective hardware, no-debug, close races and ingress/docs remain owner work.
