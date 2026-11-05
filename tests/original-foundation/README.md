@@ -45,7 +45,10 @@ full native extent completeness. `fresh-startup.py` accepts
 vectors as well as shell vectors; this is payload preservation with held RAM
 comparison and speaker continuation, not execution of the injected hook bodies.
 Metadata mismatch is not malformed-owner
-coverage. `progressive-install.py` replaces all-owner-before-effects assertions:
+coverage. `DOSBOX_TEST_MOUSE_FINITE=1` derives actual configured mouse field
+offsets through GDB and repacks ±infinity/NaN for all 14 consumed float fields;
+it does not assume a packed mouse struct or double-width PIC time.
+`progressive-install.py` replaces all-owner-before-effects assertions:
 owner failure is fatal even after earlier installation, never rollback success.
 `live-load-refusal.py` compiles the actual direct slot/file wrappers with no
 archive/guest dependency and checks unconditional fresh-launch refusal (reduced

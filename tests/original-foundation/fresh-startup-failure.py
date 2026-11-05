@@ -18,6 +18,25 @@ if os.environ.get('DOSBOX_TEST_MOUSE_SCALARS'):
   def bad_mouse_bool(data,offset=offset):
    data=bytearray(data);data[offset]=2;return bytes(data)
   cases.append(('Mouse',bad_mouse_bool,False))
+if os.environ.get('DOSBOX_TEST_MOUSE_FINITE'):
+ # Consume valid-CRC malformed fields in the configured real owner. Derive
+ # ABI offsets/widths from that binary, not the reduced fixture's guessed POD.
+ import re
+ fields=('add_x','add_y','mickey_accum_x','mickey_accum_y','x','y','ps2x','ps2y',
+         'mickeysPerPixel_x','mickeysPerPixel_y','pixelPerMickey_x','pixelPerMickey_y','senv_x','senv_y')
+ expressions=["sizeof('mouse.cpp'::ps2cbseg)*2+sizeof('mouse.cpp'::useps2callback)*2+sizeof('mouse.cpp'::aux_pkt)+sizeof('mouse.cpp'::aux_pkt_len)+sizeof('mouse.cpp'::userdefScreenMask)+sizeof('mouse.cpp'::userdefCursorMask)"]
+ expressions += [f"(char*)&'mouse.cpp'::mouse.{field}-(char*)&'mouse.cpp'::mouse" for field in fields]
+ result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
+     *[arg for expression in expressions for arg in ('-ex','p '+expression)]],
+     capture_output=True,text=True,check=True)
+ values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
+ assert len(values)==len(fields)+1,result.stdout
+ prefix,*offsets=values
+ for offset in offsets:
+  for value in (float('inf'),float('-inf'),float('nan')):
+   def bad_mouse_finite(data,offset=offset,value=value):
+    data=bytearray(data);struct.pack_into('<f',data,prefix+offset,value);return bytes(data)
+   cases.append(('Mouse',bad_mouse_finite,False))
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
  # No unchanged-destination assumption: every attempt is a fresh process.
