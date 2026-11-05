@@ -32,6 +32,7 @@
 #include "bios.h"
 #include "cpu.h"
 #include "control.h"
+#include <climits>
 
 #include <algorithm>
 
@@ -1074,6 +1075,9 @@ public:
             registerPOD(handle.locked);
             registerPOD(handle.free);
         }
+        registerPOD(xms_hma_application_has_control);
+        registerPOD(xms_global_enable);
+        registerPOD(xms_local_enable_count);
     }
 
 private:
@@ -1118,7 +1122,14 @@ private:
         binding(nullptr, &stream);
         if (!stream) return;
         SerializeGlobalPOD::setBytes(stream);
-        if (!stream || !XMS_Active()) return;
+        if (!stream) return;
+        if (xms_local_enable_count < 0 || xms_local_enable_count == INT_MAX ||
+            (xms_hma_application_has_control &&
+             (!XMS_Active() || !xms_hma_exists || DOS_IS_IN_HMA()))) {
+            stream.setstate(std::ios::failbit);
+            return;
+        }
+        if (!XMS_Active()) return;
         // Memory's owning consumer has already checked the handle chains.
         // Here check what XMS arithmetic and release consumers require. Zero
         // sized allocations may name the next free page without owning it.

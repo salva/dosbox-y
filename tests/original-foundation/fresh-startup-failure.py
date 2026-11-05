@@ -11,6 +11,22 @@ cases=[('Mouse',lambda b:b[:-1],False),
        ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
        ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
+if os.environ.get('DOSBOX_TEST_XMS_CONTROL'):
+ # Registered handles are followed by HMA ownership/global A20/count.
+ import re,struct
+ result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
+  '-ex','p 24+sizeof(xms_handles)/sizeof(xms_handles[0])*(sizeof(xms_handles[0].size)+sizeof(xms_handles[0].mem)+sizeof(xms_handles[0].locked)+sizeof(xms_handles[0].free))'],capture_output=True,text=True,check=True)
+ control_offset=int(re.findall(r'\$\d+ = (\d+)',result.stdout)[0])
+ with zipfile.ZipFile(source) as z:assert len(z.read('XMS'))==control_offset+6
+ for field in (0,1):
+  def bad_xms_bool(data,field=field):
+   data=bytearray(data);data[control_offset+field]=2;return bytes(data)
+  cases.append(('XMS',bad_xms_bool,False))
+ for count in (-1,2147483647):
+  def bad_xms_count(data,count=count):
+   data=bytearray(data);struct.pack_into('<i',data,control_offset+2,count);return bytes(data)
+  cases.append(('XMS',bad_xms_count,False))
+ for n in range(6):cases.append(('XMS',lambda data,n=n:data[:control_offset+n],False))
 if os.environ.get('DOSBOX_TEST_HMA_CURSOR'):
  # Offset is computed from configured ABI fields used by the original owner,
  # not found by matching cursor bytes in RAM or guessing sizeof(DOS_Block).

@@ -17,6 +17,7 @@ source=r'''
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <climits>
 using Bitu=uintptr_t;using MemHandle=int32_t;using PhysPt=uint32_t;
 constexpr uint32_t CB_MAX=128,CB_HOOKABLE=9;
 using Handler=Bitu(*)(void);Bitu XMS_Handler(){return 0;}
@@ -34,6 +35,8 @@ class SaveState {public:struct Component {virtual ~Component()=default;virtual v
 '''+pod+r'''
 struct XMS_Block {Bitu size=0;MemHandle mem=-1;uint8_t locked=0;bool free=true;};
 XMS_Block xms_handles[256];unsigned int XMS_HANDLES=50;uint32_t xms_callback=0xc0000010;
+bool xms_hma_application_has_control=false,xms_global_enable=false,xms_hma_exists=true;
+int xms_local_enable_count=0;bool DOS_IS_IN_HMA(){return false;}
 bool active=true;bool XMS_Active(){return active;}Bitu MEM_TotalPages(){return 4096;}
 bool fragmented=false;
 MemHandle MEM_NextHandle(MemHandle h){assert(h>0 && h<4096);return h==256?(fragmented?300:257):-1;}
@@ -54,7 +57,16 @@ int main(){
  memset(ram+Real2Phys(xms_callback),0xcc,5);assert(load(bytes));
  for(size_t i=0;i<bytes.size();++i)assert(!load(bytes.substr(0,i)));
  for(size_t i=0;i<24;++i){auto b=bytes;b[i]^=1;assert(!load(b));}
- for(size_t i=24+sizeof(Bitu)+sizeof(MemHandle)+1;i<bytes.size();i+=sizeof(Bitu)+sizeof(MemHandle)+2){auto b=bytes;b[i]=2;assert(!load(b));}
+ for(size_t i=24+sizeof(Bitu)+sizeof(MemHandle)+1;i<24+50*(sizeof(Bitu)+sizeof(MemHandle)+2);i+=sizeof(Bitu)+sizeof(MemHandle)+2){auto b=bytes;b[i]=2;assert(!load(b));}
+ assert(load(bytes));
+ xms_hma_application_has_control=true;xms_global_enable=true;xms_local_enable_count=2;
+ auto held=save();xms_hma_application_has_control=false;xms_global_enable=false;xms_local_enable_count=0;
+ assert(load(held));assert(xms_hma_application_has_control && xms_global_enable && xms_local_enable_count==2);
+ auto malformed=held;malformed[held.size()-6]=2;assert(!load(malformed));
+ malformed=held;malformed[held.size()-5]=2;assert(!load(malformed));
+ xms_hma_exists=false;assert(!load(held));xms_hma_exists=true;
+ assert(load(bytes));xms_local_enable_count=-1;assert(!load(save()));
+ assert(load(bytes));xms_local_enable_count=INT_MAX;assert(!load(save()));
  assert(load(bytes));xms_handles[1].size=9;assert(!load(save()));
  assert(load(bytes));xms_handles[1].mem=-1;assert(!load(save()));
  assert(load(bytes));xms_handles[1].size=UINT32_MAX;assert(!load(save()));

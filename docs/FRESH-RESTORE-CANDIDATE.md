@@ -6,6 +6,20 @@ SHA256 `7204d48e1ab8212c7fb7cb19072786f0bd7022eda0db18122e0f50ab49be23ba`.
 Historical r2/Astra remain applicable except the design's expressly superseded
 used-target preservation/global preparation/live reload/replay prescriptions.
 
+## XMS service accounting increment (2026-11-05)
+
+Revision **9 / original-owner-engine-9** additionally captures the XMS owner's
+HMA application-reservation flag and global/local A20 accounting. RAM's A20 gate
+alone cannot represent whether subsequent XMS disables must retain or release
+it. The original XMS codec consumes checked booleans and rejects negative or
+increment-overflow local counts and unavailable/conflicting HMA ownership. It
+does not call a guest service or re-toggle A20 during install. Revision8 and
+earlier archives are incompatible, not automatically migrated.
+`fresh-xms-a20-held.asm` holds global plus two local enables at capture, then
+requires the gate stay enabled until the last corresponding explicit disable.
+The configured Lua/no-Agent/no-Lua consumers and actual codec reduced UBSan
+probe exercise this native accounting, not just an initialized enabled gate.
+
 ## DOS HMA native state increment (2026-11-05)
 
 The original XMS-written DOS CP/M mirror at physical `0x1000c0` now retains
