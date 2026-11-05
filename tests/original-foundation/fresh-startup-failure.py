@@ -208,6 +208,14 @@ if os.environ.get('DOSBOX_TEST_DOS_TABLES'):
  # fail after earlier DOS/file/memory owners have already been consumed.
  for n in range(offset,len(data)):
   cases.append(('Dos',lambda data,n=n:data[:n],False))
+if os.environ.get('DOSBOX_TEST_MIXER_TRUNCATION'):
+ # Progressive native audio-owner chain has already installed earlier owners.
+ # Repack with valid CRC; truncations across the complete Mixer payload must
+ # dispose the disposable target rather than fall through to worker/guest.
+ with zipfile.ZipFile(source) as z:mixer=z.read('Mixer')
+ cuts=sorted(set((0,1,len(mixer)//4,len(mixer)//2,3*len(mixer)//4,len(mixer)-1)))
+ for length in cuts:
+  cases.append(('Mixer',lambda data,length=length:data[:length],False))
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
  # No unchanged-destination assumption: every attempt is a fresh process.
