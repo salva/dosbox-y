@@ -36,7 +36,8 @@ hardware: `DOSBOX_TEST_AUDIO=1` for audio-enabled captures; optional
 DOSBOX_TEST_ROOT_VALIDATION=1 DOSBOX_TEST_ROOT_PSP=0814` enables the current matrix
 fixture's owner/binding/root cases. Add `DOSBOX_TEST_SHELL_BINDING_FIELDS=1`
 with `DOSBOX_TEST_BINDINGS=1` to mutate all 13 shell PSP/role slot/type/location/span
-fields and every shorter prefix with valid ZIP CRC, using a separate disposable
+fields and every shorter prefix with valid ZIP CRC, and every byte in all three
+represented controlled shell bodies after RAM install, using a separate disposable
 startup process per attempt. With `DOSBOX_TEST_LUA=1`, rejection also asserts no
 FILE/INLINE evaluator marker. This proves represented-shell consumption, not
 full native extent completeness. Metadata mismatch is not malformed-owner

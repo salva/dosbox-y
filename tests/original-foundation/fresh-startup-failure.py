@@ -140,6 +140,18 @@ if os.environ.get('DOSBOX_TEST_BINDINGS'):
   data=bytearray(data);data[offset]^=1
   return bytes(data)
  cases.append(('Memory',wrong_native_body,False))
+ if os.environ.get('DOSBOX_TEST_SHELL_BINDING_FIELDS'):
+  # Certify each represented controlled span after RAM installation. Do not
+  # mutate PSP vectors/guest hooks: those are intentionally not native bodies.
+  for role in (1,5,9):
+   address,span=fields[role+2:role+4]
+   assert span in (5,6)
+   for byte in range(span):
+    def wrong_shell_body(data,address=address,byte=byte):
+     offset=descriptor+address+byte
+     assert 0 <= offset < len(data)
+     data=bytearray(data);data[offset]^=1;return bytes(data)
+    cases.append(('Memory',wrong_shell_body,False))
  # Matching metadata must not hide a damaged native service body in RAM.
  # XMS permits guest edits in its five-byte hook prefix, not its dispatch body.
  with zipfile.ZipFile(source) as z:
@@ -308,6 +320,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
            'settlement failed after installation' if corrupt_crc else
            'Invalid saved PIC state' if owner=='Pic' else
            'Invalid saved CPU state' if owner=='CPU' else
+           'failed during installation' if owner=='Memory' and mutate.__name__=='wrong_shell_body' else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') and mutate in root_mutations else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_INT10_BODY') and mutate is wrong_int10_body else
            'failed during installation' if owner=='Memory' and os.environ.get('DOSBOX_TEST_VESA_BODY') and mutate.__name__=='wrong_vesa_body' else
