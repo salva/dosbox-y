@@ -37,7 +37,11 @@ codec, allocation catalogue, constructor reorder or archive revision change.
 every controlled byte with reduced UBSan doubles; `fresh-startup-failure.py`
 queries the real configured constructor span and valid-CRC corrupts every byte
 alongside the existing DOS callbacks/HMA mirror. This is not complete ROM or
-DOS/private-extent certification.
+DOS/private-extent certification. `DOSBOX_TEST_CLEAR_TF=1` configures the actual
+CPU owner in producer/consumer/failure probes; matching all3 fresh imports and
+every controlled DOS/IHSEG byte corruption pass for the ten-byte variant as well
+as the default one-byte variant. The matrix includes this additional matching
+configuration (28 cases); its independently completed 27×3 predecessor does not.
 
 ## Contract and use
 

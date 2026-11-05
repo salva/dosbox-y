@@ -66,6 +66,8 @@ if os.environ.get('DOSBOX_TEST_CYCLES'):
  cycles=int(os.environ['DOSBOX_TEST_CYCLES'])
  assert 1 <= cycles <= 1000000
  conf.write_text(conf.read_text().replace('cycles=fixed 3000',f'cycles=fixed {cycles}'))
+if os.environ.get('DOSBOX_TEST_CLEAR_TF'):
+ conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nclear trap flag on unhandled int 1=true\n'))
 if os.environ.get('DOSBOX_TEST_AUTO_CYCLES'):
  conf.write_text(conf.read_text().replace('cycles=fixed 3000','cycles=auto'))
 if os.environ.get('DOSBOX_TEST_PRESENTATION'):

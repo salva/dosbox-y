@@ -62,6 +62,8 @@ if os.environ.get('DOSBOX_TEST_DOS_CALLBACKS'):
  config=w/'dos-callbacks.conf'
  config.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound='+('false' if os.environ.get('DOSBOX_TEST_AUDIO') else 'true')+'\n[midi]\nmididevice=none\n')
  script=w/'dos-callbacks.gdb'
+ if os.environ.get('DOSBOX_TEST_CLEAR_TF'):
+  config.write_text(config.read_text().replace('[cpu]\n','[cpu]\nclear trap flag on unhandled int 1=true\n'))
  script.write_text('set pagination off\nset confirm off\nbreak DEBUG_HoldRestoredStartup\nrun\n'+''.join(
      f"p 'dos.cpp'::test->native_callback[{role}].address\np 'dos.cpp'::test->native_callback[{role}].body.size()\n" for role in range(9))+"p 'dos.cpp'::test->native_ihseg_address\np 'dos.cpp'::test->native_ihseg_body.size()\np 'dos.cpp'::test->native_hma_cpm_body.size()\nquit\n")
  result=subprocess.run(['gdb','-q','-batch','-x',str(script),'--args',os.environ['DOSBOX_TEST_BINARY'],
@@ -433,6 +435,8 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  before=hashlib.sha256(archive.read_bytes()).hexdigest()
  conf=w/'fixture.conf'
  conf.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n')
+ if os.environ.get('DOSBOX_TEST_CLEAR_TF'):
+  conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nclear trap flag on unhandled int 1=true\n'))
  if os.environ.get('DOSBOX_TEST_MEMSIZE'):
   memory=int(os.environ['DOSBOX_TEST_MEMSIZE'])
   assert 1 <= memory <= 256

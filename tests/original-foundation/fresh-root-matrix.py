@@ -22,6 +22,9 @@ assert all(consumers)
 cases = (
     # Native service consumers after explicit continuation, not active-device
     # capture, waveform, rendered-frame or physical-input parity claims.
+    ('ihseg-clear-tf', {'DOSBOX_TEST_CLEAR_TF':'1',
+                        'DOSBOX_TEST_PROGRAM_HEX':'90 b8 2a 4c cd 21 eb fe'},
+     '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('speaker-timer', {'DOSBOX_TEST_SPEAKER': '1'},
      '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('video-service', {'DOSBOX_TEST_VIDEO': '1'},
@@ -123,7 +126,7 @@ for name, setup, ip, facts in cases:
         result = subprocess.run(
             ['python3', str(here / 'fresh-startup.py')],
             env=dict(env, **{key:value for key,value in setup.items()
-                             if key in ('DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS')},
+                             if key in ('DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS','DOSBOX_TEST_CLEAR_TF')},
                      **({'DOSBOX_TEST_SEARCH_MATCHING_ENTRY': '1'}
                              if setup.get('DOSBOX_TEST_SEARCH_MATCHING_ENTRY') else {}),
                      **consumer_policy,
