@@ -11,6 +11,14 @@ Malformed/partial/uncertain import disposes its process; the source is unchanged
 The target stays held until an explicit step/Run request. Host delay is not guest
 time, and host pacing is rebased only when continuation is actually activated.
 
+The DOS kernel's nine original callback roles now retain constructor-generated
+span lengths via `CALLBACK_HandlerObject::Install`'s return value. Capture and
+post-Memory installation certify slot/handler/location/controlled bytes, without
+comparing IVT pointers (guest hooks remain allowed). Set
+`DOSBOX_TEST_DOS_CALLBACKS=1` on `fresh-startup-failure.py` to corrupt every byte
+of those configured spans with valid ZIP CRCs and require disposal/no evaluator.
+This does not qualify PC98 or full DOS/HMA/UMB/MSCDEX native extents.
+
 Build profiles now include `--enable-debug-lua` and `--disable-debug-lua`, plus
 Agent enabled/disabled. `C_DEBUG_LUA` and the real Lua evaluator are integrated;
 the older “no configure Lua option” paragraph below describes the earlier input,
