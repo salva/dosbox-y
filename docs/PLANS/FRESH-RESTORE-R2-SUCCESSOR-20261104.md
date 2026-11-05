@@ -109,6 +109,23 @@ this change is `build/mouse-native-all3-manifest.json` in card work,
 SHA256 `2e7c052abe51c2119cfdc657fede690ee15960bf6974a2a2593aff318cb39ee6`;
 21×3 matrix `fresh-root-matrix/run-fpqt9qyg` passed. This author evidence does
 not complete full native services or independent affected assessment.
+Full configured DOS table consumers now also corrupt every byte of the 24-field
+native binding prefix and truncate at every following Dos suffix position
+(allocator records, country schema and private cursor). On production
+`360fe610e`, all798 cases ×3 profiles reject/dispose with unchanged source and
+attempt archives, no evaluator and no continuation. Casemap capture/install
+checks now include callback slot bounds and actual native handler identity,
+not just CB_RETF bytes. Reduced UBSan tests deliberately replace that handler
+and use an invalid slot. Exact current receipt is
+`build/dos-casemap-all3-manifest.json`, SHA256
+`db18143ba2553d2dfcad32c187da8dc4faa728418031a094129db2d2167c0457`.
+The current 21×3 matrix is `fresh-root-matrix/run-d_6j982g`; terminal blocked
+finalizer and archive fclose EIO consumers also pass on this production input.
+These are bounded author checks, not a claim of complete DOS native service
+coverage or independent assessment. Malformed fixture archives use lossless
+DEFLATED storage except the direct raw CRC corruption case; no workload or
+assertion is omitted to reduce evidence size.
+
 zip-stream is transport-only and progressive-install
 checks actual common metadata/owner completion. Old pristine upstream slot
 probes still describe their baseline, not candidate live-load permission.
