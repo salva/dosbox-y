@@ -46,6 +46,27 @@ An initial new adapter-test compile failed because its double omitted saveFile;
 the double was completed and both checks rerun successfully without production
 changes. Current unresolved obligations below remain applicable.
 
+## DSP consumed-index repair (2026-11-05)
+
+Production **80406462c3f4b214d46ba2091d04311ff5897a06** adds local checked
+consumption before SB assignment: output FIFO pos<64/used<=64, input pos<64,
+command length<=64. `DSP_ReadData` and `DSP_WriteData` otherwise directly index
+these arrays. No wire change or destination preservation; failure still disposes
+startup target. Reduced actual codec ASan/UBSan and separately rebuilt all3
+profiles pass (`proc-e8f429ac82a0`; logs `build/sb-fifo-bounds-*-make.log`).
+Initial reduced fixture compile failed missing aggregate DSP initializers
+(`proc-ca56cca0f83f`), repaired in fixture, builds had not begun.
+Valid-CRC real Mixer mutations at exact binary-derived field offsets fail/exit1
+all3 and before requested FILE/INLINE (`proc-2dc750bc3a8e`,
+`failure-{z70wesuj,6_osa92b,pa_owyzf,inw4nno3,leioe3n5}`); source/attempts
+unchanged. Older a103 evidence below is not silently promoted to this binary.
+New full **33×3** matrix `fresh-root-matrix/run-bw0s1o18` passes
+`proc-01d5cc831093` waited exit0. Exact source/header/config/binary/fixture
+receipt `build/sb-bounds-33-all3-manifest.json`, SHA256
+`d65e0ea6ce29d1ec493854103c68822bfa67420330f017efe0ae4ea2fb43b52c`.
+Earlier test-only78b6 adds six progressive Mixer truncation cuts;
+`proc-a2cc5b1d37ea` all3/FILE/INLINE each13 failures passes (a103 binaries).
+
 ## Saved SB DSP consumer (2026-11-05)
 
 `fresh-sb-held.asm` captures with the real SB16 DSP reset response pending in
