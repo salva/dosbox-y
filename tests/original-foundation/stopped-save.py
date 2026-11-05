@@ -24,6 +24,8 @@ if os.environ.get('DOSBOX_TEST_HMA_HELD'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-hma-held.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_XMS_HELD'):
  subprocess.run(['nasm','-f','bin',*(['-DGUEST_HOOK'] if os.environ.get('DOSBOX_TEST_XMS_GUEST_HOOK') else []),str(pathlib.Path(__file__).with_name('fresh-xms-held.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_SB_HELD'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-sb-held.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_EMS_SERVICE'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-ems.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_EMS_HELD'):
