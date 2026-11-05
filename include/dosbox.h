@@ -379,9 +379,9 @@ public:
     // disposable process, never a return to ordinary boot or a live-load API.
     void restoreFreshStartup(const std::string &path) const;
 
-    // Process-local captures reuse the registered component streams. Native
-    // admission and suspended-continuation lifetime belong to the caller;
-    // these internally produced bytes are not an external import format.
+    // Process-local capture uses the same registered owner streams. It is
+    // bounded save-only data, not a live-reload or alternate import format.
+    // checkpointLoad always refuses: restoration requires a fresh startup.
     typedef std::map<std::string, std::string> Checkpoint;
     bool checkpointSave(Checkpoint &parts, size_t limit);
     bool checkpointLoad(const Checkpoint &parts);
