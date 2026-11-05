@@ -46,6 +46,28 @@ An initial new adapter-test compile failed because its double omitted saveFile;
 the double was completed and both checks rerun successfully without production
 changes. Current unresolved obligations below remain applicable.
 
+## Auto-cycle workload qualification (2026-11-05)
+
+`fresh-root-matrix.py` now forwards optional `DOSBOX_TEST_AUTO_CYCLES` and
+`DOSBOX_TEST_HELD_DELAY` consistently to producer and matching consumers. The
+full 32-workload ×3 matrix passes with actual `cycles=auto` producer/consumer
+configs and five-second held delays (`fresh-root-matrix/run-q2dhqeo1`, terminal
+`proc-512523dd9a16` exit0). This includes shell/TSR descendants, held memory and
+file/search/input/video/timer states and all root terminal variants already in
+the matrix. A separate guest-hooked locked-XMS workload passes all3 with
+30-second holds (`run-v7it_m8l`, `run-zh183y9j`, `run-do0z5b7d`,
+`proc-4718ac036c66`). These qualify the asserted stopped preservation and
+explicit continuation, not every cycle algorithm or device parity.
+
+Exact source/header/config/binary/fixture receipt at test-only commit
+`b5bb9d6f8a1f58cff5762f99687325544a0d63aa`:
+`build/auto-cycles-32-all3-manifest.json`, SHA256
+`914ee588bbc66875597baa956b06c7383a444521c76b9fe9a934cbcaef3cf6f6`.
+Production and the three binaries remain a103. BIOS-layout corruption also
+passes with actual requested FILE and INLINE evaluators whose entry markers
+remain absent (`failure-3uy50a4k`, `failure-36f9d7uo`, `proc-b8b71bc0a3d1`).
+This extends the non-evaluator all3 corruption evidence below.
+
 ## XMS service accounting increment (2026-11-05)
 
 Revision **9 / original-owner-engine-9** additionally captures the XMS owner's
