@@ -123,6 +123,17 @@ if os.environ.get('DOSBOX_TEST_DOS_TABLES'):
  with zipfile.ZipFile(source) as z:data=z.read('Dos')
  needle=struct.pack('<24I',*values);offset=data.find(needle)
  assert offset>=0 and data.find(needle,offset+1)<0
+ # The no-CD MSCDEX inventory and native buffer/header segments immediately
+ # precede the table suffix. Prove the absent-service wire shape before using
+ # its boundary; mutate each field and truncate every consumed prefix.
+ mscdex_offset=offset-6
+ assert mscdex_offset>=0 and data[mscdex_offset:offset]==bytes(6)
+ for n in range(6):
+  def wrong_mscdex(data,n=n,start=mscdex_offset):
+   data=bytearray(data);data[start+n]^=1;return bytes(data)
+  cases.append(('Dos',wrong_mscdex,False))
+ for n in range(mscdex_offset,offset):
+  cases.append(('Dos',lambda data,n=n:data[:n],False))
  for n in range(len(needle)):
   def wrong_dos_table(data,n=n,table_offset=offset):
    data=bytearray(data);data[table_offset+n]^=1;return bytes(data)
