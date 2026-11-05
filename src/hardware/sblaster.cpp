@@ -4862,7 +4862,11 @@ void POD_Load_Sblaster( std::istream& stream )
 		uint8_t dma_idx = 0xff;
 		READ_POD(&incoming, incoming);
 		READ_POD(&dma_idx, dma_idx);
-		if (!stream || (dma_idx != 0xff && dma_idx >= 8)) {
+		if (!stream || (dma_idx != 0xff && dma_idx >= 8) ||
+            incoming.dsp.out.pos >= DSP_BUFSIZE ||
+            incoming.dsp.out.used > DSP_BUFSIZE ||
+            incoming.dsp.in.pos >= DSP_BUFSIZE ||
+            incoming.dsp.cmd_len > DSP_BUFSIZE) {
 			stream.setstate(std::istream::failbit);
 			return;
 		}

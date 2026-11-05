@@ -208,6 +208,24 @@ if os.environ.get('DOSBOX_TEST_DOS_TABLES'):
  # fail after earlier DOS/file/memory owners have already been consumed.
  for n in range(offset,len(data)):
   cases.append(('Dos',lambda data,n=n:data[:n],False))
+if os.environ.get('DOSBOX_TEST_SB_FIFO_BOUNDS'):
+ import re
+ fields=('dsp.out.pos','dsp.out.used','dsp.in.pos','dsp.cmd_len')
+ expressions=[f"(char*)&'sblaster.cpp'::sb[0].{field}-(char*)&'sblaster.cpp'::sb[0]" for field in fields]
+ expressions += [f"sizeof('sblaster.cpp'::sb[0].{field})" for field in fields]
+ result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
+  *[arg for expression in expressions for arg in ('-ex','p '+expression)]],capture_output=True,text=True,check=True)
+ values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
+ assert len(values)==8,result.stdout
+ with zipfile.ZipFile(source) as z:mixer=z.read('Mixer')
+ marker=b'SBlaster2'+bytes(23)
+ assert mixer.count(marker)==1
+ base=mixer.index(marker)+32
+ assert mixer[base]==1
+ for offset,width,limit in zip(values[:4],values[4:],(64,65,64,65)):
+  def bad_sb_fifo(data,offset=offset,width=width,limit=limit):
+   data=bytearray(data);data[base+1+offset:base+1+offset+width]=limit.to_bytes(width,'little');return bytes(data)
+  cases.append(('Mixer',bad_sb_fifo,False))
 if os.environ.get('DOSBOX_TEST_MIXER_TRUNCATION'):
  # Progressive native audio-owner chain has already installed earlier owners.
  # Repack with valid CRC; truncations across the complete Mixer payload must
