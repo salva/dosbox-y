@@ -11,6 +11,22 @@ cases=[('Mouse',lambda b:b[:-1],False),
        ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
        ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
+if os.environ.get('DOSBOX_TEST_HMA_CURSOR'):
+ # Offset is computed from configured ABI fields used by the original owner,
+ # not found by matching cursor bytes in RAM or guessing sizeof(DOS_Block).
+ import re,struct
+ # Explicit codec order below includes only fields actually emitted, not the
+ # enclosing native structs. See configured expression in this probe.
+ expressions=['sizeof(dos.verify)+sizeof(dos.breakcheck)+sizeof(dos.echo)+sizeof(dos.direct_output)+sizeof(dos.internal_output)+sizeof(uselfn)+sizeof(dos_copybuf)+sizeof(dos.firstMCB)+sizeof(dos.errorcode)+sizeof(dos.return_code)+sizeof(dos.return_mode)+sizeof(dos.current_drive)+sizeof(dos.loaded_codepage)+sizeof(dos.version.major)+sizeof(dos.version.minor)+sizeof(countryNo)+sizeof(lfn_filefind_handle)+sizeof(bootdrive)+sizeof(dos_kernel_disabled)+sizeof(uint16_t)']
+ result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],'-ex','p '+expressions[0]],capture_output=True,text=True,check=True)
+ offset=int(re.findall(r'\$\d+ = (\d+)',result.stdout)[0])
+ with zipfile.ZipFile(source) as z:data=z.read('Dos')
+ assert 0x100000 <= struct.unpack_from('<I',data,offset)[0] <= 0x10fff0
+ for cursor in (1,0xffffffff,0x10fff1):
+  def bad_hma_cursor(data,cursor=cursor,offset=offset):
+   data=bytearray(data);struct.pack_into('<I',data,offset,cursor);return bytes(data)
+  cases.append(('Dos',bad_hma_cursor,False))
+ for n in range(4):cases.append(('Dos',lambda data,n=n,offset=offset:data[:offset+n],False))
 if os.environ.get('DOSBOX_TEST_DOS_CALLBACKS'):
  import re
  config=w/'dos-callbacks.conf'
@@ -444,6 +460,8 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  else:
   assert 'SaveState::install' in diagnosis.stdout,diagnosis.stdout
  expected=('Fresh restore failed' if owner in metadata else
+           'failed during installation' if owner=='Dos' and mutate.__name__=='bad_hma_cursor' else
+           'failed during installation' if owner=='Dos' and os.environ.get('DOSBOX_TEST_HMA_CURSOR') else
            'failed during installation' if owner=='Dos' and os.environ.get('DOSBOX_TEST_DOS_TABLES') else
            'Invalid save-state DOS drive state' if owner=='Dos' and os.environ.get('DOSBOX_TEST_SEARCH_STATE') else
            'Cannot restore save-state DOS file: native open failed' if owner=='Dos' else

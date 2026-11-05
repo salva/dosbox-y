@@ -6,6 +6,29 @@ SHA256 `7204d48e1ab8212c7fb7cb19072786f0bd7022eda0db18122e0f50ab49be23ba`.
 Historical r2/Astra remain applicable except the design's expressly superseded
 used-target preservation/global preparation/live reload/replay prescriptions.
 
+## DOS HMA native state increment (2026-11-05)
+
+The original XMS-written DOS CP/M mirror at physical `0x1000c0` now retains
+and checks its five constructor-controlled bytes on capture/post-Memory install;
+this reads physical RAM without changing A20 or comparing guest IVT hooks.
+The native DOS HMA bump cursor is now captured/consumed by the DOS owner,
+including its uninitialized zero state, with bounds against the configured HMA
+allocation region and service availability. Failed/truncated consumption stops
+the owning install; no reset, allocation replay or rollback is attempted.
+This changes the wire to **revision 8 / original-owner-engine-8**; older archives
+are explicitly incompatible, not migrated. The earlier receipts below remain
+historical and do not qualify revision8 binaries.
+
+`dos-hma-consumption.py` exercises the actual codec with reduced UBSan service
+doubles. `fresh-hma-held.asm` allocates HMA through INT2F/4A02 before capture,
+enables A20 through XMS, writes a payload, then after explicit continuation
+requires the next query not to overlap the allocation and the payload to survive.
+The matrix includes this workload alongside XMS/EMS/files/search/active input,
+timer/video and root/descendant/TSR cuts. Configured all3 author checks passed
+22 workloads ×3 consumers (`fresh-root-matrix/run-3mmpnsoe`), plus valid-CRC
+invalid/truncated cursor/every controlled HMA byte disposal. These are bounded
+native consumers, not full HMA/UMB/private allocator or all-device acceptance.
+
 ## Resolved RAM compatibility increment (2026-11-05)
 
 RAM metadata now hashes initialized `MEM_TotalPages()`/`MEM_TotalPagesAt4GB()`

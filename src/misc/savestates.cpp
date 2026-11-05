@@ -55,7 +55,7 @@
 static std::string state_build_identity() {
     std::ostringstream identity;
     const uint32_t endian=0x01020304;
-    identity << "original-owner-engine-7;endian=";
+    identity << "original-owner-engine-8;endian=";
     const auto *bytes=reinterpret_cast<const unsigned char *>(&endian);
     for (size_t i=0;i<sizeof(endian);++i) identity << unsigned(bytes[i]) << ',';
     identity << ";char=" << sizeof(char) << ";short=" << sizeof(short)
@@ -142,7 +142,7 @@ static std::string state_config_identity() {
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }
-static const char state_archive_revision[] = "DOSBox-X original-state revision 7";
+static const char state_archive_revision[] = "DOSBox-X original-state revision 8";
 
 #include "vs/zlib/contrib/minizip/zip.c"
 #include "vs/zlib/contrib/minizip/unzip.c"

@@ -5987,6 +5987,23 @@ extern void POD_Load_DOS_Memory( std::istream& stream );
 extern void POD_Load_DOS_Mscdex( std::istream& stream );
 extern void POD_Load_DOS_Tables( std::istream& stream );
 
+// The HMA bump cursor is native mutable DOS state, not reconstructed by RAM.
+// Zero means the guest has not queried it yet. Do not query/initialize it while
+// capturing, or silently reset allocations made before capture on import.
+static void DOS_HMAState(std::ostream *output, std::istream *input)
+{
+    uint32_t cursor = dos_hma_allocator;
+    if (input && !input->read(reinterpret_cast<char*>(&cursor), sizeof(cursor))) return;
+    const uint32_t first = 0x10fff0u - uint32_t(dos_initial_hma_free);
+    if (cursor && (!DOS_HMA_LIMIT() || cursor < first || cursor > 0x10fff0u)) {
+        if (output) output->setstate(std::ios::failbit);
+        else input->setstate(std::ios::failbit);
+        return;
+    }
+    if (output) output->write(reinterpret_cast<const char*>(&cursor), sizeof(cursor));
+    else dos_hma_allocator = cursor;
+}
+
 namespace
 {
 	class SerializeDos : public SerializeGlobalPOD
@@ -6042,6 +6059,8 @@ namespace
                     return;
                 }
                 WRITE_POD(&root,root);
+                DOS_HMAState(&stream,nullptr);
+                if (!stream) return;
 
 				POD_Save_DOS_Devices(stream);
 				POD_Save_DOS_DriveManager(stream);
@@ -6101,6 +6120,8 @@ namespace
                     stream.setstate(std::ios::failbit);
                     return;
                 }
+                DOS_HMAState(nullptr,&stream);
+                if (!stream) return;
                 POD_Load_DOS_Devices(stream);
                 if (!stream) return;
                 POD_Load_DOS_DriveManager(stream);
