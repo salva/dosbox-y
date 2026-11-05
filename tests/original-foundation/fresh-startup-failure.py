@@ -25,18 +25,32 @@ if os.environ.get('DOSBOX_TEST_MOUSE_FINITE'):
  fields=('add_x','add_y','mickey_accum_x','mickey_accum_y','x','y','ps2x','ps2y',
          'mickeysPerPixel_x','mickeysPerPixel_y','pixelPerMickey_x','pixelPerMickey_y','senv_x','senv_y')
  expressions=["sizeof('mouse.cpp'::ps2cbseg)*2+sizeof('mouse.cpp'::useps2callback)*2+sizeof('mouse.cpp'::aux_pkt)+sizeof('mouse.cpp'::aux_pkt_len)+sizeof('mouse.cpp'::userdefScreenMask)+sizeof('mouse.cpp'::userdefCursorMask)"]
- expressions += [f"(char*)&'mouse.cpp'::mouse.{field}-(char*)&'mouse.cpp'::mouse" for field in fields]
+ expressions += [f"(char*)&'mouse.cpp'::mouse.{field}-(char*)&'mouse.cpp'::mouse" for field in (*fields,'hidden_at')]
+ expressions += ["sizeof('mouse.cpp'::mouse.hidden_at)"]
  result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
      *[arg for expression in expressions for arg in ('-ex','p '+expression)]],
      capture_output=True,text=True,check=True)
  values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
- assert len(values)==len(fields)+1,result.stdout
- prefix,*offsets=values
+ assert len(values)==len(fields)+3,result.stdout
+ prefix,*offsets,hidden_offset,hidden_width=values
  for offset in offsets:
   for value in (float('inf'),float('-inf'),float('nan')):
    def bad_mouse_finite(data,offset=offset,value=value):
     data=bytearray(data);struct.pack_into('<f',data,prefix+offset,value);return bytes(data)
    cases.append(('Mouse',bad_mouse_finite,False))
+ # Native Linux x86 receipts use x87 extended precision in a 16-byte slot;
+ # also support pic.h's IEEE-double ABI, rejecting unrepresented layouts.
+ import platform,sys
+ assert hidden_width in (8,16) and sys.byteorder=='little'
+ assert hidden_width==8 or platform.machine() in ('x86_64','i386','i686')
+ hidden_values=([struct.pack('<d',value) for value in (float('inf'),float('-inf'),float('nan'))]
+                if hidden_width==8 else
+                [bytes.fromhex(value)+bytes(6) for value in
+                 ('0000000000000080ff7f','0000000000000080ffff','00000000000000c0ff7f')])
+ for encoded in hidden_values:
+  def bad_mouse_tick(data,encoded=encoded):
+   data=bytearray(data);data[prefix+hidden_offset:prefix+hidden_offset+hidden_width]=encoded;return bytes(data)
+  cases.append(('Mouse',bad_mouse_tick,False))
 if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # Real transport/CRC, short consumed owner at two different dependency cuts.
  # No unchanged-destination assumption: every attempt is a fresh process.

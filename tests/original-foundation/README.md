@@ -46,7 +46,8 @@ vectors as well as shell vectors; this is payload preservation with held RAM
 comparison and speaker continuation, not execution of the injected hook bodies.
 Metadata mismatch is not malformed-owner
 coverage. `DOSBOX_TEST_MOUSE_FINITE=1` derives actual configured mouse field
-offsets through GDB and repacks ±infinity/NaN for all 14 consumed float fields;
+offsets through GDB and repacks ±infinity/NaN for all 14 consumed float fields
+and hidden_at (IEEE double or x87 extended native Linux ABI);
 it does not assume a packed mouse struct or double-width PIC time.
 `progressive-install.py` replaces all-owner-before-effects assertions:
 owner failure is fatal even after earlier installation, never rollback success.
