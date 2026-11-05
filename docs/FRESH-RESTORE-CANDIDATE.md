@@ -6,9 +6,21 @@ SHA256 `7204d48e1ab8212c7fb7cb19072786f0bd7022eda0db18122e0f50ab49be23ba`.
 Historical r2/Astra remain applicable except the design's expressly superseded
 used-target preservation/global preparation/live reload/replay prescriptions.
 
-## Latest bounded qualification (2026-11-05)
+## Current bounded qualification (2026-11-05)
 
-Production remains `a1031118eacb7f83082ce337eb75d4a4d20faa7d`; later commits
+Production now includes initialized FPU presence/model (aa1bbbee) and the
+subsequent initialized CPUID vendor increment; see
+`FRESH-RESTORE-FPU-INCREMENT.md` and `FRESH-RESTORE-CPUID-INCREMENT.md` for exact
+inputs and evidence. Independent card-n-c-k-b status2 approves only aa1bbbee
+on verified reused Lua/no-Lua builds, including full four-workload E2E,
+evaluator-not-run mismatch negatives and old804 rejection; not the CPUID delta
+or whole brief. The older binary/matrix claims below retain their named source
+applicability and are not current-build receipts. No-agent was not rebuilt for
+these increments; broader native/device/no-debug/ingress obligations remain.
+
+## Historical a103 bounded qualification (2026-11-05)
+
+At that qualification production remained `a1031118eacb7f83082ce337eb75d4a4d20faa7d`; later commits
 through `2f9b73e2141beb850fec128819701228eabf730e` change tests/docs only.
 The three configured binaries in the card build directories are unchanged.
 The 32-workload ×3 configured-consumer matrix (`fresh-root-matrix/run-nabq685m`)

@@ -110,6 +110,13 @@ bool cpu_triple_fault_reset;
 
 unsigned char cpu_custom_cpuid[12] = {0};
 
+std::string CPU_StateCpuidVendor() {
+    // Same initialized bytes/default consumed by CPUID leaf zero.
+    return cpu_custom_cpuid[0] ?
+        std::string(reinterpret_cast<const char *>(cpu_custom_cpuid), 12) :
+        std::string("GenuineIntel");
+}
+
 /* SYSENTER/SYSEXIT */
 uint16_t cpu_sep_cs = 0;		/* MSR 0x174h value of CS */
 uint32_t cpu_sep_esp = 0;		/* MSR 0x175h value of ESP */

@@ -135,7 +135,8 @@ static std::string state_config_identity() {
                                    property->propname=="memsizekb")) continue;
             // CPU initialization resolves true/1/auto and explicit FPU models.
             // Hash installed presence/model rather than the input spelling.
-            if (name=="cpu" && property->propname=="fpu") continue;
+            if (name=="cpu" && (property->propname=="fpu" ||
+                                 property->propname=="cpuid string")) continue;
             field(property->propname);
             field(property->GetValue().ToString());
         }
@@ -145,6 +146,8 @@ static std::string state_config_identity() {
     field(std::to_string(MEM_TotalPagesAt4GB()));
     field("initialized FPU presence/model v1");
     field(std::to_string(CPU_StateFpuIdentity()));
+    field("initialized CPUID vendor v1");
+    field(CPU_StateCpuidVendor());
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }
