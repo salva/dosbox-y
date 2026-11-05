@@ -9,10 +9,14 @@ w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'autosave-frontier';w.mkdir(exist_o
 t=(root/'src/misc/savestates.cpp').read_text()
 entry=t[t.index('\tvoid SaveGameState(bool pressed)'):t.index('\n\n\tvoid LoadGameState',t.index('\tvoid SaveGameState(bool pressed)'))]
 slot=t[t.index('void SaveState::save(size_t slot)'):t.index('bool SaveState::saveFile(',t.index('void SaveState::save(size_t slot)'))]
+vga=(root/'src/hardware/vga_draw.cpp').read_text()
+timed=vga.split('\t// NTS: To be moved\n',1)[1].split('\n\tint sec =',1)[0]
 code=r'''
 #include <string>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <strings.h>
 bool admitted=false;unsigned focus=0,dialogs=0,saves=0;
 bool save_state_frontier(){return admitted;}
 void LOG_MSG(const char*){}
@@ -37,12 +41,31 @@ struct SaveState {
 };
 bool DEBUG_NativeStateSlot(size_t,bool,const std::string&){++saves;return true;}
 '''+entry+'\n'+slot+r'''
+int autosave_second=1,autosave_count=0;
+bool enable_autosave=true;
+uint32_t ticksPrev=0;
+int autosave_start[10]={},autosave_end[10]={},autosave_last[10]={};
+std::string autosave_name[10],RunningProgram="TINY";
+uint32_t GetTicks(){return 2001;}
+int GetGameState_Run(){return 2;}
+void SetGameState_Run(int){}
+void SaveGameState_Run(){SaveGameState(true);}
+void timed_autosave(){
+'''+timed+r'''
+}
 int main(){
  for(bool automatic:{false,true}){
   auto_save_state=automatic;admitted=false;
   SaveGameState(false);SaveGameState(true);SaveState::instance().save(0);
   assert(!focus && !dialogs && !saves);
  }
+ admitted=false;
+ for(int start:{0,1}){
+  autosave_start[0]=start;autosave_end[0]=3;ticksPrev=0;
+  timed_autosave();assert(!focus && !dialogs && !saves);
+  assert(!auto_save_state && ticksPrev==2001);
+ }
+ auto_save_state=true; // Keep the preexisting positive control free of remark UI.
  admitted=true;SaveGameState(true);assert(focus==1 && saves==1);
 }
 '''
