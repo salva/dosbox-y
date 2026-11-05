@@ -46,6 +46,22 @@ An initial new adapter-test compile failed because its double omitted saveFile;
 the double was completed and both checks rerun successfully without production
 changes. Current unresolved obligations below remain applicable.
 
+## Saved SB DSP consumer (2026-11-05)
+
+`fresh-sb-held.asm` captures with the real SB16 DSP reset response pending in
+its FIFO. Only explicit continuation reads the saved 0xaa response, issues E1
+at port22c and checks the native DSP major version before root42. No reset
+replay on the restore path; no DMA/waveform parity claim. Fixed-cycle and
+cycles=auto (ten-second holds) all3 consumers pass (`proc-f42eaf05b8a0`,
+`proc-f9d634b12a01`). The expanded **33×3** fixed-cycle matrix passes terminal
+`proc-7e598861472f` exit0, `fresh-root-matrix/run-f7ebc3tz`.
+Source/header/config/binary/fixture receipt at test-only
+`688c819a3448cfa425a3d5ae7e9024639a587dfd`:
+`build/sb-fifo-33-all3-manifest.json`, SHA256
+`eb66efd81d264508a9527171f015023df672163df8cd469f6db52f3d89554580`.
+The 32×3 auto-cycle receipt below predates this added workload; do not label it
+33×3. Production/binaries remain a103.
+
 ## Auto-cycle workload qualification (2026-11-05)
 
 `fresh-root-matrix.py` now forwards optional `DOSBOX_TEST_AUTO_CYCLES` and
