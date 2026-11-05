@@ -6,6 +6,46 @@ SHA256 `7204d48e1ab8212c7fb7cb19072786f0bd7022eda0db18122e0f50ab49be23ba`.
 Historical r2/Astra remain applicable except the design's expressly superseded
 used-target preservation/global preparation/live reload/replay prescriptions.
 
+## Latest bounded qualification (2026-11-05)
+
+Production remains `a1031118eacb7f83082ce337eb75d4a4d20faa7d`; later commits
+through `2f9b73e2141beb850fec128819701228eabf730e` change tests/docs only.
+The three configured binaries in the card build directories are unchanged.
+The 32-workload ×3 configured-consumer matrix (`fresh-root-matrix/run-nabq685m`)
+includes legitimate `COMMAND.COM /C EXIT` descendants returning to the captured
+root, both IHSEG variants, active timer/speaker/video/input, held XMS/EMS/HMA/UMB,
+files/search and typed terminal variants. This is not shell-prompt/root capture.
+The exact receipt is `build/shell-child-32-all3-manifest.json` under the card
+work root, SHA256 `2bbcadce33a3e08c4b799eb1fc5efde6a3f451ed1185e7b60607e1acbd76038c`.
+
+A real SDL/Xvfb + disk-audio `cycles=auto` producer emits nonempty host audio;
+all3 dummy-video/audio consumers hold for 30 seconds with unchanged represented
+CPU/Memory/PIC/timer/keyboard/pacing/Mixer state, then explicitly continue to
+root42 (`run-o1hex44j`, `run-eoi4jklc`, `run-_81e0d3y`). This is not waveform
+parity or coverage of every auto-cycle/device workload.
+
+Valid-CRC mutation of all 728 BIOS layout uint32 fields, four truncations and
+trailing byte, alongside existing late-owner/core failures, passes actual
+exit1/disposal/fatal-stack/source-unchanged assertions in all3 profiles
+(`failure-nbxbv_o8`, `failure-f8e0n213`, `failure-n5z30yt3`). Separately, every
+XMS/EMS prefix field and every prefix truncation plus native-body/late-owner
+failures passes all3 (`failure-2vk651ti`, `failure-fqv4ukbd`, `failure-98x9imo3`).
+The latter suite also passes with requested Lua FILE and INLINE evaluators
+(`failure-rmbq91ej`, `failure-hl7y208j`), requiring that their entry markers are
+never written. All directories are under card `fresh-native-entry`; producer
+is `stopped-save-vertical/run-lc9eusq7/first.sav`. No assertion demands rollback
+or preservation of a disposable destination. These are author checks, not
+independent affected acceptance.
+
+`live-load-refusal.py` now executes the actual debugger slot/file adapters with
+poison attachment/admission/lease/save doubles: live loads refuse before any of
+those calls and clear supplied effects. The Lua checkpoint projection consumer
+also passes with native authority mocked. This supplements actual core wrapper
+and stopped-save tests; it is not a completed audit of every frontend ingress.
+An initial new adapter-test compile failed because its double omitted saveFile;
+the double was completed and both checks rerun successfully without production
+changes. Current unresolved obligations below remain applicable.
+
 ## XMS service accounting increment (2026-11-05)
 
 Revision **9 / original-owner-engine-9** additionally captures the XMS owner's
