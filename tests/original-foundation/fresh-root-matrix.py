@@ -49,6 +49,13 @@ cases = (
     ('shared-file', {'DOSBOX_TEST_SHARED_FILE': '1',
                      'DOSBOX_TEST_CAPTURE_IP': '0814:0200'},
      '0814:0204', 'code=42 resident=0 self-parent=0'),
+    ('xms-hma-ems-held', {'DOSBOX_TEST_XMS_HMA_HELD': '1',
+                         'DOSBOX_TEST_HMA_WITH_EMS': '1',
+                         'DOSBOX_TEST_CAPTURE_IP': '0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
+    ('xms-hma-held', {'DOSBOX_TEST_XMS_HMA_HELD': '1',
+                      'DOSBOX_TEST_CAPTURE_IP': '0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('xms-a20-held', {'DOSBOX_TEST_XMS_A20_HELD': '1',
                       'DOSBOX_TEST_CAPTURE_IP': '0814:0200'},
      '0814:0201', 'code=42 resident=0 self-parent=0'),
@@ -108,7 +115,9 @@ for name, setup, ip, facts in cases:
     for index, binary in enumerate(consumers):
         result = subprocess.run(
             ['python3', str(here / 'fresh-startup.py')],
-            env=dict(env, **({'DOSBOX_TEST_SEARCH_MATCHING_ENTRY': '1'}
+            env=dict(env, **{key:value for key,value in setup.items()
+                             if key in ('DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS')},
+                     **({'DOSBOX_TEST_SEARCH_MATCHING_ENTRY': '1'}
                              if setup.get('DOSBOX_TEST_SEARCH_MATCHING_ENTRY') else {}),
                      **consumer_policy,
                      DOSBOX_TEST_BINARY=binary,

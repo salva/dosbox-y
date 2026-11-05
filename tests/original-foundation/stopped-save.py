@@ -12,6 +12,8 @@ if os.environ.get('DOSBOX_TEST_EXEC_CHILD'):
  (w/'CHILD.COM').write_bytes(bytes.fromhex(os.environ.get('DOSBOX_TEST_CHILD_HEX','b8 07 4c cd 21')))
 if os.environ.get('DOSBOX_TEST_XMS_SERVICE'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_XMS_HMA_HELD'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms-hma-held.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_XMS_A20_HELD'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms-a20-held.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_HMA_HELD'):
@@ -83,6 +85,9 @@ def run():
  if os.environ.get('DOSBOX_TEST_BASIC_ROM'):
   rom=w/'BASIC.ROM';rom.write_bytes(bytes([0x90])*32768)
   conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nibm rom basic={rom}\n'))
+ # Exercise HMA ownership independently and with the original EMS/VCPI owner.
+ if os.environ.get('DOSBOX_TEST_XMS_HMA_HELD'):
+  conf.write_text(conf.read_text().replace('[autoexec]', '[dos]\nems='+('true' if os.environ.get('DOSBOX_TEST_HMA_WITH_EMS') else 'false')+'\n[config]\ndos=low,umb\n[autoexec]'))
  if os.environ.get('DOSBOX_TEST_LFN_HELD'):
   conf.write_text(conf.read_text().replace('[autoexec]', '[dos]\nver=7.1\nlfn=true\n[autoexec]'))
  if unsupported_devices:
@@ -94,7 +99,10 @@ def run():
  log=open(d/'pty.log','wb');wire=open(d/'wire.log','wb')
  argv=[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
  if os.environ.get('DOSBOX_SAVE_BACKTRACE'):
-  argv=['gdb','-batch','-ex','break '+os.environ['DOSBOX_SAVE_BACKTRACE'],'-ex','run','-ex','bt','-ex','continue','--args']+argv
+  argv=['gdb','-batch','-ex','break '+os.environ['DOSBOX_SAVE_BACKTRACE'],'-ex','run','-ex','bt']
+  for expression in os.environ.get('DOSBOX_SAVE_PROBE','').split(';'):
+   if expression:argv+=['-ex',expression]
+  argv+=['-ex','continue','--args']+[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
  p=subprocess.Popen(argv,stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,DISPLAY=':'+display,TERM='xterm',SDL_AUDIODRIVER=os.environ.get('DOSBOX_TEST_AUDIO_DRIVER','dummy'),SDL_DISKAUDIOFILE=str(d/'host-audio.raw')));os.close(slave)
  conn=None;buf=b''
  def drain():

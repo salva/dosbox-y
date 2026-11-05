@@ -513,6 +513,7 @@ bool SaveState::capture(Output &output) const {
         if (!stream) return false;
         entry.second.comp.getBytes(*stream);
         const bool complete = bool(*stream);
+        if (!complete) LOG_MSG("State component %s failed during capture",entry.first.c_str());
         if (!output.close() || !complete) return false;
     }
     return true;

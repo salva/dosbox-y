@@ -18,7 +18,16 @@ earlier archives are incompatible, not automatically migrated.
 `fresh-xms-a20-held.asm` holds global plus two local enables at capture, then
 requires the gate stay enabled until the last corresponding explicit disable.
 The configured Lua/no-Agent/no-Lua consumers and actual codec reduced UBSan
-probe exercise this native accounting, not just an initialized enabled gate.
+probe retains this native accounting, not just an initialized enabled gate.
+`fresh-xms-hma-held.asm` separately reserves HMA with DOS=LOW/EMS disabled,
+requires a second allocation fail in-use, releases and reallocates on explicit
+continuation. All three configured consumers pass, both without EMS and with
+EMS/VCPI represented. The latter exposed an EMS native-binding validator bug:
+its original constructor writes the VCPI monitor with A20 temporarily enabled,
+but the checker used gate-translated reads. The owner now reads that physical
+allocation without changing saved A20; it still verifies slot/handler/all six
+controlled bytes. Capture failures identify the owning component without
+changing close settlement or effects.
 
 ## DOS HMA native state increment (2026-11-05)
 

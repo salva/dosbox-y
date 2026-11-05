@@ -1831,9 +1831,14 @@ public:
             !body(call_v86mon.Get_callback(),Real2Phys(call_v86mon.Get_RealPointer()),0xcf,V86_Monitor)) return false;
         if (vcpi.enabled) {
             const PhysPt monitor=PhysPt(vcpi.private_area)+0x2e00;
-            if (!call_v86mon.Get_callback() ||
-                !body(call_v86mon.Get_callback(),monitor,0x66,V86_Monitor) ||
-                mem_readb(monitor+5)!=0xcf) return false;
+            // The constructor writes this physical allocation with A20
+            // temporarily enabled. Inspect it physically: the saved gate may
+            // legitimately be disabled, and validation must not toggle it.
+            const Bitu slot=call_v86mon.Get_callback();
+            if (!slot || slot>=CB_MAX || CallBack_Handlers[slot]!=V86_Monitor ||
+                phys_readb(monitor)!=0xfe || phys_readb(monitor+1)!=0x38 ||
+                phys_readw(monitor+2)!=slot || phys_readb(monitor+4)!=0x66 ||
+                phys_readb(monitor+5)!=0xcf) return false;
         }
         return output ? bool(*output) : bool(*input);
     }

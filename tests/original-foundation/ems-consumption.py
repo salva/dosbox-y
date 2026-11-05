@@ -24,10 +24,12 @@ using CallBack_Handler=Bitu(*)(void);
 Bitu INT4B_Handler(){return 1;}Bitu INT67_Handler(){return 2;}
 Bitu VCPI_PM_Handler(){return 3;}Bitu WinVM86Ctl(){return 4;}Bitu V86_Monitor(){return 5;}
 CallBack_Handler CallBack_Handlers[CB_MAX]={};
-uint8_t ram[0x100000]={};
+uint8_t ram[0x120000]={};bool gate=true;
+uint8_t phys_readb(PhysPt a){assert(a<sizeof ram);return ram[a];}
+uint16_t phys_readw(PhysPt a){return phys_readb(a)|(phys_readb(a+1)<<8);}
 PhysPt PhysMake(uint16_t s,uint16_t o){return s*16+o;}
 PhysPt Real2Phys(uint32_t p){return PhysMake(p>>16,p&65535);}
-uint8_t mem_readb(PhysPt a){assert(a<sizeof ram);return ram[a];}
+uint8_t mem_readb(PhysPt a){assert(a<sizeof ram);return ram[gate?a:(a&~0x100000u)];}
 uint16_t mem_readw(PhysPt a){return mem_readb(a)|(mem_readb(a+1)<<8);}
 unsigned callback_location_delta=0;
 struct Callback {unsigned slot;unsigned Get_callback(){return slot;}uint32_t Get_RealPointer(){return 0xf0000000+slot*32+callback_location_delta;}};
@@ -92,13 +94,16 @@ int main(){
  assert(load(bytes));
  // Actual PM/control/monitor bodies, including the private-area IRETD copy.
  ems.call_vcpi.slot=13;ems.call_win_vm86_ctl.slot=14;ems.call_v86mon.slot=15;
- vcpi.enabled=true;vcpi.private_area=0x20000;
+ vcpi.enabled=true;vcpi.private_area=0x110000;
  for(auto c:{ems.call_vcpi,ems.call_win_vm86_ctl,ems.call_v86mon}){
   auto a=Real2Phys(c.Get_RealPointer());init(a,c.slot);ram[a+4]=c.slot==15?0xcf:0xcb;
  }
  const auto monitor=vcpi.private_area+0x2e00;
  init(monitor,15);ram[monitor+4]=0x66;ram[monitor+5]=0xcf;
  const auto enabled=save();assert(load(enabled));
+ gate=false;assert(load(enabled));assert(save()==enabled);assert(!gate);
+ // Physical monitor certification must not follow the low-memory alias.
+ assert(mem_readb(monitor)!=phys_readb(monitor));
  for(auto slot:{13u,14u,15u}) {
   auto handler=CallBack_Handlers[slot];
   for(auto bad:{static_cast<CallBack_Handler>(nullptr),INT67_Handler}) {
