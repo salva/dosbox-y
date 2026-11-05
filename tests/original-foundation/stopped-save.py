@@ -88,6 +88,8 @@ def run():
   cycles=int(os.environ['DOSBOX_TEST_CYCLES'])
   assert 1 <= cycles <= 1000000
   conf.write_text(conf.read_text().replace('cycles=fixed 3000',f'cycles=fixed {cycles}'))
+ if os.environ.get('DOSBOX_TEST_FPU'):
+  conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nfpu='+os.environ['DOSBOX_TEST_FPU']+'\n'))
  if os.environ.get('DOSBOX_TEST_AUDIO'):
   conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
  if os.environ.get('DOSBOX_TEST_BASIC_ROM'):

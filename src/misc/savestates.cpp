@@ -21,6 +21,7 @@
 #include "state_machine_inputs.h"
 #include "native_frontier.h"
 #include "restored_session.h"
+#include "cpu.h"
 #include "dos_inc.h"
 #if C_DEBUG && C_DEBUG_LUA
 #include "../debug/debug_lua.h"
@@ -132,6 +133,9 @@ static std::string state_config_identity() {
             // also checks allocated/handler/address/A20 geometry on install.
             if (name=="dosbox" && (property->propname=="memsize" ||
                                    property->propname=="memsizekb")) continue;
+            // CPU initialization resolves true/1/auto and explicit FPU models.
+            // Hash installed presence/model rather than the input spelling.
+            if (name=="cpu" && property->propname=="fpu") continue;
             field(property->propname);
             field(property->GetValue().ToString());
         }
@@ -139,6 +143,8 @@ static std::string state_config_identity() {
     field("resolved RAM pages");
     field(std::to_string(MEM_TotalPages()));
     field(std::to_string(MEM_TotalPagesAt4GB()));
+    field("initialized FPU presence/model v1");
+    field(std::to_string(CPU_StateFpuIdentity()));
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }

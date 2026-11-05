@@ -81,6 +81,8 @@ if os.environ.get('DOSBOX_TEST_BASIC_ROM'):
  conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nibm rom basic={rom}\n'))
 if os.environ.get('DOSBOX_TEST_CAPTURE_POLICY'):
  conf.write_text(conf.read_text()+'[dosbox]\nsaveslot=97\nsavefile=unused-policy.sav\nsaveremark=false\nautosave=-30 1-3\nforceloadstate=true\n')
+if os.environ.get('DOSBOX_TEST_FPU'):
+ conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nfpu='+os.environ['DOSBOX_TEST_FPU']+'\n'))
 if os.environ.get('DOSBOX_TEST_AUDIO'):
  conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
 log=(w/'native.log').open('wb')

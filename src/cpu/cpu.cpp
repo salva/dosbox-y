@@ -84,6 +84,10 @@ uint8_t enable_pse_extbits = 0;
 uint8_t enable_pse_extmask = 0;
 
 bool enable_fpu = true;
+
+uint32_t CPU_StateFpuIdentity() {
+    return enable_fpu ? (0x100u | uint32_t(FPU_ArchitectureType)) : 0u;
+}
 bool enable_msr = true;
 bool enable_syscall = true;
 bool enable_cmpxchg8b = true;

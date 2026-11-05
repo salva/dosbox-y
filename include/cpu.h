@@ -24,6 +24,8 @@
 
 // Emulator-thread observation without retiring deferred arithmetic flags.
 uint32_t CPU_InspectFlags();
+// Initialized guest FPU identity, not the requested configuration spelling.
+uint32_t CPU_StateFpuIdentity();
 
 #define CPU_AUTODETERMINE_NONE		0x00
 #define CPU_AUTODETERMINE_CORE		0x01
