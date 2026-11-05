@@ -44,8 +44,9 @@ for name, setup, step in cases:
         'DOSBOX_TEST_ROOT_FACTS': 'code=42 resident=0 self-parent=0'})
     # Real FILE/INLINE observe/save/host-delay/save without advancing guest.
     run(name + '-lua-held', 'fresh-startup-lua.py', {'DOSBOX_TEST_ARCHIVE': archive})
-    # Separate fresh FILE/INLINE process explicitly runs to useful guest result,
-    # checks exact terminal facts, revoked context and actual Lua close fence.
-    run(name + '-lua-run', 'fresh-startup-terminal.py', {'DOSBOX_TEST_ARCHIVE': archive})
+    # Same fresh FILE/INLINE invocation observes/delays/saves and then explicitly
+    # runs to useful guest result, exact terminal facts and Lua close fence.
+    run(name + '-lua-run', 'fresh-startup-terminal.py', {
+        'DOSBOX_TEST_ARCHIVE': archive, 'DOSBOX_TEST_OBSERVE_BEFORE_RUN': '1'})
     print(name, 'debugger + fresh FILE/INLINE held observation, explicit continuation, root42 disposal PASS', flush=True)
 print('Bounded author E2E milestone PASS; independent assessment still required', flush=True)

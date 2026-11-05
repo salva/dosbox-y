@@ -56,8 +56,9 @@ reset, deployment, source switch or unknown-resource cleanup is needed.
    target disposal, unchanged input, no evaluator/ordinary continuation. Do not
    demand preservation of a used target. Do not replay an uncertain operation.
 
-Author run `proc-0ccc62a7cec2` exit0, evidence
-`e2e-milestone-ua7nsl_2`, all three debugger/FILE/INLINE verticals pass. This
+Author runs `proc-0ccc62a7cec2` and stronger same-invocation
+observe→delay→save→explicit Run `proc-f377a09109a1` exit0, evidence
+`e2e-milestone-ua7nsl_2` / `e2e-milestone-tgqoxjhj`, all three debugger/FILE/INLINE verticals pass. This
 wrapper consolidates existing real consumers; it is not a new decoder or test
 injection into production. All emulator/Xvfb instances it creates are owned
 and settled by those consumers.

@@ -48,6 +48,15 @@ assert(not r.continuation and r.context==nil)
 local ok=pcall(d.context);assert(not ok)
 local f=assert(io.open('{receipt}','w'));f:write(r.exit_code);f:close()
 '''
+ if os.environ.get('DOSBOX_TEST_OBSERVE_BEFORE_RUN'):
+  held_one=w/(mode+'-held-one.sav');held_two=w/(mode+'-held-two.sav')
+  observation=f'''local c=d.context()
+local regs=d.registers(c)
+assert(d.save('{held_one}').effects.usable)
+os.execute('sleep 2')
+assert(d.save('{held_two}').effects.usable)
+'''
+  script=script.replace('local r=d.run{}',observation+'local r=d.run{}')
  if os.environ.get('DOSBOX_TEST_BLOCKED_FINALIZER'):
   script=script.replace("local d=require('dosbox')",f"local d=require('dosbox');package.cpath='{w}/?.so;'..package.cpath;local block=require('close_block')")
   script=script.replace(" local ok=pcall(d.context)",f" block('{entered}','{release}');local ok=pcall(d.context)",1)
@@ -81,6 +90,13 @@ local f=assert(io.open('{receipt}','w'));f:write(r.exit_code);f:close()
  if os.environ.get('DOSBOX_TEST_FINALIZER_ERROR'):
   text=(w/(mode+'.log')).read_text(errors='replace')
   assert 'expected close-fence error' in text and 'Restored session ended:' in text
+ if os.environ.get('DOSBOX_TEST_OBSERVE_BEFORE_RUN'):
+  import zipfile
+  with zipfile.ZipFile(archive) as original,zipfile.ZipFile(held_one) as one,zipfile.ZipFile(held_two) as two:
+   for name in ('CPU','Memory','Pic','Dosbox-x','Keyboard','IntTimer10'):
+    assert one.read(name)==two.read(name),(w,mode,name,'advanced before explicit Run')
+   for name in ('Pic','Dosbox-x','Keyboard','IntTimer10'):
+    assert original.read(name)==one.read(name),(w,mode,name,'advanced before Lua observation')
  assert done.read_text()=='revoked' and receipt.read_text()==str(exit_code),(w,mode)
  assert gc_done.read_text()=='revoked',(w,mode,'lua_close finalizer granted a context')
  assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
