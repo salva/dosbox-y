@@ -10604,15 +10604,15 @@ fresh_boot:
                 // No guest frames, worker or frontend are active here. Blocking
                 // input is host time only; EOF/unknown input disposes, never runs.
                 DOSBOX_HoldFreshPacing();
-                LOG_MSG("Restored console held: cycles=%d left=%d pic=%.17g ticks=%u; commands: status, run, quit",
-                        CPU_Cycles, CPU_CycleLeft, double(PIC_FullIndex()), unsigned(PIC_Ticks));
+                LOG_MSG("Restored console held: cycles=%lld left=%lld pic=%.17g ticks=%u; commands: status, run, quit",
+                        static_cast<long long>(CPU_Cycles), static_cast<long long>(CPU_CycleLeft), double(PIC_FullIndex()), unsigned(PIC_Ticks));
                 char command[32];
                 for (;;) {
                     if (!fgets(command,sizeof(command),stdin))
                         E_Exit("Restored console closed; target discarded");
                     if (!strcmp(command,"status\n")) {
-                        LOG_MSG("Restored console held: cycles=%d left=%d pic=%.17g ticks=%u",
-                                CPU_Cycles, CPU_CycleLeft, double(PIC_FullIndex()), unsigned(PIC_Ticks));
+                        LOG_MSG("Restored console held: cycles=%lld left=%lld pic=%.17g ticks=%u",
+                                static_cast<long long>(CPU_Cycles), static_cast<long long>(CPU_CycleLeft), double(PIC_FullIndex()), unsigned(PIC_Ticks));
                     } else if (!strcmp(command,"run\n")) {
                         DOSBOX_ContinueFreshPacing();
                         break;

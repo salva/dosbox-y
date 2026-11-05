@@ -26,7 +26,13 @@ status timing invariant, explicit Run consumes reset0xaa/E1 and root42 disposes.
 Valid-CRC Shell binding mismatch refuses before console; quit refuses without
 root suffix; archive unchanged. Full four-workload Lua debugger/FILE/INLINE E2E
 passes proc-77b465231ed5 on owning production delta (before help-only line).
-Final help-inclusive rebuilt binaries + native vertical/mismatch/quit pass
+Final width-correct diagnostic rebuild/check proc-652a808add82 exit0:
+native-console-r3mbst7j and full E2E e2e-milestone-d6mzy956 pass. CPU counters
+are long on this profile: final diagnostics use explicit long-long casts/%lld,
+after compiler warnings exposed original %d truncation. Build logs
+build/frontend-width-{lua,no-debug}.log. Final Lua SHA256a18d836a7ab864ed57e6a8911c8f98e7dcab71c0d090c02d22ce023c8c8d8e1a;
+no-debug1c1c7eab3617446b707d806c374ab4c89e28589f76b970f37edd994fdd44a493.
+Previous help-inclusive rebuilt binaries + native vertical/mismatch/quit pass
 proc-23817bb19745: native-console-eqzg97_5 under card-n-c-k-a work root.
 Lua SHA256a18d836a7ab864ed57e6a8911c8f98e7dcab71c0d090c02d22ce023c8c8d8e1a;
 no-debug265f6674894d32415b6c9b112b86b0457f4b6e741cad9a8500e44e3d4e4f2857.
