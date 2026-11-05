@@ -11,6 +11,20 @@ cases=[('Mouse',lambda b:b[:-1],False),
        ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
        ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
+if os.environ.get('DOSBOX_TEST_EMS_MONITOR'):
+ # Physical private monitor above 1MiB; corrupt all six controlled bytes.
+ import re
+ config=w/'ems-monitor.conf'
+ config.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=false\n[midi]\nmididevice=none\n[config]\ndos=low,umb\n')
+ result=subprocess.run(['gdb','-q','-batch','-ex','break DEBUG_HoldRestoredStartup','-ex','run','-ex',"p 'ems.cpp'::vcpi.private_area",'-ex','quit','--args',os.environ['DOSBOX_TEST_BINARY'],'-conf',str(config),'-restore-state',str(source)],capture_output=True,text=True,timeout=45,env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'))
+ (w/'ems-monitor.log').write_text(result.stdout+result.stderr)
+ values=list(map(int,re.findall(r'\$\d+ = (\d+)',result.stdout)))
+ assert result.returncode==0 and len(values)==1 and values[0]>=0x100000,(result.stdout,result.stderr)
+ _,descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
+ for n in range(6):
+  def wrong_ems_monitor(data,n=n):
+   data=bytearray(data);data[descriptor+values[0]+0x2e00+n]^=1;return bytes(data)
+  cases.append(('Memory',wrong_ems_monitor,False))
 if os.environ.get('DOSBOX_TEST_XMS_CONTROL'):
  # Registered handles are followed by HMA ownership/global A20/count.
  import re,struct
@@ -432,6 +446,8 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
   conf.write_text(conf.read_text()+f'[dosbox]\nibm rom basic={rom}\n')
  if os.environ.get('DOSBOX_TEST_AUDIO'):
   conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
+ if os.environ.get('DOSBOX_TEST_EMS_MONITOR'):
+  conf.write_text(conf.read_text()+'[config]\ndos=low,umb\n')
  master,slave=pty.openpty()
  fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',50,160,0,0))
  os.set_blocking(master,False)
@@ -476,6 +492,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
  else:
   assert 'SaveState::install' in diagnosis.stdout,diagnosis.stdout
  expected=('Fresh restore failed' if owner in metadata else
+           'failed during installation' if mutate.__name__=='wrong_ems_monitor' else
            'failed during installation' if owner=='Dos' and mutate.__name__=='bad_hma_cursor' else
            'failed during installation' if owner=='Dos' and os.environ.get('DOSBOX_TEST_HMA_CURSOR') else
            'failed during installation' if owner=='Dos' and os.environ.get('DOSBOX_TEST_DOS_TABLES') else
