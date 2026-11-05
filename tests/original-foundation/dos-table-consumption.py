@@ -24,6 +24,11 @@ uint16_t DOS_SDA_SEG=0xb2,DOS_SDA_OFS=0,DOS_SDA_SEG_SIZE=2;
 uint16_t DOS_INFOBLOCK_SEG=0x80,DOS_CONDRV_SEG=0xa0,DOS_CDS_SEG=0x108;
 uint16_t DOS_IHSEG=0xc810,cmd_line_seg=0xc820;
 unsigned call_casemap=12;
+constexpr unsigned CB_MAX=128;
+using Handler=unsigned(*)();
+unsigned DOS_CaseMapFunc(){return 0;}
+unsigned wrong_handler(){return 1;}
+Handler CallBack_Handlers[CB_MAX]={};
 uint8_t ram[0x100000]={};
 uint32_t CALLBACK_PhysPointer(unsigned slot){return 0xf0000+slot*32;}
 uint8_t mem_readb(uint32_t address){assert(address<sizeof(ram));return ram[address];}
@@ -35,6 +40,7 @@ uint8_t country_info[0x22]={},country_info_pc98[0x22]={};
 std::string save(){std::ostringstream s;POD_Save_DOS_Tables(s);assert(s);return s.str();}
 bool load(const std::string &b){std::istringstream s(b);POD_Load_DOS_Tables(s);return bool(s);}
 int main(){
+ CallBack_Handlers[call_casemap]=DOS_CaseMapFunc;
  const auto code=CALLBACK_PhysPointer(call_casemap);
  ram[code]=0xfe;ram[code+1]=0x38;ram[code+2]=call_casemap;ram[code+4]=0xcb;
  dos.tables.country=country_info;country_info[0]=2;country_info[0x12]=42;
@@ -55,6 +61,12 @@ int main(){
  for(unsigned n=0;n<5;++n){ram[code+n]^=1;assert(!load(bytes));
    std::ostringstream refused;POD_Save_DOS_Tables(refused);assert(!refused);
    ram[code+n]^=1;assert(load(bytes));}
+ CallBack_Handlers[call_casemap]=wrong_handler;assert(!load(bytes));
+ {std::ostringstream s;POD_Save_DOS_Tables(s);assert(!s);}
+ CallBack_Handlers[call_casemap]=DOS_CaseMapFunc;assert(load(bytes));
+ const auto slot=call_casemap;call_casemap=CB_MAX;assert(!load(bytes));
+ {std::ostringstream s;POD_Save_DOS_Tables(s);assert(!s);}
+ call_casemap=slot;assert(load(bytes));
  DOS_GetMemory_unmapped=true;assert(!load(bytes));
 }
 '''

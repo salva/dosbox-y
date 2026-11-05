@@ -616,7 +616,9 @@ static bool DOS_CaseMapBindingIntact()
     // DOS_CaseMapFunc owns an unhookable CB_RETF body. Guest INT vectors and
     // country contents outside its native entry remain payload, not defaults.
     const auto address=CALLBACK_PhysPointer(call_casemap);
-    if (!call_casemap || address>0x100000u-5u) return false;
+    if (!call_casemap || call_casemap >= CB_MAX ||
+        CallBack_Handlers[call_casemap] != DOS_CaseMapFunc ||
+        address>0x100000u-5u) return false;
     return mem_readb(address)==0xfe && mem_readb(address+1)==0x38 &&
            mem_readw(address+2)==call_casemap && mem_readb(address+4)==0xcb;
 }
