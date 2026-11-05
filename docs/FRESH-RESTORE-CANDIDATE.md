@@ -26,7 +26,11 @@ EMS/VCPI represented. The latter exposed an EMS native-binding validator bug:
 its original constructor writes the VCPI monitor with A20 temporarily enabled,
 but the checker used gate-translated reads. The owner now reads that physical
 allocation without changing saved A20; it still verifies slot/handler/all six
-controlled bytes. Capture failures identify the owning component without
+controlled bytes. `fresh-umb-held.asm` separately holds an allocated UMB with
+an A55A payload, then explicitly frees/reallocates/frees through reconstructed
+XMS services before root42; all three profiles pass without a production change.
+This bounded default-layout witness is not full UMB extent/native identity
+qualification. Capture failures identify the owning component without
 changing close settlement or effects.
 
 ## DOS HMA native state increment (2026-11-05)
