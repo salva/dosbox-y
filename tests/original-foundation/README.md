@@ -40,7 +40,11 @@ fields and every shorter prefix with valid ZIP CRC, and every byte in all three
 represented controlled shell bodies after RAM install, using a separate disposable
 startup process per attempt. With `DOSBOX_TEST_LUA=1`, rejection also asserts no
 FILE/INLINE evaluator marker. This proves represented-shell consumption, not
-full native extent completeness. Metadata mismatch is not malformed-owner
+full native extent completeness. `fresh-startup.py` accepts
+`DOSBOX_TEST_IVT_HOOKS=1 DOSBOX_TEST_DEVICE_IVT_HOOKS=1` to preserve guest INT10/33
+vectors as well as shell vectors; this is payload preservation with held RAM
+comparison and speaker continuation, not execution of the injected hook bodies.
+Metadata mismatch is not malformed-owner
 coverage. `progressive-install.py` replaces all-owner-before-effects assertions:
 owner failure is fatal even after earlier installation, never rollback success.
 `live-load-refusal.py` compiles the actual direct slot/file wrappers with no

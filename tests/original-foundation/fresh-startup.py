@@ -39,6 +39,11 @@ if os.environ.get('DOSBOX_TEST_IVT_HOOKS') or os.environ.get('DOSBOX_TEST_XMS_HO
     if os.environ.get('DOSBOX_TEST_IVT_HOOKS'):
      struct.pack_into('<II',data,descriptor+0x22*4,0x08140100,0x08140101)
      struct.pack_into('<I',data,descriptor+0x2e*4,0x08140100)
+     # These guest vectors must not be mistaken for constructor-owned native
+     # trampoline bytes. The speaker continuation does not invoke either hook.
+     if os.environ.get('DOSBOX_TEST_DEVICE_IVT_HOOKS'):
+      for vector in (0x10,0x33):
+       struct.pack_into('<I',data,descriptor+vector*4,0x08140100)
     if xms_hook is not None:
      # Five guest-owned bytes, not the FE38 native dispatch after them.
      data[descriptor+xms_hook:descriptor+xms_hook+5]=b'\x90'*5
