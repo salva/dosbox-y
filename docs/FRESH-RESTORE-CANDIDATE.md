@@ -6,6 +6,19 @@ SHA256 `7204d48e1ab8212c7fb7cb19072786f0bd7022eda0db18122e0f50ab49be23ba`.
 Historical r2/Astra remain applicable except the design's expressly superseded
 used-target preservation/global preparation/live reload/replay prescriptions.
 
+## Resolved RAM compatibility increment (2026-11-05)
+
+RAM metadata now hashes initialized `MEM_TotalPages()`/`MEM_TotalPagesAt4GB()`
+instead of requested `memsize`/`memsizekb` spellings. The Memory consumer still
+checks allocated, reported, handler, address-mask and related geometry before
+install. Author all3 configured Lua/no-Agent/no-Lua consumers restore a 16 MiB
+producer with `memsize=0, memsizekb=16381` (rounded to 16384 KiB), stay held
+across repeated saves/delay, then explicitly continue to root exit42. 32 MiB
+rejects before install, exit1, unchanged source. This is one resolved owner,
+**not** completion of effective identity: other property hashing remains broad.
+Metadata meaning changed, so preceding archives' Config_Identity does not
+qualify this increment; no migration or override is provided.
+
 ## Current bounded author receipt
 
 Combined production vertical committed as

@@ -127,10 +127,18 @@ static std::string state_config_identity() {
                 property->propname=="saveslot" || property->propname=="savefile" ||
                 property->propname=="saveremark" || property->propname=="autosave" ||
                 property->propname=="forceloadstate")) continue;
+            // RAM geometry is resolved (rounded/clamped) by Memory. Equivalent
+            // requested sizes are not different hardware; its owning consumer
+            // also checks allocated/handler/address/A20 geometry on install.
+            if (name=="dosbox" && (property->propname=="memsize" ||
+                                   property->propname=="memsizekb")) continue;
             field(property->propname);
             field(property->GetValue().ToString());
         }
     }
+    field("resolved RAM pages");
+    field(std::to_string(MEM_TotalPages()));
+    field(std::to_string(MEM_TotalPagesAt4GB()));
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }

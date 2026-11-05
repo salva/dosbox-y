@@ -56,6 +56,10 @@ if os.environ.get('DOSBOX_TEST_MEMSIZE'):
  memory=int(os.environ['DOSBOX_TEST_MEMSIZE'])
  assert 1 <= memory <= 256
  conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nmemsize={memory}\n'))
+if os.environ.get('DOSBOX_TEST_MEMSIZEKB'):
+ memory=int(os.environ['DOSBOX_TEST_MEMSIZEKB'])
+ assert 1 <= memory <= 262144
+ conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nmemsize=0\nmemsizekb={memory}\n'))
 if os.environ.get('DOSBOX_TEST_CYCLES'):
  cycles=int(os.environ['DOSBOX_TEST_CYCLES'])
  assert 1 <= cycles <= 1000000

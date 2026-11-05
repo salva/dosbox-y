@@ -20,6 +20,9 @@ struct Property{std::string propname;Value value;Value GetValue(){return value;}
 struct Section{virtual ~Section(){};virtual const char*GetName()=0;};
 struct Section_prop:Section {std::string name;std::vector<Property> props;const char*GetName()override{return name.c_str();}Property*Get_prop(int i){return unsigned(i)<props.size()?&props[i]:nullptr;}};
 struct Control{std::vector<Section*>sections;Section*GetSection(int i){return unsigned(i)<sections.size()?sections[i]:nullptr;}} owner,*control=&owner;
+unsigned resolved_pages=4096;
+unsigned MEM_TotalPages(){return resolved_pages;}
+unsigned MEM_TotalPagesAt4GB(){return 0;}
 std::string STATE_MachineInputsIdentity(){return "loaded-rom-identity";}
 std::string identity(){
 '''+body+r'''
@@ -28,10 +31,11 @@ int main(){
  machine.props={{"memsize",{"16"}},{"saveslot",{"1"}},{"savefile",{"first.sav"}},{"saveremark",{"true"}},{"autosave",{"10 1-3"}},{"forceloadstate",{"false"}}};
  owner.sections={&machine};auto baseline=identity();
  for(unsigned i=1;i<machine.props.size();++i){auto old=machine.props[i].value.s;machine.props[i].value.s="different-policy";assert(identity()==baseline);machine.props[i].value.s=old;}
- machine.props[0].value.s="32";assert(identity()!=baseline);
+ machine.props[0].value.s="32";assert(identity()==baseline);
+ resolved_pages=8192;assert(identity()!=baseline);
 }
 '''
 (w/'test.cpp').write_text(code)
 subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-fsanitize=undefined',str(w/'test.cpp'),'-o',str(w/'test')],check=True)
 subprocess.run([str(w/'test')],check=True)
-print('Actual identity traversal ignores capture/live-load policy; retains memory configuration distinction (reduced hash/section doubles, not effective-hardware completeness)')
+print('Actual identity traversal ignores capture/live-load policy and requested RAM spelling; retains resolved memory distinction (reduced hash/section doubles, not effective-hardware completeness)')
