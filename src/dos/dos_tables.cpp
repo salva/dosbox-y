@@ -658,9 +658,14 @@ void POD_Load_DOS_Tables( std::istream& stream )
     stream.read(reinterpret_cast<char*>(country), sizeof(country));
     stream.read(reinterpret_cast<char*>(&cursor), sizeof(cursor));
     // The casemap entry is native code, not a guest-selected replacement.
+    // Matching allocator records above establish the same native allocations,
+    // so the next-free paragraph must also match the initialized owner. Merely
+    // bounding it by the arena permits a later DOS_GetMemory to overwrite a
+    // retained table (or skip unrepresented allocations). No lazy allocation
+    // reconstruction is implied by accepting guest RAM.
     if (!stream || memcmp(country + 0x12, dos.tables.country + 0x12, 4) ||
-        DOS_GetMemory_unmapped || cursor < DOS_PRIVATE_SEGMENT ||
-        cursor > DOS_PRIVATE_SEGMENT_END) {
+        DOS_GetMemory_unmapped || cursor != dos_memseg ||
+        cursor < DOS_PRIVATE_SEGMENT || cursor > DOS_PRIVATE_SEGMENT_END) {
         stream.setstate(std::ios::failbit);
         return;
     }
