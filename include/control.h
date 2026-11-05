@@ -94,6 +94,7 @@ public:
     bool opt_fastbioslogo = false;
     bool opt_print_ticks = false;
     std::string opt_restore_state;
+    bool opt_restore_console = false;
     bool opt_break_start = false;
     bool opt_erasemapper = false;
     bool opt_resetmapper = false;

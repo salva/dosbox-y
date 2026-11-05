@@ -8479,7 +8479,7 @@ bool DEBUG_IsNativeDebuggerCallback(Bits callback) {
 
 void DEBUG_ReinitCallback(void) {
     /* this is REQUIRED after loading a custom BIOS */
-	debugCallback=CALLBACK_Allocate();
+	debugCallback=CALLBACK_AllocateFrontend();
 	CALLBACK_Setup(debugCallback,DEBUG_EnableDebugger,CB_RETF,"debugger");
     LOG_MSG("Debugger callback entry %04x:%04x",RealSeg(CALLBACK_RealPointer(debugCallback)),RealOff(CALLBACK_RealPointer(debugCallback)));
 }
@@ -8510,7 +8510,7 @@ void DEBUG_Init() {
 	/* Reset code overview and input line */
 	memset((void*)&codeViewData,0,sizeof(codeViewData));
 	/* Setup callback */
-	debugCallback=CALLBACK_Allocate();
+	debugCallback=CALLBACK_AllocateFrontend();
 	CALLBACK_Setup(debugCallback,DEBUG_EnableDebugger,CB_RETF,"debugger");
     LOG_MSG("Debugger callback entry %04x:%04x",RealSeg(CALLBACK_RealPointer(debugCallback)),RealOff(CALLBACK_RealPointer(debugCallback)));
 

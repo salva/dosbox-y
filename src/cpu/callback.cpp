@@ -91,6 +91,17 @@ void CALLBACK_Shutdown(void) {
 	}
 }
 
+uint8_t CALLBACK_AllocateFrontend() {
+    for (Bitu i=CB_MAX-1;i>0;--i) {
+        if (CallBack_Handlers[i]==&illegal_handler) {
+            CallBack_Handlers[i]=nullptr;
+            return static_cast<uint8_t>(i);
+        }
+    }
+    E_Exit("CALLBACK:Can't allocate frontend handler.");
+    return 0;
+}
+
 uint8_t CALLBACK_Allocate(void) {
 	for (uint8_t i=1;(i<CB_MAX);i++) {
 		if (CallBack_Handlers[i]==&illegal_handler) {

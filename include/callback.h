@@ -58,6 +58,9 @@ static inline PhysPt CALLBACK_GetBase(void) {
 }
 
 uint8_t CALLBACK_Allocate();
+// Host-only frontend callbacks use the high end, leaving guest owner order
+// independent of whether a debugger frontend was compiled in.
+uint8_t CALLBACK_AllocateFrontend();
 
 void CALLBACK_Idle(void);
 

@@ -7703,6 +7703,7 @@ bool DOSBOX_parse_argv() {
             fprintf(stderr,"DOSBox-X project maintainer: joncampbell123 (The Great Codeholio)\n\n");
             fprintf(stderr,"Based on DOSBox by the DOSBox Team (See AUTHORS file)\n\n");
             fprintf(stderr,"Debugging options:\n\n");
+            fprintf(stderr,"  -restore-console                        No-debug only: hold restored target; stdin status/run/quit (EOF disposes)\n");
             fprintf(stderr,"  -restore-state <archive>                 Restore once into a fresh disposable startup target, held before debugger/Lua\n");
             fprintf(stderr,"                                          Matching hardware/mounts required; failure disposes target, never live reload\n");
             fprintf(stderr,"  -lua-driver-file <file>                  Evaluate Lua FILE after startup restore (Lua-enabled debug builds)\n");
@@ -7770,6 +7771,13 @@ bool DOSBOX_parse_argv() {
         else if (optname == "time-limit") {
             if (!control->cmdline->NextOptArgv(tmp)) return false;
             control->opt_time_limit = atof(tmp.c_str());
+        }
+        else if (optname == "restore-console") {
+#if !C_DEBUG
+            control->opt_restore_console = true;
+#else
+            return false; // Debug builds already have the exclusive debugger owner.
+#endif
         }
         else if (optname == "restore-state") {
             if (!control->opt_restore_state.empty() ||
@@ -8078,6 +8086,7 @@ bool DOSBOX_parse_argv() {
         control->cmdline->NextArgv();
     }
 
+    if (control->opt_restore_console && control->opt_restore_state.empty()) return false;
 #if C_DEBUG_LUA
     bool competing = control->opt_debug || control->opt_earlydebug;
 #if defined(C_DOSBOX_AGENT)
@@ -10590,7 +10599,27 @@ fresh_boot:
 #if C_DEBUG
                 DEBUG_HoldRestoredStartup();
 #else
-                E_Exit("Restored target held: this build has no explicit continuation frontend");
+                if (!control->opt_restore_console)
+                    E_Exit("Restored target held: select -restore-console for explicit continuation");
+                // No guest frames, worker or frontend are active here. Blocking
+                // input is host time only; EOF/unknown input disposes, never runs.
+                DOSBOX_HoldFreshPacing();
+                LOG_MSG("Restored console held: cycles=%d left=%d pic=%.17g ticks=%u; commands: status, run, quit",
+                        CPU_Cycles, CPU_CycleLeft, double(PIC_FullIndex()), unsigned(PIC_Ticks));
+                char command[32];
+                for (;;) {
+                    if (!fgets(command,sizeof(command),stdin))
+                        E_Exit("Restored console closed; target discarded");
+                    if (!strcmp(command,"status\n")) {
+                        LOG_MSG("Restored console held: cycles=%d left=%d pic=%.17g ticks=%u",
+                                CPU_Cycles, CPU_CycleLeft, double(PIC_FullIndex()), unsigned(PIC_Ticks));
+                    } else if (!strcmp(command,"run\n")) {
+                        DOSBOX_ContinueFreshPacing();
+                        break;
+                    } else if (!strcmp(command,"quit\n")) {
+                        E_Exit("Restored console quit; target discarded");
+                    } else E_Exit("Restored console invalid command; target discarded");
+                }
 #endif
             }
 #if C_DEBUG
