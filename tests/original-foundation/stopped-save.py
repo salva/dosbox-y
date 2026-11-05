@@ -10,7 +10,7 @@ binary = pathlib.Path(os.environ.get('DOSBOX_TEST_BINARY','src/dosbox-x')).resol
 if os.environ.get('DOSBOX_TEST_IHSEG'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-ihseg.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_EXEC_CHILD'):
- subprocess.run(['nasm','-f','bin',*(['-DCHILD_TSR'] if os.environ.get('DOSBOX_TEST_CHILD_TSR') else []),str(pathlib.Path(__file__).with_name('fresh-child.asm')),'-o',str(w/'TINY.COM')],check=True)
+ subprocess.run(['nasm','-f','bin',*(['-DCHILD_TSR'] if os.environ.get('DOSBOX_TEST_CHILD_TSR') else []),*(['-DCHILD_SHELL'] if os.environ.get('DOSBOX_TEST_CHILD_SHELL') else []),str(pathlib.Path(__file__).with_name('fresh-child.asm')),'-o',str(w/'TINY.COM')],check=True)
  (w/'CHILD.COM').write_bytes(bytes.fromhex(os.environ.get('DOSBOX_TEST_CHILD_HEX','b8 07 4c cd 21')))
 if os.environ.get('DOSBOX_TEST_XMS_SERVICE'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-xms.asm')),'-o',str(w/'TINY.COM')],check=True)

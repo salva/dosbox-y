@@ -92,6 +92,8 @@ cases = (
     ('child-tsr', {'DOSBOX_TEST_EXEC_CHILD': '1', 'DOSBOX_TEST_CHILD_TSR':'1',
                     'DOSBOX_TEST_CHILD_HEX':'ba 20 00 b8 07 31 cd 21'},
      '0814:0101', 'code=42 resident=0 self-parent=0'),
+    ('shell-child', {'DOSBOX_TEST_EXEC_CHILD': '1', 'DOSBOX_TEST_CHILD_SHELL':'1'},
+     '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('int22', {'DOSBOX_TEST_CUSTOM_INT22': '1'}, '0814:0101', 'code=42 resident=0 self-parent=0'),
     ('int20', {'DOSBOX_TEST_PROGRAM_HEX': '90 90 cd 20 eb fe'},
      '0814:0101', 'code=0 resident=0 self-parent=0'),

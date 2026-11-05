@@ -43,7 +43,11 @@ every controlled DOS/IHSEG byte corruption pass for the ten-byte variant as well
 as the default one-byte variant. The matrix includes this additional matching
 configuration plus an ordinary IRET consumer (29 cases), followed by separate
 Int20/AH00 root consumers (31 cases); the independently
-completed 27×3 predecessor does not. `fresh-ihseg.asm` explicitly invokes INT1
+completed 27×3 predecessor does not. The subsequent shell-child case executes
+`Z:\COMMAND.COM /C EXIT` after restore, requires its legitimate zero-status
+return to the captured root, then root exit42 (32 cases). This is an integrated
+polymorphic shell **descendant** consumer, not shell-prompt/root capture support
+or the reduced `PROGRAMS_Handler` RootExit-deletion test. `fresh-ihseg.asm` explicitly invokes INT1
 only after authorized continuation and checks preserved AX/carry before root42,
 so both constructor variants are actually consumed, not merely compared.
 
