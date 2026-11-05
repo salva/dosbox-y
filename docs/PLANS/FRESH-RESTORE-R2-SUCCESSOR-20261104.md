@@ -25,6 +25,20 @@ All three configured consumers reject/dispose without evaluator, preserve source
 and attempt archives, and also retain the script's core/late-owner/CRC coverage.
 The actual-codec reduced test remains separate from this integrated witness.
 
+## Retained DOS interrupt helper body
+
+The DOS constructor now retains the exact IHSEG code emitted immediately by
+`DOS_SetupIHSEG`: IRET alone or its nine-byte TF-clearing prefix plus IRET.
+Capture and post-Memory DOS installation compare that controlled span alongside
+the existing nine callback roles. Unused paragraph bytes and IVT hook values
+remain guest payload. This closes a specific native-body omission without a new
+codec, allocation catalogue, constructor reorder or archive revision change.
+`dos-callback-consumption.py` exercises both generated lengths and corruption of
+every controlled byte with reduced UBSan doubles; `fresh-startup-failure.py`
+queries the real configured constructor span and valid-CRC corrupts every byte
+alongside the existing DOS callbacks/HMA mirror. This is not complete ROM or
+DOS/private-extent certification.
+
 ## Contract and use
 
 Preconfigure matching emulated hardware and mounts, then launch:

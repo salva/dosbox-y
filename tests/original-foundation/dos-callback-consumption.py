@@ -25,6 +25,9 @@ uint8_t ram[0x110000] = {};
 uint8_t phys_readb(unsigned address) { assert(address < sizeof(ram)); return ram[address]; }
 PhysPt CALLBACK_PhysPointer(unsigned slot) { return 32 * slot; }
 uint8_t mem_readb(unsigned address) { assert(address < sizeof(ram)); return ram[address]; }
+uint16_t DOS_IHSEG = 0x200;
+bool dos_clear_tf_on_int01 = false;
+unsigned PhysMake(unsigned segment,unsigned offset) { return segment*16+offset; }
 unsigned next_slot = 1;
 struct CALLBACK_HandlerObject {
     unsigned slot = 0;
@@ -43,6 +46,21 @@ Bitu wrong() { return 1; }
 int main() {
     DOS owner;
     assert(owner.NativeCallbacksIntact());
+    for (const bool clear_tf : {false,true}) {
+        dos_clear_tf_on_int01=clear_tf;
+        owner.RetainInterruptHelpers();
+        assert(owner.native_ihseg_body.size()==(clear_tf ? 10u : 1u));
+        assert(owner.NativeCallbacksIntact());
+        for (unsigned n=0;n<owner.native_ihseg_body.size();++n) {
+            ram[owner.native_ihseg_address+n]^=1;
+            assert(!owner.NativeCallbacksIntact());
+            ram[owner.native_ihseg_address+n]^=1;
+        }
+        // Neither unused paragraph prefix nor IVT contents are controlled.
+        ram[PhysMake(DOS_IHSEG,0)]^=1;
+        ram[4]^=1;
+        assert(owner.NativeCallbacksIntact());
+    }
     owner.native_hma_cpm_body={0xea,1,2,3,4};
     for (unsigned n=0;n<5;++n) ram[0x1000c0+n]=owner.native_hma_cpm_body[n];
     assert(owner.NativeCallbacksIntact());

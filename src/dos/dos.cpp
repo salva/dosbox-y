@@ -4142,6 +4142,7 @@ static Bitu DOS_29Handler(void)
 void AddBPINT3(void);
 void IPX_Setup(Section*);
 void DOS_SetupIHSEG(void);
+extern bool dos_clear_tf_on_int01;
 void DOS_CreateDummyDeviceMCB(void);
 void DOS_MemStartChange(uint16_t adjto);
 void DOS_AllocMinFreePadding(uint16_t upto);
@@ -4206,6 +4207,16 @@ private:
     } native_callback[9];
     // XMS writes this second native entry after DOS construction.
     std::vector<uint8_t> native_hma_cpm_body;
+    PhysPt native_ihseg_address = 0;
+    std::vector<uint8_t> native_ihseg_body;
+    void RetainInterruptHelpers() {
+        // DOS_SetupIHSEG owns either IRET alone or the TF-clearing prefix and
+        // IRET. Unused paragraph bytes and guest IVT hooks are not native code.
+        native_ihseg_address = PhysMake(DOS_IHSEG, dos_clear_tf_on_int01 ? 5 : 14);
+        native_ihseg_body.resize(dos_clear_tf_on_int01 ? 10 : 1);
+        for (size_t n = 0; n < native_ihseg_body.size(); ++n)
+            native_ihseg_body[n] = mem_readb(native_ihseg_address + n);
+    }
     void InstallCallback(unsigned role, CallBack_Handler handler, Bitu type,
                          const char *description) {
         const auto size = callback[role].Install(handler, type, description);
@@ -4234,6 +4245,8 @@ public:
             for (size_t n = 0; n < native.body.size(); ++n)
                 if (mem_readb(native.address + n) != native.body[n]) return false;
         }
+        for (size_t n = 0; n < native_ihseg_body.size(); ++n)
+            if (mem_readb(native_ihseg_address + n) != native_ihseg_body[n]) return false;
         for (size_t n = 0; n < native_hma_cpm_body.size(); ++n)
             if (phys_readb(0x1000c0u + n) != native_hma_cpm_body[n]) return false;
         return true;
@@ -4752,6 +4765,7 @@ public:
 #endif
 
 		DOS_SetupIHSEG();
+        RetainInterruptHelpers();
 		DOS_SetupFiles();								/* Setup system File tables */
 		DOS_SetupDevices();							/* Setup dos devices */
 		DOS_SetupTables();
