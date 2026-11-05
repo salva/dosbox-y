@@ -36,7 +36,9 @@ class Forbidden(gdb.Breakpoint):
         gdb.execute('bt')
         raise gdb.GdbError('unexpected guest dispatch before startup hold: '+self.location)
 for name in ('DOSBOX_RunMachine', 'CPU_Core_Normal_Run', 'PIC_RunQueue', 'TIMER_AddTick',
-             'CALLBACK_RunRealInt', 'CALLBACK_RunRealFar',
+             'CALLBACK_Idle', 'CALLBACK_IdleNoInts',
+             'CALLBACK_RunRealInt', 'CALLBACK_RunRealIntOwned',
+             'CALLBACK_RunRealInt_retcsip', 'CALLBACK_RunRealFar',
              'CALLBACK_RunRealFarInt', 'CALLBACK_RunShellExec'):
     Forbidden(name)
 end
