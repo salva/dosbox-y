@@ -1914,12 +1914,18 @@ void POD_Load_DOS_Mscdex( std::istream& stream )
 
 #if !defined(OSFREE)
 			// first play, then simulate pause
-			StopAudio(drive_unit);
+            if (!StopAudio(drive_unit)) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
 #endif
 
 #if !defined(OSFREE)
-			if( playing ) mscdex->PlayAudioMSF(drive_unit, msf_time, play_len);
-			if( pause ) mscdex->PlayAudioMSF(drive_unit, msf_time, 0);
+            if ((playing && !mscdex->PlayAudioMSF(drive_unit, msf_time, play_len)) ||
+                (pause && !mscdex->PlayAudioMSF(drive_unit, msf_time, 0))) {
+                stream.setstate(std::ios::failbit);
+                return;
+            }
 #endif
 		}
 
