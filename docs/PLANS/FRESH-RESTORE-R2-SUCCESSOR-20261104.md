@@ -99,8 +99,17 @@ CRC/EOF/close/publication, actual CPU/memory/PIC/paging/keyboard and native-owne
 safety remain covered. The matrix now also consumes native INT33 reset/set/get
 position after explicit continuation, and captures an already-set cursor at
 IP0200 to check saved state without reinsertion. These are bounded service/state
-witnesses, not physical mouse routing, rendering, or complete native mouse
-callback binding qualification. zip-stream is transport-only and progressive-install
+witnesses, not physical mouse routing or rendering parity. The six IBM mouse
+native roles now retain original-constructor slot/handler/location/final code
+span checks at capture and after Memory installation (including the INT33
+backdoor overlay). Valid-CRC every-controlled-byte corruption rejects in all
+three configured profiles; legitimate IVT hooks remain outside controlled spans.
+PC98's separate INT15 role remains unqualified. Exact all3 input receipt after
+this change is `build/mouse-native-all3-manifest.json` in card work,
+SHA256 `2e7c052abe51c2119cfdc657fede690ee15960bf6974a2a2593aff318cb39ee6`;
+21×3 matrix `fresh-root-matrix/run-fpqt9qyg` passed. This author evidence does
+not complete full native services or independent affected assessment.
+zip-stream is transport-only and progressive-install
 checks actual common metadata/owner completion. Old pristine upstream slot
 probes still describe their baseline, not candidate live-load permission.
 
