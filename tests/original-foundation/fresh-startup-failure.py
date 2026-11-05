@@ -306,6 +306,16 @@ if os.environ.get('DOSBOX_TEST_BINDINGS'):
   return bytes([data[0]^1])+data[1:]
  for name in ('BIOS layout','Shell bindings','XMS','EMS'):
   cases.append((name,wrong_binding,False))
+ if os.environ.get('DOSBOX_TEST_XMS_EMS_BINDING_FIELDS'):
+  # Prefixes belong to the original XMS/EMS codecs, not a second decoder.
+  # Every role/location/span field is consumed before mutable service state.
+  for owner,count in (('XMS',6),('EMS',9)):
+   for offset in range(0,count*4,4):
+    def wrong_service_field(data,offset=offset):
+     data=bytearray(data);data[offset]^=1;return bytes(data)
+    cases.append((owner,wrong_service_field,False))
+   for length in range(count*4):
+    cases.append((owner,lambda data,length=length:data[:length],False))
  if os.environ.get('DOSBOX_TEST_SHELL_BINDING_FIELDS'):
   # Each role has independent slot/type/location/span identity. Mutate every
   # uint32 field with valid ZIP CRC; a count-only check would miss most cases.
