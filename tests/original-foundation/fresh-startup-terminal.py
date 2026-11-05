@@ -1,6 +1,7 @@
 """Real FILE/INLINE root terminal response, Lua close, and process disposal."""
 import hashlib, os, pathlib, subprocess, tempfile
 root=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])
+(root/'fresh-native-entry').mkdir(parents=True, exist_ok=True)
 w=pathlib.Path(tempfile.mkdtemp(prefix='terminal-',dir=root/'fresh-native-entry'))
 archive=pathlib.Path(os.environ['DOSBOX_TEST_ARCHIVE'])
 before=hashlib.sha256(archive.read_bytes()).hexdigest()

@@ -5,6 +5,7 @@ This is a core witness, not backend/audio or universal native-binding acceptance
 """
 import os,pathlib,tempfile,socket,subprocess,time,select,zipfile,hashlib
 root=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])
+(root/'fresh-native-entry').mkdir(parents=True, exist_ok=True)
 w=pathlib.Path(tempfile.mkdtemp(prefix='run-',dir=root/'fresh-native-entry'))
 archive=pathlib.Path(os.environ['DOSBOX_TEST_ARCHIVE'])
 before=hashlib.sha256(archive.read_bytes()).hexdigest()

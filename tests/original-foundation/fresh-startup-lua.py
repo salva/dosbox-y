@@ -1,6 +1,7 @@
 """Worker FILE/INLINE restore probe with compatible engine/ABI and guest hardware."""
 import os,pathlib,tempfile,subprocess,zipfile,hashlib,time
 root=pathlib.Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])
+(root/'fresh-native-entry').mkdir(parents=True, exist_ok=True)
 w=pathlib.Path(tempfile.mkdtemp(prefix='lua-',dir=root/'fresh-native-entry'))
 archive=pathlib.Path(os.environ['DOSBOX_TEST_ARCHIVE'])
 before=hashlib.sha256(archive.read_bytes()).hexdigest()
