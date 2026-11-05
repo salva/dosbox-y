@@ -106,7 +106,7 @@ try:
   refused=request('live-load',f'STATEREAD {archive}',False)
   assert b'fresh' in refused.lower(),refused
  request('save1',f'STATEWRITE {w}/one.sav')
- time.sleep(2)
+ time.sleep(float(os.environ.get('DOSBOX_TEST_HELD_DELAY','2')))
  request('save2',f'STATEWRITE {w}/two.sav')
  with zipfile.ZipFile(startup_archive) as source,zipfile.ZipFile(w/'one.sav') as a,zipfile.ZipFile(w/'two.sav') as b:
   # The exact binary's extracted extents delimit guest CPU state and RAM;

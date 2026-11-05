@@ -43,7 +43,14 @@ every controlled DOS/IHSEG byte corruption pass for the ten-byte variant as well
 as the default one-byte variant. The matrix includes this additional matching
 configuration plus an ordinary IRET consumer (29 cases), followed by separate
 Int20/AH00 root consumers (31 cases); the independently
-completed 27×3 predecessor does not. The subsequent shell-child case executes
+completed 27×3 predecessor does not. Configuration plus stopped-save host-backend qualification also has a bounded
+`cycles=auto` speaker/timer consumer: an SDL/Xvfb plus disk-audio producer
+requires actual nonempty host output, then dummy video/audio imports preserve
+CPU/PIC/timer state across a 30-second host delay and terminate only after
+explicit continuation. `DOSBOX_TEST_HELD_DELAY=30` selects that longer witness;
+it is not a hard-deadline or waveform/parity assertion.
+
+The subsequent shell-child case executes
 `Z:\COMMAND.COM /C EXIT` after restore, requires its legitimate zero-status
 return to the captured root, then root exit42 (32 cases). This is an integrated
 polymorphic shell **descendant** consumer, not shell-prompt/root capture support
