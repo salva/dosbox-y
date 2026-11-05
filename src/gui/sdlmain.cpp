@@ -7716,7 +7716,8 @@ bool DOSBOX_parse_argv() {
             fprintf(stderr,"  -debug-lua-script <path>                 Run trusted Lua at startup stopped state\n");
             fprintf(stderr,"  -debug-lua-validation-exit               Exit after successful startup Lua\n");
             fprintf(stderr,"  -lua-driver-file <path> | -lua-driver-code <chunk>\n");
-            fprintf(stderr,"  -lua-driver-program <DOS path> [-lua-driver-state <archive>]\n");
+            fprintf(stderr,"  -lua-driver-program <DOS path> (natural entry, no restore)\n");
+            fprintf(stderr,"  -lua-driver-state <archive> unsupported; use -restore-state <archive>\n");
 #endif
             fprintf(stderr,"  -console                                Show logging console (Windows builds only)\n");
             fprintf(stderr,"  -noconsole                              Do not show logging console (Windows debug builds only)\n");
@@ -8088,6 +8089,10 @@ bool DOSBOX_parse_argv() {
 
     if (control->opt_restore_console && control->opt_restore_state.empty()) return false;
 #if C_DEBUG_LUA
+    if (control->lua_driver.archive_set) {
+        LOG_MSG("-lua-driver-state refused: fresh launch required; use -restore-state <archive> with -lua-driver-file or -lua-driver-code (without -lua-driver-program)");
+        return false;
+    }
     bool competing = control->opt_debug || control->opt_earlydebug;
 #if defined(C_DOSBOX_AGENT)
     competing = competing || !control->opt_agent_config.empty() || control->opt_agent_self_test;

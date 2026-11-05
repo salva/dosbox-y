@@ -22,8 +22,13 @@ code=r'''
 #include <cstdarg>
 #include <cstdio>
 unsigned logs=0;std::string message;
-void LOG_MSG(const char *format,...){char text[1024];va_list args;va_start(args,format);vsnprintf(text,sizeof(text),format,args);va_end(args);message=text;++logs;}
+std::string working_dir="/guest",savefilename;
+bool use_save_file=false;
+#define CROSS_FILESPLIT '/'
+bool Get_Custom_SaveDir(std::string&){return false;}
+void LOG_MSG(const char *format,...){char text[1024];va_list args;va_start(args,format);vsnprintf(text,sizeof(text),format,args);va_end(args);if(std::string(text).find("State archive:")!=0)message=text;++logs;}
 struct SaveState{
+ static constexpr size_t SLOT_COUNT=10,MAX_PAGE=10;
  void load(size_t) const;
  bool loadFile(const std::string&) const;
  bool loadFrom(size_t,const std::string*) const;
@@ -31,11 +36,11 @@ struct SaveState{
 '''+wrappers+s[a:b]+r'''
 int main(){SaveState state;
  for(size_t slot:{size_t(0),size_t(99),size_t(-1)}){
-  auto before=logs;state.load(slot);assert(logs==before+1);
+  auto before=logs;state.load(slot);assert(logs==before+(slot<100?2:1));
   assert(message.find("fresh launch required")!=std::string::npos);
  }
  for(const std::string &path:{std::string(),std::string("missing.sav"),std::string("/dev/zero")}){
-  auto before=logs;assert(!state.loadFile(path));assert(logs==before+1);
+  auto before=logs;assert(!state.loadFile(path));assert(logs==before+2);
   assert(message.find("fresh launch required")!=std::string::npos);
  }
 }

@@ -2815,8 +2815,7 @@ bool noremark_savestate_menu_callback(DOSBoxMenu * const menu, DOSBoxMenu::item 
 bool force_loadstate_menu_callback(DOSBoxMenu * const menu, DOSBoxMenu::item * const menuitem) {
     (void)menu;//UNUSED
     (void)menuitem;//UNUSED
-    force_load_state = !force_load_state;
-    mainMenu.get_item("force_loadstate").check(force_load_state).refresh_item(mainMenu);
+    LOG_MSG("State load refused: fresh launch required; legacy force preference has no effect");
     return true;
 }
 
@@ -3783,7 +3782,7 @@ void AllocCallback1() {
         {
             mainMenu.alloc_item(DOSBoxMenu::item_type_id,"enable_autosave").set_text("Enable auto-saving state").set_callback_function(enable_autosave_menu_callback).enable(false);
             mainMenu.alloc_item(DOSBoxMenu::item_type_id,"noremark_savestate").set_text("No remark when saving state").set_callback_function(noremark_savestate_menu_callback).check(noremark_save_state);
-            mainMenu.alloc_item(DOSBoxMenu::item_type_id,"force_loadstate").set_text("No warning when loading state").set_callback_function(force_loadstate_menu_callback).check(force_load_state);
+            mainMenu.alloc_item(DOSBoxMenu::item_type_id,"force_loadstate").set_text("Legacy force load (unsupported; fresh launch required)").set_callback_function(force_loadstate_menu_callback).enable(false);
             mainMenu.alloc_item(DOSBoxMenu::item_type_id,"removestate").set_text("Remove state in slot").set_callback_function(remove_state_menu_callback);
             mainMenu.alloc_item(DOSBoxMenu::item_type_id,"refreshslot").set_text("Refresh display status").set_callback_function(refresh_slots_menu_callback);
             mainMenu.alloc_item(DOSBoxMenu::item_type_id,"lastautosaveslot").set_text("Select last auto-saved slot").set_callback_function(last_autosave_slot_menu_callback).enable(false);

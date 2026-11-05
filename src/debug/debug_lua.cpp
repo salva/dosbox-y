@@ -3386,12 +3386,10 @@ void Debugger_LocalDriverSave(NativeDebug::Attachment attachment,
 }
 const char *Debugger_LocalDriverLoad(NativeDebug::Attachment attachment,
                                     NativeDebug::Context context,const std::string &archive) {
-    // Startup runs on the admitted held native frame before the worker exists.
-    // The shared operation owns the lease, original component-stream install,
-    // fatal partial-install handling, and retirement of the previous context.
-    // Do not pump host events or a second state-job execution loop here.
-    return DEBUG_NativeStateFile(attachment,context,archive,true) ?
-        nullptr : "startup state load refused or failed";
+    // Legacy entry/state_file consumers cannot restore into a used invocation.
+    // Shared refusal reports the path without attachment, lease or installation.
+    (void)DEBUG_NativeStateFile(attachment,context,archive,true);
+    return "fresh launch required: use -restore-state <archive> before Lua FILE/CODE; state_file load is unsupported";
 }
 void Debugger_EntryLoaded(const char *name,uint16_t psp,uint16_t load,uint16_t cs,uint16_t ip,const char *executable) {
  // Natural identity recording neither arms a hold nor changes execution.

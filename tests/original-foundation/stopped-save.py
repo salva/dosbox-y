@@ -189,6 +189,7 @@ def run():
    sendkey(':'+display,'l');time.sleep(2);drain()
    text=(d/'pty.log').read_bytes()
    assert b'fresh launch required' in text and b'Loading state from slot' not in text,text[-4000:]
+   assert str(d/'1.sav').encode() in text and b'-restore-state <archive>' in text,text[-4000:]
    # Refused load retains the held guest and repeated slot save capability.
    sendkey(':'+display,'s');time.sleep(2);drain()
    with zipfile.ZipFile(d/'slot-before.sav') as before, zipfile.ZipFile(d/'1.sav') as after:

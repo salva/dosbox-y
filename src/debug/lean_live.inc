@@ -197,8 +197,8 @@ int LeanState(lua_State *L) {
     lua_pop(L,1);if(!save && !load)return LeanError(L,"unsupported");
     if(lean_terminal.serial || NativeControl::owner().busy())return LeanError(L,"busy");
     if(!DEBUG_AdmitNativeState(live_attachment,DEBUG_NativeExecutionContext()))return LeanError(L,"wrong_owner");
-    // Original codecs do not serialize Lua stacks. Restore remains a one-shot
-    // entry operation, not arbitrary replay inside an executing script.
+    // Retained entry eligibility checks may refuse earlier. Even an eligible
+    // used invocation cannot import: LocalDriverLoad reports fresh startup.
     if(load) {
         const auto owner=DOSBOX_MachineServiceOwner();
         if(lean_loaded_owner==owner.token)return LeanError(L,"load_consumed");

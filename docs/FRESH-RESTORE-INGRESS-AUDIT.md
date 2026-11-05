@@ -1,9 +1,54 @@
 # Fresh restore ingress audit — 2026-11-05
 
-Author inspection of production6ae12f2122997197cfbdd1ba789e48eb82009b07,
-plus this documentation/test-only successor. This is final direct-caller
-inventory for the currently implemented ingresses, not a universal runtime or
-§7 requirement-record approval. Governing design lives at
+## Superseding finite reconciliation — 2026-11-05
+
+Independent [[card:card-n-c-k-b]] status6 approved bounded f1d0 evidence and
+unchanged production6ae12, **not** this document's former completeness claim.
+The following inventory corrects the omitted consumers and dispositions; it is
+not full §7 or hardware/constructor/close/timing acceptance.
+
+- `src/debug/lean_live.inc` LeanState / `state_file(action=load)` retains its
+  argument/context/busy/entry eligibility checks (which can return earlier).
+  Eligible requests call Debugger_LocalDriverLoad -> DEBUG_NativeStateFile ->
+  loadFile -> unconditional fresh-launch refusal. Terminal is completed=false,
+  loaded=false, retired=true, code=the explicit fresh-launch-required error,
+  usability comes from
+  current admission. No target install or context retirement occurs. Entry
+  checks are not a supported restore capability; public state_file save and
+  other lean operations remain. The helper now explicitly describes refusal.
+- `debug.cpp` legacy local startup archive branch (after natural program entry,
+  before worker) calls that same refusing helper and E_Exit on error. No hidden
+  decoder exists. The CLI now rejects `-lua-driver-state` during option
+  validation before natural execution/worker, and help calls it unsupported.
+  The defensive internal branch remains refusing, not an active import seam.
+- For actual startup import use `-restore-state /path/archive.sav` with matching
+  initialized hardware/mounts and **without** `-lua-driver-program` or
+  `-lua-driver-state`; optionally add `-lua-driver-file script.lua` or
+  `-lua-driver-code '...'`. Debugger is the debug-build default; no-debug uses
+  `-restore-console`. These are the existing common fresh startup seam, not a
+  fictitious replacement command or used-target alias.
+- Selected-slot refusal now reports its concrete configured savedir/slot path
+  (or selected explicit savefilename); explicit loadFile reports its supplied
+  archive. It names `-restore-state <archive>` and never creates directories,
+  opens archives, acquires leases or advances guest to report refusal. Invalid
+  native slots refuse explicitly. Saving/selection/info/deletion unchanged.
+- Legacy force menu now says unsupported/fresh-launch-required and is disabled.
+  Its retained callback only reports refusal; no flag toggling or force bypass.
+  Config preference remains inert for compatibility, not a restore capability.
+
+New regression coverage extends used-target-ingress.py with resolved default,
+custom-dir and explicit-file diagnostics, and real stopped-save.py slot UI with
+exact savedir path/action, repeated stopped saves and unchanged held owners.
+Runtime identities/results belong to current owner status and reconciliation
+handoff; reduced-host checks do not replace actual UI evidence.
+
+## Prior bounded inspection provenance
+
+The original f1d0 documentation/test-only successor inspected
+production6ae12f2122997197cfbdd1ba789e48eb82009b07. Its inventory omitted the two
+legacy consumers now included above; it was not a final §5 reconciliation.
+The current candidate includes the explicit production corrections above and
+requires its own builds/runtime evidence. Governing design lives at
 `/work/dosbox-y/docs/PLANS/FRESH-TARGET-RESTORE-DESIGN.md`, not this checkout's
 absent PLANS copy. Accepted brief supersedes its historical pending labels.
 
@@ -16,7 +61,8 @@ calls fresh startup at the top-level unused startup before debugger/FILE/INLINE
 attachment or normal RunMachine. It constructs the native owners, opens source
 read-only, installs common streams, settles exact archive and validates/selects
 root. No used-target transport import was found. Memory checkpoint capture uses
-common output traversal; no second memory decoder remains. Failed target must
+common output traversal; private MemoryInput remains unused transport code,
+not an active alternate decoder/import seam. Failed target must
 be disposed; no unchanged-destination/rollback/used-target preservation claim.
 
 ## Caller inventory

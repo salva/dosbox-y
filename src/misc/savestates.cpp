@@ -987,8 +987,19 @@ void SaveState::restoreFreshStartup(const std::string &path) const {
         E_Exit("Fresh restore failed: invalid or already selected native root");
 }
 bool SaveState::loadFrom(size_t slot, const std::string *source) const { //throw (Error)
-    LOG_MSG("State load refused: fresh launch required (%s, slot %u)",
-            source ? source->c_str() : "selected state archive", unsigned(slot + 1));
+    std::string path;
+    bool Get_Custom_SaveDir(std::string& savedir);
+    if (!source && !(use_save_file && !savefilename.empty())) {
+        if (slot >= SLOT_COUNT*MAX_PAGE) {
+            LOG_MSG("State load refused: fresh launch required; invalid slot");
+            return false;
+        }
+        if (!Get_Custom_SaveDir(path)) path=working_dir+CROSS_FILESPLIT+"save";
+        path+=CROSS_FILESPLIT;
+        path+=std::to_string(slot+1)+".sav";
+    } else path=source ? *source : savefilename;
+    LOG_MSG("State load refused: fresh launch required; use -restore-state <archive>");
+    LOG_MSG("State archive: %s", path.c_str());
     return false;
 }
 

@@ -18,14 +18,19 @@ code=r'''
 #include <cstdarg>
 #include <cstdio>
 unsigned logs=0;
+std::string last,working_dir="/work/guest",savefilename,custom;
+bool use_save_file=false;
+#define CROSS_FILESPLIT '/'
+bool Get_Custom_SaveDir(std::string &path){if(custom.empty())return false;path=custom;return true;}
 void LOG_MSG(const char *format,...) {
  char text[512];va_list args;va_start(args,format);
  vsnprintf(text,sizeof(text),format,args);va_end(args);
- assert(std::string(text).find("fresh launch required")!=std::string::npos);
- ++logs;
+ assert(std::string(text).find("fresh launch required")!=std::string::npos || std::string(text).find("State archive:")==0);
+ ++logs;last=text;
 }
 struct SaveState {
  using Checkpoint=std::map<std::string,std::string>;
+ static constexpr size_t SLOT_COUNT=10,MAX_PAGE=10;
  void load(size_t) const;
  bool loadFile(const std::string&) const;
  bool loadFrom(size_t,const std::string*) const;
@@ -42,7 +47,12 @@ int main() {
  SaveState::Checkpoint parts{{"CPU","malformed"}};
  const auto before=parts;
  assert(!owner.checkpointLoad(parts) && parts==before);
- assert(logs==10);
+ assert(logs==17);
+ owner.load(1);assert(last.find("/work/guest/save/2.sav")!=std::string::npos);
+ custom="/custom";owner.load(99);assert(last.find("/custom/100.sav")!=std::string::npos);
+ use_save_file=true;savefilename="selected.sav";owner.load(0);
+ assert(last.find("selected.sav")!=std::string::npos);
+ assert(!owner.loadFile("explicit.sav"));assert(last.find("explicit.sav")!=std::string::npos);
 }
 '''
 (work/'test.cpp').write_text(code)
