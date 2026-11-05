@@ -45,7 +45,12 @@ reset, deployment, source switch or unknown-resource cleanup is needed.
    workload saves duplicated handles at cursor3, observes current changed host
    contents, shares cursor through aliases and survives closing one alias;
    it exits42 only after these checks. SB workload consumes the saved unread
-   reset response and executes E1 at actual port22c before exit42.
+   reset response and executes E1 at actual port22c before exit42. Fourth
+   descendant workload is captured at the initial stopped debugger entry;
+   explicit continuation EXECs native `Z:\\COMMAND.COM /C EXIT`, receives child
+   status and returns to the immutable root before root42. This covers legitimate
+   new descendants through real FILE/INLINE as well as debugger, not shell-root
+   capture.
 3. For each, the real debugger saves the running workload. Fresh CLI restore
    holds before any requested debugger/Lua work; save/delay/save verifies no
    CPU/PIC/TIMER advance/rebudget. FILE/INLINE use new Lua states with full
@@ -58,7 +63,13 @@ reset, deployment, source switch or unknown-resource cleanup is needed.
 
 Author runs `proc-0ccc62a7cec2` and stronger same-invocation
 observe→delay→save→explicit Run `proc-f377a09109a1` exit0, evidence
-`e2e-milestone-ua7nsl_2` / `e2e-milestone-tgqoxjhj`, all three debugger/FILE/INLINE verticals pass. This
+`e2e-milestone-ua7nsl_2` / `e2e-milestone-tgqoxjhj`, all three debugger/FILE/INLINE verticals pass. Fourth descendant expansion `proc-6fff3560c3a2` exit0,
+`e2e-milestone-0fd4_xa9`, all four verticals pass. Initial expansion
+`proc-144d5202fc59` failed because an unnecessary breakpoint/Run at the already
+held initial IP let the ordinary root exit before capture; first three cases
+passed, descendant did not. Corrected fixture captures the existing initial
+stop without Run; production unchanged. This is not evidence of shell-root
+support. This
 wrapper consolidates existing real consumers; it is not a new decoder or test
 injection into production. All emulator/Xvfb instances it creates are owned
 and settled by those consumers.

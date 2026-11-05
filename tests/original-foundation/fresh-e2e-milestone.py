@@ -32,11 +32,14 @@ cases = (
                        'DOSBOX_TEST_SPEAKER_ACTIVE': '1'}, '0814:0201'),
     ('shared-file', {'DOSBOX_TEST_SHARED_FILE': '1'}, '0814:0204'),
     ('sb-fifo', {'DOSBOX_TEST_SB_HELD': '1'}, '0814:0201'),
+    ('new-shell-child', {'DOSBOX_TEST_EXEC_CHILD': '1',
+                         'DOSBOX_TEST_CHILD_SHELL': '1',
+                         'DOSBOX_TEST_CAPTURE_IP': ''}, '0814:0101'),
 )
 for name, setup, step in cases:
-    output = run(name + '-producer', 'stopped-save.py', dict(
-        setup, DOSBOX_TEST_CAPTURE_IP='0814:0200',
-        DOSBOX_TEST_REFUSAL_REGISTERS='CS:IP=' + step))
+    producer_setup = {'DOSBOX_TEST_CAPTURE_IP': '0814:0200', **setup}
+    producer_setup['DOSBOX_TEST_REFUSAL_REGISTERS'] = 'CS:IP=' + step
+    output = run(name + '-producer', 'stopped-save.py', producer_setup)
     archive = str(Path(output.splitlines()[0]) / 'first.sav')
     run(name + '-debugger', 'fresh-startup.py', {
         'DOSBOX_TEST_ARCHIVE': archive, 'DOSBOX_TEST_ROOT_EXIT': '1',
