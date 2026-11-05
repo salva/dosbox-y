@@ -11,6 +11,18 @@ cases=[('Mouse',lambda b:b[:-1],False),
        ('Mouse',lambda b:b[:-17]+b'\xff'+b[-16:],False),
        ('Pic',lambda b:b[:1],False),('Keyboard',lambda b:b+b'\xff',False),
        ('Keyboard',lambda b:b,True),('Keyboard',lambda b:None,False)]
+if os.environ.get('DOSBOX_TEST_BIOS_LAYOUT'):
+ # Compare native allocation identity, never import an allocator graph.
+ # Valid CRC mutations cover every extent/role field before RAM install.
+ with zipfile.ZipFile(source) as z:layout=z.read('BIOS layout')
+ assert len(layout)>=28 and len(layout)%4==0
+ for offset in range(0,len(layout),4):
+  def wrong_layout(data,offset=offset):
+   data=bytearray(data);data[offset]^=1;return bytes(data)
+  cases.append(('BIOS layout',wrong_layout,False))
+ for length in (0,3,24,len(layout)-1):
+  cases.append(('BIOS layout',lambda data,length=length:data[:length],False))
+ cases.append(('BIOS layout',lambda data:data+b'\0',False))
 if os.environ.get('DOSBOX_TEST_EMS_MONITOR'):
  # Physical private monitor above 1MiB; corrupt all six controlled bytes.
  import re
@@ -539,5 +551,6 @@ print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHA
       ('/VBE wait/real/PM constructor body' if os.environ.get('DOSBOX_TEST_VESA_BODY') else '')+
       ('/Int10 native trampoline body' if os.environ.get('DOSBOX_TEST_INT10_BODY') else '')+
       ('/PSP signature/MCB ownership/parent/stack/vector' if os.environ.get('DOSBOX_TEST_ROOT_VALIDATION') else '')+
+      ('/every BIOS allocator extent-role field and truncated/trailing layout' if os.environ.get('DOSBOX_TEST_BIOS_LAYOUT') else '')+
       ('/representation-build-config metadata' if os.environ.get('DOSBOX_TEST_METADATA') else '')+
       ' reject/exit1; source and attempt archives unchanged')
