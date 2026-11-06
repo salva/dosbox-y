@@ -41,6 +41,16 @@ no-write assertion, explicit X/addLF/root42 and final mismatch/quit-disposal
 no-write assertion. `proc-9425382a4a8d` passes (`native-console-9qwvax3n`).
 This directly qualifies destination disposal with an acquired host output stream;
 it does not generalize to multiport shared-buffer scheduling or Windows handles.
+Focused current source checks `proc-cd22d1750173` pass logical gameport, native
+input primitives, pending-D1/AUX keyboard codec, PIT, DMA callback IDs, mixer
+channel/traversal/mute and SB DMA bindings before GUS harness compile failure.
+The table extractor missed an explicitly cast parallel callback and its PIC
+fixture lacked the Epson post-install hook. Corrected `gus-pic.py` accounts for
+cast table entries and explicitly inert Epson absence (not printer coverage).
+`proc-aa790c620795` then passes actual GUS 0.32ms Tx/value/PIC callback+queue,
+SB actual-port forwarding, GUS DRAM/relocations, XMS owner bounds and RAM backing
+lifetime/write tests. These extraction/double checks supplement actual guest
+continuation; they are not waveform/nonempty RAM-image certification.
 Reproduce with `DOSBOX_TEST_BINARY` Lua producer, `DOSBOX_TEST_NATIVE_BINARY`
 native consumer and `DOSBOX_TEST_CONSOLE_FIXTURE=serial|floppy|ah86|pause` using
 `tests/original-foundation/fresh-native-console.py`. These receipts qualify the

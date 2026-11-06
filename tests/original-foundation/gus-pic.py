@@ -22,7 +22,7 @@ callback = function(gus, 'static void GUS_MidiTxDone(Bitu val)')
 table = pic[pic.index('const void *pic_state_event_table[]'):]
 table = table[:table.index('};')+2]
 # Use actual callback table order, with inert stand-ins for other device callbacks.
-entries = re.findall(r'^\s*([A-Za-z_][A-Za-z_0-9]*),', table, re.M)
+entries = re.findall(r'^\s*(?:\(void\s*\*\)\s*)?([A-Za-z_][A-Za-z_0-9]*),', table, re.M)
 assert entries.count('GUS_MidiTxDone_PIC_Event') == 1
 standins = ''.join('void *'+name+' = (void*)&inert;\n' for name in dict.fromkeys(entries) if name not in ('NULL', 'GUS_MidiTxDone_PIC_Event'))
 timer_table = pic[pic.index('const void *pic_state_timer_table[]'):]
@@ -68,6 +68,9 @@ bool InEventService=false;
 pic_tickindex_t srv_lag=0;
 #define IS_PC98_ARCH false
 void PC98_Mouse_RestoreTick() {}
+// This focused GUS harness has no Epson service; production discards its
+// interrupted-job event after PIC installation. Do not manufacture a printer.
+void PRINTER_DiscardRestoredEvents() {}
 '''
 code = r'''
 #include <cassert>
