@@ -439,7 +439,19 @@ void POD_Save_Tandy_Sound( std::ostream& stream )
 	// *******************************************
 
 	// - near-pure data
-	WRITE_POD( &tandy, tandy );
+    if ((tandy.dac.dma.chan && dma_idx==0xff) ||
+        (tandy.dac.dma.chan && (dma_idx>=4 || tandy.dac.dma.chan->DMA16)) ||
+        (tandy.dac.enabled && !tandy.dac.dma.transfer_done && !tandy.dac.dma.chan)) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    // Logical DAC/PSG backing only; channel and DMA lifetimes stay local.
+#define SAVE_TANDY(f) WRITE_POD(&tandy.f,tandy.f);
+    SAVE_TANDY(enabled) SAVE_TANDY(last_write) SAVE_TANDY(dac.enabled)
+    SAVE_TANDY(dac.hw.base) SAVE_TANDY(dac.hw.irq) SAVE_TANDY(dac.hw.dma)
+    SAVE_TANDY(dac.dma.rate) SAVE_TANDY(dac.dma.buf) SAVE_TANDY(dac.dma.last_sample)
+    SAVE_TANDY(dac.dma.transfer_done) SAVE_TANDY(dac.mode) SAVE_TANDY(dac.control)
+    SAVE_TANDY(dac.frequency) SAVE_TANDY(dac.amplitude) SAVE_TANDY(dac.irq_activated)
+#undef SAVE_TANDY
 
 	// - reloc ptr
 	WRITE_POD( &dma_idx, dma_idx );
@@ -486,7 +498,18 @@ void POD_Load_Tandy_Sound( std::istream& stream )
 	// *******************************************
 
 	// - near-pure data
-	READ_POD( &tandy, tandy );
+    auto incoming=tandy;
+    auto read_bool=[&](bool &v) {
+        unsigned char b=0;static_assert(sizeof(bool)==1,"bool framing");
+        READ_POD(&b,b);if(b>1)stream.setstate(std::ios::failbit);else v=b!=0;
+    };
+#define LOAD_TANDY(f) READ_POD(&incoming.f,incoming.f);
+    read_bool(incoming.enabled); LOAD_TANDY(last_write) read_bool(incoming.dac.enabled);
+    LOAD_TANDY(dac.hw.base) LOAD_TANDY(dac.hw.irq) LOAD_TANDY(dac.hw.dma)
+    LOAD_TANDY(dac.dma.rate) LOAD_TANDY(dac.dma.buf) LOAD_TANDY(dac.dma.last_sample)
+    read_bool(incoming.dac.dma.transfer_done);LOAD_TANDY(dac.mode) LOAD_TANDY(dac.control)
+    LOAD_TANDY(dac.frequency) LOAD_TANDY(dac.amplitude) read_bool(incoming.dac.irq_activated);
+#undef LOAD_TANDY
 
 	// - reloc ptr
 	READ_POD( &dma_idx, dma_idx );
@@ -494,8 +517,14 @@ void POD_Load_Tandy_Sound( std::istream& stream )
 	// *******************************************
 	// *******************************************
 	// *******************************************
-	tandy.dac.dma.chan = NULL;
-	if( dma_idx != 0xff ) tandy.dac.dma.chan = GetDMAChannel(dma_idx);
+    DmaChannel *dma_local = dma_idx==0xff ? nullptr :
+        (dma_idx<4 ? GetDMAChannel(dma_idx) : nullptr);
+    if (!stream || (dma_idx!=0xff && (!dma_local || dma_local->DMA16)) ||
+        (incoming.dac.enabled && !incoming.dac.dma.transfer_done && !dma_local)) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    tandy=incoming;
+    tandy.dac.dma.chan=dma_local;
 
 	// *******************************************
 	// *******************************************
