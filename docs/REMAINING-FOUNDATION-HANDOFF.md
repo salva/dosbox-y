@@ -8,7 +8,20 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
-Current engine24/representation9 production `3a8f6485eb37c7c507f2930446899d414fe3edb5`
+Current engine27/representation9 production `66f6317a8b0ee2221d8c932c1d9ab7bcb4478283`
+(tree `8c786174539d2d6de22004a9fea2523d2c75e84f`) supersedes the historical
+engine24 account below. `MIXER-GUEST-TIME-CONTINUATION.md`,
+`DMA-CALLBACK-CONTINUATION.md` and `DISNEY-NATIVE-CONTINUATION.md` give direct
+original-owner implementation, exact current hashes, tests and limits. Last
+combined FILE/INLINE E2E is proc-cf2a067e1deb, all four cases pass on engine27,
+plus active Adlib/speaker/RTC to two fresh Lua/no-Lua consumers each. All three
+profiles build proc-2d68ddb0f03b. Current configured headers/toolchains unchanged.
+No source cleanup/publication/adoption/independent acceptance. Mixer SDL consumer
+is quiesced; native audible output, active Disney/SB/PC98 not certified by doubles.
+Earlier engine24–26 archives also incompatible. Complete dated §7 finite
+semantic disposition and current-engine frontend/native checks remain actionable.
+
+Prior engine24/representation9 production `3a8f6485eb37c7c507f2930446899d414fe3edb5`
 is documented in `ADLIB-BOOST-CONTINUATION.md` (current three binary hashes,
 all-profile builds, final combined FILE/INLINE/native/exclusive/Lua consumers)
 and `PC-SPEAKER-HISTORY-PARITY.md`. Both directly complete missing selected

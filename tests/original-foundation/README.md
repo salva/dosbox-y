@@ -1,5 +1,15 @@
 ## Current remaining-foundation successor (2026-11-06)
 
+Engine27/representation9 production `66f6317a8b0ee2221d8c932c1d9ab7bcb4478283`
+adds original mixer interpolation/filter/accumulation, DMA userdata/mode/mask/bank
+history, and scalar-only Disney continuation with destination-local resources.
+See `docs/{MIXER-GUEST-TIME-CONTINUATION,DMA-CALLBACK-CONTINUATION,
+DISNEY-NATIVE-CONTINUATION}.md` for current hashes, three builds, actual-code
+sanitizers and combined FILE/INLINE plus two-consumer active matrix. Older engine
+archives are incompatible. Whole finite disposition/current-engine frontend/native
+qualification remains actionable. The previous engine24 inventory below is
+historical source applicability, not current archive compatibility.
+
 Engine24/representation9 production `3a8f6485eb37c7c507f2930446899d414fe3edb5`
 retains fresh-only restore and includes RTC calendar/alarm/lock/NMI state,
 selected bounded Tandy DMA producer, defined signed mixer sample scaling,
