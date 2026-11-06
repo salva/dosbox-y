@@ -2344,18 +2344,27 @@ bool CPrinter::outputPage()
 
         SDL_UnlockSurface(page);
 
+        // All C++ image storage is already constructed and the surface unlocked
+        // before libpng may longjmp on publication failure.
+        if (setjmp(png_jmpbuf(png_ptr))) {
+            png_destroy_write_struct(&png_ptr, &info_ptr);
+            fclose(fp);
+            return false;
+        }
         // tell the png library what to encode.
         png_set_rows(png_ptr, info_ptr, row_pointers.data());
 		
 		// Write image to file
 		png_write_png(png_ptr, info_ptr, 0, NULL);
 
-		/*close file*/
-		fclose(fp);
+		/* Do not clear a page or run an action on partial publication. */
+        const bool written = ferror(fp) == 0;
+        const bool closed = fclose(fp) == 0;
 	
 		/*Destroy PNG structs*/
 		png_destroy_write_struct(&png_ptr, &info_ptr);
 		
+        if (!written || !closed) return false;
 		doAction(fname);
 	}
 #endif
@@ -2451,6 +2460,11 @@ bool CPrinter::outputPage()
 
 		if (multipageOutput)
 		{
+            if (fflush(psfile) || ferror(psfile)) {
+                fclose(psfile);
+                outputHandle = NULL;
+                return false;
+            }
 			multiPageCounter++;
 			outputHandle = psfile;
 		}
@@ -2458,8 +2472,10 @@ bool CPrinter::outputPage()
 		{
 			fprintf(psfile, "%%%%Pages: 1\n");
 			fprintf(psfile, "%%%%EOF\n");
-			fclose(psfile);
+            const bool written = ferror(psfile) == 0;
+            const bool closed = fclose(psfile) == 0;
 			outputHandle = NULL;
+            if (!written || !closed) return false;
 			doAction(fname);
 		}
 	}
