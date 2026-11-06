@@ -450,10 +450,17 @@ fresh-process hit-hit-miss evidence and remaining backend refusals are documente
 in RENDER-CONTINUATION-CORRECTION.md. Full Epson logical/font/spool checkpointing
 is superseded, not silently delegated: EPSON-RESTORE-DISPOSITION.md records the
 owner's interrupted-job hardware-fault requirement and real fresh consumer tests.
-Active FileLPT host resources are not qualified by those Epson receipts. Remaining
-work includes finite current effective VGA scan/layout/split/schedule/panning/
-visibility disposition and affected actual consumers, complete dated §7 semantic
-reconciliation, and parent-arranged independent assessment. IDE's selected delta
+Active FileLPT continuation is now implemented and qualified on the existing
+regular-file/current-EOF route (see `INT10-APERTURE-FILELPT-CONTINUATION.md`); it is not an Epson
+receipt or permission to recreate/truncate missing output. Applied VGA effective
+scan/layout/split/schedule/panning/visibility disposition is complete in
+`VGA-APPLIED-SCAN-DISPOSITION.md`, with actual arithmetic and affected fresh
+font/bank/VESA consumers, not every pixel/backend. Those former open items are
+not current gaps. Remaining work includes complete finite source-grounded
+reconciliation and dated §7/API/CLI consistency, plus parent-arranged independent
+assessment. `VOODOO-CALLOUT-PARITY.md` records the newly ported selected ordinary
+presence/callout lifecycle fix, exact final binaries and combined E2E; its
+ordinary lifetime test does not qualify active accelerator restore. IDE's selected delta
 is catalogue-only, not active nonempty IDE qualification. Broader exhaustive
 hardware/composed and installed-host work remains with parents; that is not
 authority to silently parent-retain still-required foundation behavior. Continue

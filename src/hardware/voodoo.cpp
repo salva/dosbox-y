@@ -41,6 +41,8 @@ static uint32_t assigned_lfb = 0;
 static uint32_t voodoo_current_lfb=(VOODOO_INITIAL_LFB&0xffff0000);
 
 static bool voodoo_pci_enabled = false;
+// Device presence is independent of the PCI command enable bit.
+static bool voodoo_device_enabled = false;
 static MEM_Callout_t voodoo_lfb_cb = MEM_Callout_t_none;
 
 PageHandler* voodoo_lfb_memio_cb(MEM_CalloutObject &co,Bitu phys_page) {
@@ -60,6 +62,10 @@ void voodoo_lfb_cb_free(void) {
 }
 
 void voodoo_lfb_cb_init() {
+	if (!voodoo_device_enabled) {
+		voodoo_lfb_cb_free();
+		return;
+	}
 	if (voodoo_lfb_cb == MEM_Callout_t_none) {
 		voodoo_lfb_cb = MEM_AllocateCallout(MEM_TYPE_PCI);
 		if (voodoo_lfb_cb == MEM_Callout_t_none) E_Exit("Unable to allocate voodoo cb for LFB");
@@ -116,6 +122,7 @@ class VOODOO:public Module_base{
 			else
 				max_voodoomem = false;
 
+			voodoo_device_enabled = emulation_type > 0;
 			bool needs_pci_device = false;
 
 			switch (emulation_type) {
@@ -135,6 +142,8 @@ class VOODOO:public Module_base{
 		}
 
 		~VOODOO(){
+			voodoo_device_enabled = false;
+			voodoo_lfb_cb_free();
 			PCI_RemoveSST_Device();
 
 			if (emulation_type<=0) return;
