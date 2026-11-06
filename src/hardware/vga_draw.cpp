@@ -18,6 +18,7 @@
 
 
 #include <string.h>
+#include "vga_cursor_color.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -974,9 +975,9 @@ static uint8_t * VGA_Draw_Linear_Line_24_to_32_HWMouse_Base(Bitu vidstart, Bitu 
                     // X11 mode: draw when mask bit is set, otherwise transparent
                     if (bitsA & bit) {
                         if (bitsB & bit) {
-                            *xat = *(uint16_t*)vga.s3.hgc.forestack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.forestack);
                         } else {
-                            *xat = *(uint16_t*)vga.s3.hgc.backstack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.backstack);
                         }
                     }
                 } else {
@@ -985,9 +986,9 @@ static uint8_t * VGA_Draw_Linear_Line_24_to_32_HWMouse_Base(Bitu vidstart, Bitu 
                         if (bitsB&bit) *xat ^= ~0U;
                         //else Transparent
                     } else if (bitsB&bit) {
-                        *xat = *(uint32_t*)vga.s3.hgc.forestack;
+                        *xat = VGA_CursorColor<uint32_t>(vga.s3.hgc.forestack);
                     } else {
-                        *xat = *(uint32_t*)vga.s3.hgc.backstack;
+                        *xat = VGA_CursorColor<uint32_t>(vga.s3.hgc.backstack);
                     }
                 }
                 xat++;
@@ -1869,9 +1870,9 @@ static uint8_t * VGA_Draw_VGA_Line_Xlat32_HWMouse( Bitu vidstart, Bitu /*line*/)
                         // X11 mode: draw when mask bit is set, otherwise transparent
                         if (bitsA & bit) {
                             if (bitsB & bit) {
-                                *xat = *(uint16_t*)vga.s3.hgc.forestack;
+                                *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.forestack);
                             } else {
-                                *xat = *(uint16_t*)vga.s3.hgc.backstack;
+                                *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.backstack);
                             }
                         }
                     } else {
@@ -1957,9 +1958,9 @@ static uint8_t * VGA_Draw_VGA_Line_HWMouse( Bitu vidstart, Bitu /*line*/) {
                     // X11 mode: draw when mask bit is set, otherwise transparent
                     if (bitsA & bit) {
                         if (bitsB & bit) {
-                            *xat = *(uint16_t*)vga.s3.hgc.forestack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.forestack);
                         } else {
-                            *xat = *(uint16_t*)vga.s3.hgc.backstack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.backstack);
                         }
                     }
                 } else {
@@ -2044,9 +2045,9 @@ static uint8_t * VGA_Draw_LIN16_Line_HWMouse_Base(Bitu vidstart, Bitu /*line*/) 
                     // X11 mode: draw when mask bit is set, otherwise transparent
                     if (bitsA & bit) {
                         if (bitsB & bit) {
-                            *xat = *(uint16_t*)vga.s3.hgc.forestack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.forestack);
                         } else {
-                            *xat = *(uint16_t*)vga.s3.hgc.backstack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.backstack);
                         }
                     }
                 } else {
@@ -2058,9 +2059,9 @@ static uint8_t * VGA_Draw_LIN16_Line_HWMouse_Base(Bitu vidstart, Bitu /*line*/) 
                     } else if (bitsB&bit) {
                         // Source as well as destination are uint8_t arrays, 
                         // so this should work out endian-wise?
-                        *xat = *(uint16_t*)vga.s3.hgc.forestack;
+                        *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.forestack);
                     } else {
-                        *xat = *(uint16_t*)vga.s3.hgc.backstack;
+                        *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.backstack);
                     }
                 }
                 xat++;
@@ -2142,9 +2143,9 @@ static uint8_t * VGA_Draw_LIN32_Line_HWMouse_Base(Bitu vidstart, Bitu /*line*/) 
                     // X11 mode: draw when mask bit is set, otherwise transparent
                     if (bitsA & bit) {
                         if (bitsB & bit) {
-                            *xat = *(uint16_t*)vga.s3.hgc.forestack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.forestack);
                         } else {
-                            *xat = *(uint16_t*)vga.s3.hgc.backstack;
+                            *xat = VGA_CursorColor<uint16_t>(vga.s3.hgc.backstack);
                         }
                     }
                 } else {
@@ -2153,9 +2154,9 @@ static uint8_t * VGA_Draw_LIN32_Line_HWMouse_Base(Bitu vidstart, Bitu /*line*/) 
                         if (bitsB&bit) *xat ^= ~0U;
                         //else Transparent
                     } else if (bitsB&bit) {
-                        *xat = *(uint32_t*)vga.s3.hgc.forestack;
+                        *xat = VGA_CursorColor<uint32_t>(vga.s3.hgc.forestack);
                     } else {
-                        *xat = *(uint32_t*)vga.s3.hgc.backstack;
+                        *xat = VGA_CursorColor<uint32_t>(vga.s3.hgc.backstack);
                     }
                 }
                 xat++;

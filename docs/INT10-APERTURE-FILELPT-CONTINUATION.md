@@ -17,6 +17,20 @@ FileLPT99/cp437 on engine21 binaries. Full output retained at
 `work:///cards/card-n-c-l-a/processes/proc-66bf2b191bf2/stdout.log`.
 These do not certify multiport/Windows behavior.
 
+A further actual configuration-binding route sets only destination `shellhide`
+via `DOSBOX_TEST_FILELPT_REFUSAL=binding`. It is already refused by
+`Config_Identity` before FileLPT installation, with unchanged host output/archive
+and closed transport. No extra per-owner serialization or engine revision is
+needed. An attempted redundant field/engine22 was removed after observing this
+existing consumed boundary; no engine22 work is delivered. Initial
+`proc-168f849d4554` passed three resource refusals but failed a test assertion
+requiring the FileLPT diagnostic on this earlier metadata refusal; not a production
+restore success. Corrected `proc-890c719e6daa` && exit0 rebuilt both engine21
+configs, passed all four refusals, timeout100/addLF/addFF/cp437 continuation and
+four combined FILE/INLINE fresh held/explicit continuation/root42 E2Es. Binary
+hashes remained exactly those in VGA-PRODUCER-RECURRENCE.md. This receipt precedes
+the later cursor-load-only change; no all-input coverage transfer implied.
+
 Actual missing/FIFO/directory target refusals are now exercised by
 `DOSBOX_TEST_FILELPT_REFUSAL=missing|fifo|directory filelpt-restore.py` with the
 same binary env. `proc-17ad4237f638` && exit0 preserves producer bytes under a

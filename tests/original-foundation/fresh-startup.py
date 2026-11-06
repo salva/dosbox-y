@@ -56,7 +56,7 @@ conf=w/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockna
 if os.environ.get('DOSBOX_TEST_TEXT_PRODUCER'):
  conf.write_text(conf.read_text()+'\n[video]\nenable supermegazeux tweakmode=true\n')
 if os.environ.get('DOSBOX_TEST_FILELPT'):
- conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(archive.parent/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:'+os.environ.get('DOSBOX_TEST_FILELPT_TIMEOUT','100000')+'\n')
+ conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(archive.parent/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_DEST_FLAGS',os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF'))+' timeout:'+os.environ.get('DOSBOX_TEST_FILELPT_TIMEOUT','100000')+'\n')
 if os.environ.get('DOSBOX_TEST_PRINTER'):
  conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(archive.parent)+'\n[parallel]\nparallel1=printer\n')
 if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):
@@ -123,7 +123,9 @@ try:
  if os.environ.get('DOSBOX_TEST_RESTORE_REFUSAL'):
   assert p.wait(timeout=25)!=0
   text=(w/'native.log').read_text(errors='replace')
-  assert 'FileLPT' in text,text[-4000:]
+  binding=os.environ.get('DOSBOX_TEST_FILELPT_REFUSAL')=='binding'
+  expected='Config_Identity: incompatible or malformed' if binding else 'State component FileLPT failed during installation'
+  assert expected in text,text[-4000:]
   assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
   listener.setblocking(False)
   try:
@@ -140,7 +142,7 @@ try:
     chunks+=chunk
    transport.close()
    assert b'BEGIN ' not in chunks,chunks
-  assert 'failed during installation' in text,text[-4000:]
+  assert ('Fresh restore failed' if binding else 'failed during installation') in text,text[-4000:]
   print(w,'FileLPT refusal terminated startup; transport closed; archive unchanged')
   raise SystemExit(0)
  conn,_=listener.accept()

@@ -17,17 +17,19 @@ before=target.read_bytes()
 env.update(DOSBOX_TEST_ARCHIVE=str(base/'first.sav'),DOSBOX_TEST_STEP_IP='0814:0201',DOSBOX_TEST_ROOT_EXIT='1',DOSBOX_TEST_ROOT_FACTS='code=42 resident=0 self-parent=0')
 refusal=os.environ.get('DOSBOX_TEST_FILELPT_REFUSAL')
 if refusal:
- assert refusal in ('missing','fifo','directory')
+ assert refusal in ('missing','fifo','directory','binding')
  # Preserve unique producer output; replace only this task-owned target.
- target.rename(base/'printed-preserved.prt')
+ if refusal!='binding':target.rename(base/'printed-preserved.prt')
+ else:env['DOSBOX_TEST_FILELPT_DEST_FLAGS']=env.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' shellhide'
  if refusal=='fifo':os.mkfifo(target)
  elif refusal=='directory':target.mkdir()
  env['DOSBOX_TEST_RESTORE_REFUSAL']='1'
 p=subprocess.run(['python3',str(here/'fresh-startup.py')],env=env,capture_output=True,text=True)
 (w/'restore.log').write_text(p.stdout+p.stderr);p.check_returncode()
 if refusal:
- assert (base/'printed-preserved.prt').read_bytes()==before
- if refusal=='missing':assert not target.exists()
+ assert (target if refusal=='binding' else base/'printed-preserved.prt').read_bytes()==before
+ if refusal=='binding':pass
+ elif refusal=='missing':assert not target.exists()
  elif refusal=='fifo':
   import stat
   assert stat.S_ISFIFO(target.stat().st_mode)
