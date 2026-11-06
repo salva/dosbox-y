@@ -34,6 +34,8 @@ if os.environ.get('DOSBOX_TEST_CUSTOM_INT22'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-int22.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_INT27'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-int27.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_ADLIB'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-adlib.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_CMOS'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-cmos.asm')),'-o',str(w/'TINY.COM')],check=True)
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm'),('MOUSE','fresh-mouse.asm')):
@@ -118,6 +120,8 @@ def run():
  if os.environ.get('DOSBOX_TEST_PRINTER'):
   conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(w)+'\n[parallel]\nparallel1=printer\n')
  # Exercise represented geometry/timing, not just the default 16MB/3000 case.
+ if os.environ.get('DOSBOX_TEST_ADLIB'):
+  conf.write_text(conf.read_text().replace('[autoexec]', '[sblaster]\nadlib pcm boost=true\n[autoexec]'))
  if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):
   conf.write_text(conf.read_text().replace('[dosbox]\n','[dosbox]\nmachine=svga_et4000\n'))
  if os.environ.get('DOSBOX_TEST_FLOPPY'):

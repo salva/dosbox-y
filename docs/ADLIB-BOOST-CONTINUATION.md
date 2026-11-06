@@ -33,5 +33,16 @@ Interactive/Bridge and full-library Lua regressions. No independent acceptance.
 Existing `dbopl-consumption.py` actual chip role/truncation/roundtrip sanitizer
 passes on unchanged DBOPL (`proc-aaa333433140`); selected null sentinel versus
 original numeric-offset difference remains an investigation, not this repair.
+Active guest OPL fixture `fresh-adlib.asm` sets both operators, key-on and1100
+actual data writes with PCM detection enabled; capture0200, held/resave/delay then
+explicit guest timer/mixer progress and root42. Added adlib-active matrix case;
+`proc-75b7a14c61f1` exit0 Lua and debug-no-Lua fresh consumers (`run-3f0hyl2b`).
+This checks active owner continuity/no held mutation, not acoustic equality.
+Initial direct fresh-startup invocation lacked required archive (`proc-c2ee85783c8c`);
+initial fixture label WAIT collided with NASM instruction (`proc-04fcfb1f4b56`);
+next producer passed but consumer correctly rejected mismatched boost config
+(`proc-ff4633674cfc`, EOF at save after restore). Forward actual ADLIB config to
+consumer; no production waiver or force-load. Prior failed evidence preserved.
+
 Full finite source disposition and required current §7/API/CLI/test reconciliation
 remain actionable. Historical approved packets untouched.

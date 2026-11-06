@@ -20,6 +20,8 @@ consumers = os.environ.get('DOSBOX_TEST_CONSUMERS', producer).split(os.pathsep)
 assert all(consumers)
 # Prefix steps are explicit guest execution in the producer, before capture.
 cases = (
+    ('adlib-active', {'DOSBOX_TEST_ADLIB':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('cmos-held', {'DOSBOX_TEST_CMOS':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
      '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('serial-held', {'DOSBOX_TEST_SERIAL':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
@@ -178,7 +180,7 @@ for name, setup, ip, facts in cases:
         result = subprocess.run(
             ['python3', str(here / 'fresh-startup.py')],
             env=dict(env, **{key:value for key,value in setup.items()
-                             if key in ('DOSBOX_TEST_BANK_SERVICE','DOSBOX_TEST_GAMEPORT','DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS','DOSBOX_TEST_CLEAR_TF')},
+                             if key in ('DOSBOX_TEST_ADLIB','DOSBOX_TEST_BANK_SERVICE','DOSBOX_TEST_GAMEPORT','DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS','DOSBOX_TEST_CLEAR_TF')},
                      **({'DOSBOX_TEST_SEARCH_MATCHING_ENTRY': '1'}
                              if setup.get('DOSBOX_TEST_SEARCH_MATCHING_ENTRY') else {}),
                      **consumer_policy,
