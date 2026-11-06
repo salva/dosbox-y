@@ -52,6 +52,26 @@ int main() {
  std::istringstream input(good);target.LoadState(input);assert(input);
  int32_t a[32]={},b[32]={};producer.chip.GenerateBlock2(32,a);target.chip.GenerateBlock2(32,b);
  assert(!std::memcmp(a,b,sizeof(a)));
+ // Setup writes every E0 before capture. Test active waves, not silence.
+ for(unsigned wave=0;wave<8;++wave) {
+  DBOPL::Handler active(true);active.Init(44100);
+  active.WriteReg(0x105,1);active.WriteReg(1,0x20);
+  for(unsigned op: {0u,3u}) {
+   active.WriteReg(0x20+op,1);active.WriteReg(0x40+op,0);
+   active.WriteReg(0x60+op,0xf0);active.WriteReg(0x80+op,0x77);
+   active.WriteReg(0xe0+op,wave);
+  }
+  active.WriteReg(0xc0,0x31);active.WriteReg(0xa0,0x98);
+  active.WriteReg(0xb0,0x31);
+  int32_t warm[512]={};active.chip.GenerateBlock3(256,warm);
+  bool nonzero=false;for(auto sample:warm)nonzero|=sample!=0;assert(nonzero);
+  std::ostringstream saved;active.SaveState(saved);assert(saved);
+  DBOPL::Handler fresh(true);fresh.Init(44100);
+  std::istringstream restore(saved.str());fresh.LoadState(restore);assert(restore);
+  int32_t next[512]={},resumed[512]={};
+  active.chip.GenerateBlock3(256,next);fresh.chip.GenerateBlock3(256,resumed);
+  assert(!std::memcmp(next,resumed,sizeof(next)));
+ }
 }
 '''
 p=work/'consumer.cpp';p.write_text(source)
