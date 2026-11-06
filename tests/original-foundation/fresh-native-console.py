@@ -8,8 +8,9 @@ env={k:v for k,v in os.environ.items() if not k.startswith('DOSBOX_TEST_')}
 fixture=os.environ.get('DOSBOX_TEST_CONSOLE_FIXTURE','sb-fifo')
 assert fixture in ('sb-fifo','font','ah86','pause','floppy','serial',
                    'gameport-timed','gameport-untimed','keyboard-d1',
-                   'xms-a20','ems','shared-file'), fixture
+                   'xms-a20','ems','shared-file','filelpt'), fixture
 setup={
+ 'filelpt':{'DOSBOX_TEST_FILELPT':'1','DOSBOX_TEST_FILELPT_PREFIX':'99','DOSBOX_TEST_FILELPT_FLAGS':'addLF cp:437'},
  'gameport-timed':{'DOSBOX_TEST_GAMEPORT':'timed'},
  'gameport-untimed':{'DOSBOX_TEST_GAMEPORT':'untimed'},
  'keyboard-d1':{'DOSBOX_TEST_KEYBOARD_D1':'1'},
@@ -32,8 +33,15 @@ r=subprocess.run(['python3',str(here/'stopped-save.py')],env=producer,text=True,
 r.check_returncode()
 archive=pathlib.Path(r.stdout.splitlines()[0])/'first.sav'
 before=hashlib.sha256(archive.read_bytes()).hexdigest()
+if fixture=='filelpt':
+ target=archive.parent/'printed.prt'
+ assert target.read_bytes()==b'current host prefix:'+b'A'*99+b'\r'
+ with target.open('ab') as output:output.write(b'EXTERNAL')
+ current_print=target.read_bytes()
 conf=work/'fresh.conf'
 conf.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=false\n[midi]\nmididevice=none\n')
+if fixture=='filelpt':
+ conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(target)+' addLF cp:437 timeout:100000\n')
 if fixture.startswith('gameport-'):
  conf.write_text(conf.read_text()+'\n[joystick]\njoysticktype=logical\ntimed='+str(fixture=='gameport-timed').lower()+'\n')
 args=[os.environ['DOSBOX_TEST_NATIVE_BINARY'],'-conf',str(conf),'-restore-state',str(archive),'-restore-console']
@@ -52,12 +60,14 @@ with (work/'native.log').open('w') as log:
    states=re.findall(r'Restored console held: (cycles=.*?ticks=\d+)',text)
    assert len(states)==2 and states[0]==states[1],text
    assert 'Restored session ended' not in text
+   if fixture=='filelpt':assert target.read_bytes()==current_print
    p.stdin.write('run\n');p.stdin.flush()
    assert p.wait(timeout=40)==0
   finally:
    if p.poll() is None:p.kill();p.wait()
 text=(work/'native.log').read_text()
 assert 'code=42 resident=0 self-parent=0' in text,text
+if fixture=='filelpt':assert target.read_bytes()==current_print+b'X\n'
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
 if fixture == 'floppy':
  # Resolve the exact producer-owned medium from its authored config.
@@ -110,5 +120,6 @@ quit_result=subprocess.run(args,env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODR
 (work/'quit.log').write_text(quit_result.stdout)
 assert quit_result.returncode==1 and 'Restored console quit; target discarded' in quit_result.stdout
 assert 'Restored session ended' not in quit_result.stdout
+if fixture=='filelpt':assert target.read_bytes()==current_print+b'X\n'
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
 print(f'native held/delay/status invariant; explicit Run/{fixture}/root42/disposal; mismatch/quit disposal; source unchanged PASS')

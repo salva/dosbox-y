@@ -35,6 +35,12 @@ native console, with matching gameport destination configuration and exact
 producer step boundaries. `proc-3ca00ba1dcb2` passes all six held/status/delay,
 explicit Run/root42, mismatch/quit disposal and unchanged archive cases on the
 same current binaries. No new production codec or implicit execution.
+Actual native FileLPT case (`DOSBOX_TEST_CONSOLE_FIXTURE=filelpt`) now uses
+99-byte cp437 lookahead plus CR, current-host EXTERNAL append, held/status/delay
+no-write assertion, explicit X/addLF/root42 and final mismatch/quit-disposal
+no-write assertion. `proc-9425382a4a8d` passes (`native-console-9qwvax3n`).
+This directly qualifies destination disposal with an acquired host output stream;
+it does not generalize to multiport shared-buffer scheduling or Windows handles.
 Reproduce with `DOSBOX_TEST_BINARY` Lua producer, `DOSBOX_TEST_NATIVE_BINARY`
 native consumer and `DOSBOX_TEST_CONSOLE_FIXTURE=serial|floppy|ah86|pause` using
 `tests/original-foundation/fresh-native-console.py`. These receipts qualify the
