@@ -6,8 +6,16 @@ work=pathlib.Path(tempfile.mkdtemp(prefix='native-console-',dir=os.environ['SAIV
 print(work,flush=True)
 env={k:v for k,v in os.environ.items() if not k.startswith('DOSBOX_TEST_')}
 fixture=os.environ.get('DOSBOX_TEST_CONSOLE_FIXTURE','sb-fifo')
-assert fixture in ('sb-fifo','font','ah86','pause','floppy','serial'), fixture
+assert fixture in ('sb-fifo','font','ah86','pause','floppy','serial',
+                   'gameport-timed','gameport-untimed','keyboard-d1',
+                   'xms-a20','ems','shared-file'), fixture
 setup={
+ 'gameport-timed':{'DOSBOX_TEST_GAMEPORT':'timed'},
+ 'gameport-untimed':{'DOSBOX_TEST_GAMEPORT':'untimed'},
+ 'keyboard-d1':{'DOSBOX_TEST_KEYBOARD_D1':'1'},
+ 'xms-a20':{'DOSBOX_TEST_XMS_A20_HELD':'1'},
+ 'ems':{'DOSBOX_TEST_EMS_HELD':'1'},
+ 'shared-file':{'DOSBOX_TEST_SHARED_FILE':'1'},
  'serial':{'DOSBOX_TEST_SERIAL':'1'},
  'sb-fifo':{'DOSBOX_TEST_SB_HELD':'1'},
  'font':{'DOSBOX_TEST_FONT':'1'},
@@ -16,6 +24,9 @@ setup={
  'pause':{'DOSBOX_TEST_PAUSE':'1'},
 }[fixture]
 producer=dict(env,**setup,DOSBOX_TEST_BINARY=os.environ['DOSBOX_TEST_BINARY'],DOSBOX_TEST_AUDIO='1',DOSBOX_TEST_CAPTURE_IP='0814:0200',DOSBOX_TEST_REFUSAL_REGISTERS='CS:IP=0814:0201')
+# Refusal probes step one instruction in the producer; console uses Run.
+if fixture=='ems':producer['DOSBOX_TEST_REFUSAL_REGISTERS']='CS:IP=0814:0207'
+if fixture=='shared-file':producer['DOSBOX_TEST_REFUSAL_REGISTERS']='CS:IP=0814:0204'
 r=subprocess.run(['python3',str(here/'stopped-save.py')],env=producer,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=120)
 (work/'producer.log').write_text(r.stdout)
 r.check_returncode()
@@ -23,6 +34,8 @@ archive=pathlib.Path(r.stdout.splitlines()[0])/'first.sav'
 before=hashlib.sha256(archive.read_bytes()).hexdigest()
 conf=work/'fresh.conf'
 conf.write_text('[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=false\n[midi]\nmididevice=none\n')
+if fixture.startswith('gameport-'):
+ conf.write_text(conf.read_text()+'\n[joystick]\njoysticktype=logical\ntimed='+str(fixture=='gameport-timed').lower()+'\n')
 args=[os.environ['DOSBOX_TEST_NATIVE_BINARY'],'-conf',str(conf),'-restore-state',str(archive),'-restore-console']
 with (work/'native.log').open('w') as log:
  with subprocess.Popen(args,env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),stdin=subprocess.PIPE,stdout=log,stderr=log,text=True) as p:

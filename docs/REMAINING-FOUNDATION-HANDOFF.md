@@ -29,6 +29,12 @@ refused held target without `-restore-console`. This is not a restore success or
 production defect. Correct actual native console route `proc-36feae214364`
 passes serial/floppy/AH86/Pause held-delay-status invariance, explicit Run/root42,
 wrong-slot and quit disposal, plus missing medium and invalid UART cases.
+Extended `fresh-native-console.py` now directly consumes the same active logical
+gameport timed/untimed, 8042-D1, XMS/A20, EMS and shared-file fixtures through
+native console, with matching gameport destination configuration and exact
+producer step boundaries. `proc-3ca00ba1dcb2` passes all six held/status/delay,
+explicit Run/root42, mismatch/quit disposal and unchanged archive cases on the
+same current binaries. No new production codec or implicit execution.
 Reproduce with `DOSBOX_TEST_BINARY` Lua producer, `DOSBOX_TEST_NATIVE_BINARY`
 native consumer and `DOSBOX_TEST_CONSOLE_FIXTURE=serial|floppy|ah86|pause` using
 `tests/original-foundation/fresh-native-console.py`. These receipts qualify the
