@@ -8,6 +8,23 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
+Latest production is engine22/representation9: original CMOS registration now
+carries calendar/alarm/modes/native time/pending BIOS sync instead of silently
+substituting the fresh startup calendar. `CMOS-CALENDAR-CONTINUATION.md` pins
+that repair and corrected fixture failures. `TANDY-DMA-PRODUCER-PARITY.md` pins
+the subsequent ordinary selected DMA chunk/completion correction, current binary
+hashes, both builds and four final combined fresh-process E2Es plus native RTC.
+No archive layout changed for Tandy. Prior engine21 hashes and archive receipts
+below remain historical, not current-binary evidence.
+
+`proc-0babb79f7817` passes eleven engine22 fresh consumers (RTC,serial,720/1440
+FAT12,font,AH86,Pause,timed gameport,D1,bank-held,bank-service). Matrix now
+includes the RTC fixture. `proc-9ae0adf38dcf` reruns actual Render consumption,
+lazy acquired-output hit-hit-miss, real SDL fresh cursor/RGB/aspect, VGA filter,
+DAC,52 handler relocation,TempLine,text bounds/history,cursor color,selected
+arithmetic,upstream stride,printer page refusal and PS/PNG publication checks:
+all pass. These focused checks are author evidence, not independent acceptance.
+
 `VGA-APPLIED-SCAN-DISPOSITION.md` now grounds selected addressing/layout/row/
 schedule/panning/split/visibility/timing recipes in actual original draw POD and
 consumers. Actual split/visibility/blank/CRTC scan-policy differential ASan/UBSan

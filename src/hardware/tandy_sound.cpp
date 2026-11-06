@@ -239,19 +239,22 @@ static Bitu TandyDACRead(Bitu port,Bitu /*iolen*/) {
 }
 
 static void TandyDACGenerateDMASound(Bitu length) {
-	if (length) {
-		Bitu read = tandy.dac.dma.chan->Read(length,tandy.dac.dma.buf);
+	while (length) {
+		const Bitu chunk = std::min(length, Bitu(TDAC_DMA_BUFSIZE));
+		Bitu read = tandy.dac.dma.transfer_done ? 0 :
+		        tandy.dac.dma.chan->Read(chunk,tandy.dac.dma.buf);
 		if (read > 0) {
 			tandy.dac.chan->AddSamples_m8(read,tandy.dac.dma.buf);
 			tandy.dac.dma.last_sample = tandy.dac.dma.buf[read - 1u];
 		}
 
 		/* repeat the last sample to fill output if not enough */
-		if (read < length) {
-			for (Bitu ct=read; ct < length; ct++) {
+		if (read < chunk) {
+			for (Bitu ct=read; ct < chunk; ct++) {
 				tandy.dac.chan->AddSamples_m8(1,&tandy.dac.dma.last_sample);
 			}
 		}
+		length -= chunk;
 	}
 }
 

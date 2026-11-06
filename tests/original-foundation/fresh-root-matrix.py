@@ -20,6 +20,8 @@ consumers = os.environ.get('DOSBOX_TEST_CONSUMERS', producer).split(os.pathsep)
 assert all(consumers)
 # Prefix steps are explicit guest execution in the producer, before capture.
 cases = (
+    ('cmos-held', {'DOSBOX_TEST_CMOS':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('serial-held', {'DOSBOX_TEST_SERIAL':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
      '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('floppy-720-held', {'DOSBOX_TEST_FLOPPY':'1','DOSBOX_TEST_FLOPPY_KB':'720',
