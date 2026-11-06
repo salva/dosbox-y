@@ -137,12 +137,36 @@ chains are not claims of a current exhaustive matrix. Engine11 pre-bank/font
 42-case proc-981e7d2d8f48 passed matrix/E2E/native media before wrong third
 script path (overall exit2); corrected frontend chain proc-dc21464b381e passed.
 
+## Text-layout and event-bound increment (2026-11-06)
+
+On `00b8a982f56f327fa893e35f02710efed5fc7ecd` (tree
+`c2f06b14d36e692fd65cf8274df0dae18d50d5a8`), the follow-on increment routes both
+ordinary TTF setup and VGA drawing setup through `VGA_SetTextScanColumns` in the
+owning VGA implementation. It applies columns*2 without replaying CRTC setup or
+changing registers; does not yet supply the selected effective-address source tag.
+Also retains selected serial event index bound (`serclassid<9`) before accessing
+the nine-port array. No claim of UART state serialization follows from that bound.
+
+proc-f6ddb1229c56 exit0 built both configurations, passed original-reference
+scan arithmetic, all three real printer routes (printer-runtime-es9wm_34), and
+four final combined E2Es (e2e-milestone-b_ah9nb3). This input included text-column
+primitive but preceded serial bound. proc-27b8c4f4d5b8 additionally tests40/80/132
+columns and unchanged hardware inputs in extracted actual primitive.
+proc-9bc45b56a68f exit0 tests actual serial event valid/null/out-of-range dispatch
+with ASan/UBSan then rebuilds both final binaries; logs
+`$W/build-{lua,native}-serial-bounds.log`. Final binary SHA256:
+Lua `e6783eaea6ba745b221e0295a5e15f05af4606b3d9f033d9a7109b3e278b9764`,
+native `f4fff7cf26c4cea9250979b47c1c83bbfa8d5897759729982d4ecfa4ba535286`.
+Generated config/header pins remain unchanged. Earlier table identifies previous
+final-printer inputs, not these later binaries.
+
 ## Remaining implementation and disposition obligations
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,
 not certification. Full source-grounded finite closure is still unfinished.
 Actual remaining seams include selected effective scan/layout/output histories
-and single text-column primitive (current TTF still directly assigns address_add),
+and single text-column primitive (now routed through the VGA owner above, while
+its selected effective-address history representation remains unfinished),
 active serial/parallel/printer parser/raster/timing/spool/future font-bank state
 (no original owner serializer in those directories), and real provider/output
 consumers. Ordinary independent printer face lifetime repair does not settle them.

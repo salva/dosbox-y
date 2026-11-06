@@ -251,7 +251,7 @@ void CSerial::changeLineProperties() {
 
 static void Serial_EventHandler(Bitu val) {
 	Bitu serclassid=val&0xf;
-	if(serialports[serclassid])
+	if(serclassid < 9 && serialports[serclassid])
 		serialports[serclassid]->handleEvent((uint16_t)(val>>4));
 }
 

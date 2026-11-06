@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]
 src = (root/'src/hardware/vga_draw.cpp').read_text()
-start = src.index('void VGA_CheckScanLength(void) {')
+start = src.index('void VGA_SetTextScanColumns(Bitu columns) {')
 end = src.index('\nvoid VGA_ActivateHardwareCursor', start)
 body = src[start:end]
 # Pin the pristine reference to the accepted upstream, not the old selected
@@ -43,6 +43,13 @@ struct {
 '''
 tests = '''
 int main() {
+ // Applied text layout does not read or replay current hardware registers.
+ for (auto columns : {40ul, 80ul, 132ul}) {
+  vga.config.scan_len=123; vga.draw.blocks=45;
+  VGA_SetTextScanColumns(columns);
+  assert(vga.draw.address_add==columns*2);
+  assert(vga.config.scan_len==123 && vga.draw.blocks==45);
+ }
  for (int integrated=0; integrated<2; ++integrated)
  for (int m=-1; m<=M_HERC_GFX+1; ++m)
  for (int model=MCH_VGA; model<=MCH_3270PC; ++model)

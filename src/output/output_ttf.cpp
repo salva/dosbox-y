@@ -1457,7 +1457,7 @@ void ttf_setlines(int cols, int lins) {
     ttf_reset();
     real_writeb(BIOSMEM_SEG,BIOSMEM_NB_COLS,ttf.cols);
     if (IS_EGAVGA_ARCH) real_writeb(BIOSMEM_SEG,BIOSMEM_NB_ROWS,ttf.lins-1);
-    vga.draw.address_add = ttf.cols * 2;
+    VGA_SetTextScanColumns(ttf.cols);
 }
 
 void ttf_switch_on(bool ss=true) {

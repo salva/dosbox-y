@@ -755,6 +755,8 @@ void VGA_SetupHandlers(void);
 void VGA_StartResize(Bitu delay=50);
 void VGA_SetupDrawing(Bitu val);
 void VGA_CheckScanLength(void);
+// Text layout is an applied owner value; do not replay CRTC setup to change it.
+void VGA_SetTextScanColumns(Bitu columns);
 void VGA_ChangedBank(void);
 
 /* Some DAC/Attribute functions */

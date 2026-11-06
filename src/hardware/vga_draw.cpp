@@ -7080,6 +7080,10 @@ void VGA_ResetDebugOverrides(void) {
 	vga.overopts.enable = false;
 }
 
+void VGA_SetTextScanColumns(Bitu columns) {
+    vga.draw.address_add = columns * 2;
+}
+
 void VGA_CheckScanLength(void) {
     vga.draw.address_add = VGA_ResolveScanAddressing(vga.mode, machine, svgaCard,
         IS_EGAVGA_ARCH, vga.dosboxig.svga, vga.dosboxig.bytes_per_scanline,
@@ -8215,7 +8219,7 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 	}
 	VGA_CheckScanLength();
 #if defined(USE_TTF)
-	if (ttf.inUse) vga.draw.address_add = ttf.cols * 2;
+	if (ttf.inUse) VGA_SetTextScanColumns(ttf.cols);
 #endif
 
 	/* for MCGA, need to "double scan" the screen in some cases */
