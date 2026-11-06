@@ -28,7 +28,7 @@ historical same-process/whole-preflight proposals; approved packets are unchange
   720/1440KB AH08 geometry, real LPT ESC font refresh/PS output and TTF route.
   This does **not** implement full active printer/UART/spool checkpoint state.
 
-Engine11 / outer representation9. `-restore-state <archive>` attaches once to an
+Engine12 / outer representation9 (prior increment receipts below name engine11). `-restore-state <archive>` attaches once to an
 initialized-unused disposable process, before FILE/INLINE evaluation, held until
 explicit Run/step. Used target load returns fresh-launch-required. No guest replay,
 rollback, implicit CPU/PIC/TIMER advance or binary-equality compatibility rule.
@@ -181,6 +181,41 @@ native `d270cc6058658cac7e89dabd37a991ba18eda1c816f22ac0b9cb4145c7838ffa`.
 Rebuild logs `$W/build-{lua,native}-printer-resolver.log`; earlier combined E2E
 predates this behavior-preserving extraction and new family variations.
 
+## UART owner increment (2026-11-06)
+
+The next bounded implementation supplies actual dummy UART state in the common
+engine, not a copied selected Prepared/catalogue path: `SerialPorts` before Pic,
+logical registers/latches, diagnostics, effective timing and normalized FIFO
+order (including empty retained head). Native ports/base/IRQ/backend bindings
+are checked where consumed. Install does not call backend/register/IRQ methods;
+PIC restores queued event timing separately. Non-dummy live backends remain
+usable ordinarily but refuse checkpoint rather than pretending a UART-only
+archive captures external transport. This matches the selected dummy-only bound;
+no direct/modem/network checkpoint claim. Fresh failure remains disposal, not
+rollback. Engine12 rejects engine11 archives rather than silently adding an owner.
+
+Both configurations build in proc-5624e611ecaa; logs
+`$W/build-{lua,native}-serial-owner.log`. Config/compiler pins above unchanged.
+Lua SHA256 `a6251a016870d77aaa537122aa76bcebd1954f6eee53717a79ec1629307a1bd5`;
+native `87d7adf5a69b73d7ae481ce0d042c18edb2f5b8cf872185b94985b3fbac476b1`.
+`serial-fifo.py` extracts actual owner codec/ring operations and tests wrap,
+empty-head, oversized/invalid/truncated input under ASan/UBSan. Real
+`fresh-serial.asm` holds loopback byte55 in RX and byte66 in flight, nondefault
+baud/FIFO/loopback/scratch registers; fresh restore must consume both in order
+and return42 after explicit continuation. `DOSBOX_TEST_CASES=serial-held` matrix
+passes proc-ae35ef6b9a42/run-m8txc0vb, as do FIFO sanitizer and four combined
+fresh FILE/INLINE E2Es (`e2e-milestone-xcwvy1zh`). Native no-debug/no-Agent/no-Lua
+`DOSBOX_TEST_CONSOLE_FIXTURE=serial` passes proc-56277014210f /
+`native-console-qrat9ez3`: held/delay invariant, explicit Run/root42, wrong native
+binding, three valid-CRC SerialPorts malformed payloads (short/presence/NaN),
+quit disposal/no attach/no continuation and unchanged source archive.
+These are author checks, not independent assessment or all serial backends.
+
+Prior engine11 final resolver E2E passed proc-6201e7ab07f3 /
+`e2e-milestone-2mv6k85k` on `a986e886fd64a9290362060150949c19dee6edd8`, tree
+`8d89b322e792d59a1986c0cf71c491aaf2446e87`. It does not assert engine12
+compatibility with engine11 archives.
+
 ## Remaining implementation and disposition obligations
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,
@@ -188,8 +223,9 @@ not certification. Full source-grounded finite closure is still unfinished.
 Actual remaining seams include selected effective scan/layout/output histories
 and single text-column primitive (now routed through the VGA owner above, while
 its selected effective-address history representation remains unfinished),
-active serial/parallel/printer parser/raster/timing/spool/future font-bank state
-(no original owner serializer in those directories), and real provider/output
+active parallel/printer parser/raster/timing/spool/future font-bank state
+(no original owner serializer in those directories; dummy UART now implemented
+above), and real provider/output
 consumers. Ordinary independent printer face lifetime repair does not settle them.
 Existing Render codec transports geometry/palette and reconstructs output; it
 must not be described as completed canvas/history parity without implementation

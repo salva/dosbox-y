@@ -41,7 +41,7 @@ public:
 	MyFifo(Bitu maxsize_) {
 		maxsize=size=maxsize_;
 		pos=used=0;
-		data=new uint8_t[size];
+		data=new uint8_t[size]();
 	}
 	~MyFifo() {
 		if (data != NULL) {
@@ -107,6 +107,8 @@ public:
 	uint8_t probeByte() {
 		return data[pos];
 	}
+	void saveState(std::ostream &stream) const;
+	void loadState(std::istream &stream);
 private:
 	uint8_t * data;
 	Bitu maxsize,size,pos,used;
@@ -263,6 +265,9 @@ public:
 
 	void registerDOSDevice();
 	void unregisterDOSDevice();
+	// Logical assignment only; PIC owns queued event times. No port/IRQ replay.
+	void saveState(std::ostream &stream) const;
+	void loadState(std::istream &stream);
 
 private:
 

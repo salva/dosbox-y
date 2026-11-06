@@ -6,8 +6,9 @@ work=pathlib.Path(tempfile.mkdtemp(prefix='native-console-',dir=os.environ['SAIV
 print(work,flush=True)
 env={k:v for k,v in os.environ.items() if not k.startswith('DOSBOX_TEST_')}
 fixture=os.environ.get('DOSBOX_TEST_CONSOLE_FIXTURE','sb-fifo')
-assert fixture in ('sb-fifo','font','ah86','pause','floppy'), fixture
+assert fixture in ('sb-fifo','font','ah86','pause','floppy','serial'), fixture
 setup={
+ 'serial':{'DOSBOX_TEST_SERIAL':'1'},
  'sb-fifo':{'DOSBOX_TEST_SB_HELD':'1'},
  'font':{'DOSBOX_TEST_FONT':'1'},
  'ah86':{'DOSBOX_TEST_AH86':'1','DOSBOX_TEST_AH86_ACTIVE':'1'},
@@ -75,6 +76,23 @@ negative=subprocess.run([args[0],'-conf',str(conf),'-restore-state',str(bad),'-r
 (work/'wrong-slot.log').write_text(negative.stdout)
 assert negative.returncode==1 and 'State component Shell bindings failed during installation' in negative.stdout,negative.stdout
 assert 'Restored console held:' not in negative.stdout and 'Restored session ended' not in negative.stdout
+# Invalid UART payloads are consumed by the owner after earlier installation;
+# none may attach a console or continue the disposable target.
+if fixture == 'serial':
+ for label, mutate in (
+     ('short', lambda data: data[:-1]),
+     ('presence', lambda data: bytes([2])+data[1:]),
+     ('timing', lambda data: data[:11]+bytes.fromhex('0000c07f')+data[15:])):
+  damaged=work/('serial-'+label+'.sav')
+  with zipfile.ZipFile(archive) as source, zipfile.ZipFile(damaged,'w') as dest:
+   for item in source.infolist():
+    data=source.read(item.filename)
+    if item.filename=='SerialPorts':data=mutate(data)
+    dest.writestr(item,data)
+  result=subprocess.run([args[0],'-conf',str(conf),'-restore-state',str(damaged),'-restore-console'],env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),input='run\n',text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=40)
+  (work/('serial-'+label+'.log')).write_text(result.stdout)
+  assert result.returncode==1 and 'State component SerialPorts failed during installation' in result.stdout,result.stdout
+  assert 'Restored console held:' not in result.stdout and 'Restored session ended' not in result.stdout
 quit_result=subprocess.run(args,env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),input='quit\n',text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=40)
 (work/'quit.log').write_text(quit_result.stdout)
 assert quit_result.returncode==1 and 'Restored console quit; target discarded' in quit_result.stdout

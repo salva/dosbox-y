@@ -37,6 +37,8 @@ if os.environ.get('DOSBOX_TEST_INT27'):
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm'),('MOUSE','fresh-mouse.asm')):
  if os.environ.get('DOSBOX_TEST_'+option):
   subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),*(['-DBANK_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_BANK_SERVICE') else []),*(['-DVESA_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_VESA_SERVICE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_SERIAL'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-serial.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_FLOPPY'):
  floppy_kb=int(os.environ.get('DOSBOX_TEST_FLOPPY_KB','1440'))
  assert floppy_kb in (720,1440)

@@ -1722,4 +1722,100 @@ void SERIAL_Init () {
 }
 
 // save state support
+void MyFifo::saveState(std::ostream &stream) const {
+    const uint8_t shape[] = {uint8_t(size), uint8_t(used)};
+    stream.write(reinterpret_cast<const char *>(shape), sizeof(shape));
+    // Empty reads return the last head byte, not an invented zero.
+    for (Bitu i=0; i<(used ? used : 1); ++i) {
+        const uint8_t value=data[(pos+i)%size];
+        writePOD(stream,value);
+    }
+}
+
+void MyFifo::loadState(std::istream &stream) {
+    uint8_t shape[2]{};
+    if (!stream.read(reinterpret_cast<char *>(shape),sizeof(shape))) return;
+    if (!shape[0] || shape[0]>maxsize || shape[1]>shape[0]) {
+        stream.setstate(std::ios::failbit); return;
+    }
+    size=shape[0]; used=shape[1]; pos=0;
+    stream.read(reinterpret_cast<char *>(data),used ? used : 1);
+}
+
+void CSerial::saveState(std::ostream &stream) const {
+    writePOD(stream,bytetime); writePOD(stream,baud_multiplier);
+    writePOD(stream,baud_divider);
+    const uint8_t bytes[]={waiting_interrupts,IER,ISR,LCR,LSR,SPR,loopback_data,FCR};
+    stream.write(reinterpret_cast<const char *>(bytes),sizeof(bytes));
+    const bool flags[]={irq_active,dtr,rts,op1,op2,loopback,d_cts,d_dsr,
+        d_ri,d_cd,cts,dsr,ri,cd,sync_guardtime,errormsg_pending};
+    for (const bool flag:flags) stream.put(flag ? 1 : 0);
+    const Bitu values[]={errors_in_fifo,rx_interrupt_threshold,fifosize,
+        framingErrors,parityErrors,overrunErrors,txOverrunErrors,overrunIF0,breakErrors};
+    stream.write(reinterpret_cast<const char *>(values),sizeof(values));
+    rxfifo->saveState(stream); txfifo->saveState(stream); errorfifo->saveState(stream);
+}
+
+void CSerial::loadState(std::istream &stream) {
+    readPOD(stream,bytetime); readPOD(stream,baud_multiplier);
+    if (!stream || !std::isfinite(bytetime) || bytetime<0 ||
+        !std::isfinite(baud_multiplier) || baud_multiplier<=0) {
+        stream.setstate(std::ios::failbit); return;
+    }
+    readPOD(stream,baud_divider);
+    uint8_t *bytes[]={&waiting_interrupts,&IER,&ISR,&LCR,&LSR,&SPR,&loopback_data,&FCR};
+    for (auto *byte:bytes) if (!stream.read(reinterpret_cast<char *>(byte),1)) return;
+    bool *flags[]={&irq_active,&dtr,&rts,&op1,&op2,&loopback,&d_cts,&d_dsr,
+        &d_ri,&d_cd,&cts,&dsr,&ri,&cd,&sync_guardtime,&errormsg_pending};
+    for (auto *flag:flags) {
+        const int value=stream.get();
+        if (value!=0 && value!=1) {stream.setstate(std::ios::failbit);return;}
+        *flag=value!=0;
+    }
+    Bitu *values[]={&errors_in_fifo,&rx_interrupt_threshold,&fifosize,
+        &framingErrors,&parityErrors,&overrunErrors,&txOverrunErrors,&overrunIF0,&breakErrors};
+    for (auto *value:values) {readPOD(stream,*value); if (!stream) return;}
+    if (fifosize!=16 || errors_in_fifo>16 || rx_interrupt_threshold>16) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    rxfifo->loadState(stream); txfifo->loadState(stream); errorfifo->loadState(stream);
+}
+
+// Only the dummy backend has no independent host/modem state. Other backends
+// remain usable normally but cannot produce a misleading partial checkpoint.
+class SerializeSerialPorts final : public SaveState::Component {
+public:
+    SerializeSerialPorts() {SaveState::instance().registerComponent("SerialPorts",*this);}
+    void getBytes(std::ostream &stream) override {
+        for (unsigned i=0;i<9;++i) {
+            auto *port=serialports[i];
+            if (port && (typeid(*port)!=typeid(CSerialDummy) ||
+                         !port->InstallationSuccessful)) {
+                stream.setstate(std::ios::failbit);return;
+            }
+            stream.put(port ? 1 : 0);
+            if (!port) continue;
+            writePOD(stream,serial_baseaddr[i]); writePOD(stream,port->irq);
+            port->saveState(stream);
+        }
+    }
+    void setBytes(std::istream &stream) override {
+        for (unsigned i=0;i<9;++i) {
+            auto *port=serialports[i];
+            const int present=stream.get();
+            if (present!=(port ? 1 : 0)) {stream.setstate(std::ios::failbit);return;}
+            if (!port) continue;
+            uint16_t base=0; Bitu irq=0;
+            readPOD(stream,base); readPOD(stream,irq);
+            if (!stream || typeid(*port)!=typeid(CSerialDummy) ||
+                !port->InstallationSuccessful || port->idnumber!=i ||
+                base!=serial_baseaddr[i] || irq!=port->irq) {
+                stream.setstate(std::ios::failbit);return;
+            }
+            port->loadState(stream);
+            if (!stream) return;
+        }
+    }
+} serial_ports_state;
+
 void *Serial_EventHandler_PIC_Event = (void*)((uintptr_t)Serial_EventHandler);
