@@ -29,6 +29,8 @@
 #endif
 
 #include "SDL.h"
+#include <memory>
+#include <vector>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -172,9 +174,10 @@ private:
 	// Returns value of the num-th pixel (counting left-right, top-down) in a safe way
 	uint8_t getPixel(uint32_t num);
 
-	FT_Library FTlib;					// FreeType2 library used to render the characters
+	FT_Library FTlib = nullptr; // Must outlive curFont and its backing.
+    std::shared_ptr<std::vector<unsigned char>> fontBytes;
 
-	SDL_Surface* page;					// Surface representing the current page
+	SDL_Surface* page = nullptr;			// Surface representing the current page
 	uint8_t color = 0;
 
 	double curX = 0, curY = 0;					// Position of the print head (in inch)

@@ -45,7 +45,8 @@
 extern unsigned char DOSBoxTTFbi[48868];
 extern bool printfont;
 extern void resetFontSize();
-extern FT_Face GetTTFFace();
+extern FT_Face GetTTFFace(FT_Library library,
+                        std::shared_ptr<std::vector<unsigned char>> &backing);
 #endif
 extern std::string GetDOSBoxXPath(bool withexe=false);
 extern bool CheckBoxDrawing(uint8_t c1, uint8_t c2, uint8_t c3, uint8_t c4);
@@ -150,6 +151,11 @@ CPrinter::CPrinter(uint16_t dpi, uint16_t width, uint16_t height, char* output, 
 		// Create page
 		page = SDL_CreateRGBSurface(SDL_SWSURFACE, (int)(defaultPageWidth*dpi), (int)(defaultPageHeight*dpi), 8, 0, 0, 0, 0);
 
+		if (!page) {
+            LOG(LOG_MISC,LOG_ERROR)("PRINTER: Unable to allocate page. Printing disabled");
+            return;
+        }
+
 		// Set a grey palette
 		SDL_Palette* palette = page->format->palette;
 		
@@ -197,6 +203,7 @@ CPrinter::CPrinter(uint16_t dpi, uint16_t width, uint16_t height, char* output, 
 
 void CPrinter::resetPrinterHard()
 {
+    if (!page) return;
 	charRead = false;
 	resetPrinter();
 }
@@ -258,12 +265,17 @@ void CPrinter::resetPrinter()
 CPrinter::~CPrinter(void)
 {
 	finishMultipage();
+    if (curFont) {
+        FT_Done_Face(curFont);
+        curFont = nullptr;
+    }
+    fontBytes.reset();
 	if (page != NULL)
 	{
 		SDL_FreeSurface(page);
 		page = NULL;
-		FT_Done_FreeType(FTlib);
 	}
+    if (FTlib) FT_Done_FreeType(FTlib);
 #if defined (WIN32)
 	if (printerDC) DeleteDC(printerDC);
 #endif
@@ -304,15 +316,16 @@ void CPrinter::updateFont()
 		FT_Done_Face(curFont);
 		curFont = NULL;
 	}
+    fontBytes.reset();
 
 #if defined(USE_TTF)
-    if (TTF_using()&&printfont) curFont = GetTTFFace();
+    if (TTF_using()&&printfont) curFont = GetTTFFace(FTlib,fontBytes);
     if (curFont == NULL)
 #endif
     {
 
 	std::string fontName, basedir = font_path;
-    if (basedir.back()!='\\' && basedir.back()!='/')
+    if (!basedir.empty() && basedir.back()!='\\' && basedir.back()!='/')
         basedir += CROSS_FILESPLIT;
 
     switch(LQtypeFace)
@@ -528,6 +541,7 @@ void CPrinter::updateFont()
 		actcpi /= 2.0/3.0;
 	}
 
+    if (!curFont) return;
 	FT_Set_Char_Size(curFont, (uint16_t)horizPoints*64, (uint16_t)vertPoints*64, dpi, dpi);
 	
 	if (style & STYLE_ITALICS || charTables[curCharTable] == 0)
@@ -1410,6 +1424,7 @@ void CPrinter::newPage(bool save, bool resetx)
 
 void CPrinter::printChar(uint8_t ch, int box)
 {
+    if (!page) return;
     bool dbcs=false;
     uint8_t ll = 0;
     uint16_t dbchar = 0;
@@ -1931,6 +1946,7 @@ void CPrinter::printBitGraph(uint8_t ch)
 
 void CPrinter::formFeed()
 {
+    if (!page) return;
     if ((printdbcs==1 || (printdbcs==-1 && (TTF_using() || showdbcs)
 #if defined(USE_TTF)
     && dbcs_sbcs

@@ -53,6 +53,8 @@ startup_hash=hashlib.sha256(startup_archive.read_bytes()).hexdigest()
 capture_ip=os.environ.get('DOSBOX_TEST_STEP_IP','0814:0101').encode()
 listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(25)
 conf=w/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n')
+if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):
+ conf.write_text(conf.read_text().replace('[dosbox]\n','[dosbox]\nmachine=svga_et4000\n'))
 if os.environ.get('DOSBOX_TEST_GAMEPORT'):
  assert os.environ['DOSBOX_TEST_GAMEPORT'] in ('timed','untimed')
  conf.write_text(conf.read_text()+'\n[joystick]\njoysticktype=logical\ntimed='+str(os.environ['DOSBOX_TEST_GAMEPORT']=='timed').lower()+'\n')

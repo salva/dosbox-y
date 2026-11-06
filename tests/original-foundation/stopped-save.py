@@ -36,15 +36,19 @@ if os.environ.get('DOSBOX_TEST_INT27'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-int27.asm')),'-o',str(w/'TINY.COM')],check=True)
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm'),('MOUSE','fresh-mouse.asm')):
  if os.environ.get('DOSBOX_TEST_'+option):
-  subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),*(['-DVESA_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_VESA_SERVICE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
+  subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),*(['-DBANK_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_BANK_SERVICE') else []),*(['-DVESA_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_VESA_SERVICE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_FLOPPY'):
- subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-floppy.asm')),'-o',str(w/'TINY.COM')],check=True)
- image=bytearray(1440*1024)
+ floppy_kb=int(os.environ.get('DOSBOX_TEST_FLOPPY_KB','1440'))
+ assert floppy_kb in (720,1440)
+ sectors=9 if floppy_kb==720 else 18
+ fat_sectors=3 if floppy_kb==720 else 9
+ subprocess.run(['nasm','-f','bin','-DSECTORS_PER_TRACK='+str(sectors),str(pathlib.Path(__file__).with_name('fresh-floppy.asm')),'-o',str(w/'TINY.COM')],check=True)
+ image=bytearray(floppy_kb*1024)
  # Small valid FAT12 medium; sector signature is the guest witness.
  image[:11]=b'\xeb\x3c\x90DOSBOXY '
- struct.pack_into('<HBHBHHBHHHII',image,11,512,1,1,2,224,2880,0xf0,9,18,2,0,0)
+ struct.pack_into('<HBHBHHBHHHII',image,11,512,2 if floppy_kb==720 else 1,1,2,112 if floppy_kb==720 else 224,floppy_kb*2,0xf9 if floppy_kb==720 else 0xf0,fat_sectors,sectors,2,0,0)
  image[510:512]=b'\x55\xaa'
- for offset in (512,5120): image[offset:offset+3]=b'\xf0\xff\xff'
+ for offset in (512,512*(1+fat_sectors)): image[offset:offset+3]=bytes((0xf9 if floppy_kb==720 else 0xf0,255,255))
  (w/'floppy.img').write_bytes(image)
 if os.environ.get('DOSBOX_TEST_FONT'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-font.asm')),'-o',str(w/'TINY.COM')],check=True)
@@ -95,6 +99,8 @@ def run():
  flag_command = 'flagsave FLAG.TXT\n' if flagged else ''
  conf=d/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[autoexec]\nmount c {w}\nc:\n{flag_command}debugbox TINY.COM\n')
  # Exercise represented geometry/timing, not just the default 16MB/3000 case.
+ if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):
+  conf.write_text(conf.read_text().replace('[dosbox]\n','[dosbox]\nmachine=svga_et4000\n'))
  if os.environ.get('DOSBOX_TEST_FLOPPY'):
   conf.write_text(conf.read_text().replace('debugbox TINY.COM',f'imgmount a {w}/floppy.img -t floppy\ndebugbox TINY.COM'))
  if os.environ.get('DOSBOX_TEST_MEMSIZE'):

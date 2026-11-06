@@ -1,163 +1,160 @@
 # Remaining foundation port: author handoff (2026-11-06)
 
-This is an implementation increment on `b9f71b9db454d630f632f9ddfbde754c0841c689`
-(tree `298adb70b011c75f7a1ec5966e6c5c2bba202754`), not whole-foundation or independent
-acceptance. Historical design packets and the finite semantic map remain provenance;
-the fresh-target contract supersedes their same-process/whole-preflight prescriptions.
+This is a useful committed increment, **not whole-foundation or independent
+acceptance**. Checkout `/work/dosbox-y/original-savestate-restart`, branch
+`original-savestate-restart`. Selected74b5fa198 versus029bd65 remains the finite
+scope; original4b7ffec is provenance. Fresh disposable progressive import supersedes
+historical same-process/whole-preflight proposals; approved packets are unchanged.
 
-## Delivered behavior and API
+## Delivered increments / API and CLI
 
-Source comparison with selected `74b5fa198` found two missing guest-owned wait
-continuations. `CB_IRQ1_PAUSE` now keeps VGA Pause's interruptible wait in guest
-code, with exactly one PIC EOI and return through the IRQ1 POP AX/IRET suffix.
-`CB_INT15` similarly keeps real-mode BIOS AH86 waiting in a PUSHF/STI/HLT/POPF
-suffix, observing the existing RTC count without restarting the wait on reentry.
-Direct/APM callers retain synchronous semantics. Both use ordinary native callback
-ownership; neither runs a frontend evaluator, advances time on attachment, or creates
-a second restore engine. Non-VGA Pause's existing path is unchanged and not newly
-qualified by the VGA workload.
+* `70bbe958b53967aaba28c7dbe965a25c5f035854` (tree
+  `cbc51d103b27472f89e3407dfde5a034591a9b70`): actual missing AH86 and VGA Pause
+  guest-owned interruptible wait suffixes, one IRQ1 EOI/return, paired callback
+  allocation/disposal. Direct/APM synchronous and non-VGA paths retained.
+* `2d77f2f5a7feab8d92c05470d9e2a18554956673` (tree
+  `24f074627ca64e7013f181b88a5532cb5f2834f8`): BIOS INT10/1100 font upload,
+  active plane2 bytes/read mapping, fresh actual A000/BIOS text consumer; native
+  console font/AH86/Pause selectors. Not pixel, PC98 or every TTF qualification.
+* `e21978e7625abea21560043afb6649e0b6468b02` (tree
+  `96881f39e656e694cd93654cb985c81d2a3386ed`): deterministic valid FAT12
+  mounted-media regression. Initially failed; fixed by core owner, below.
+* Current source increment on combined `ac455f1691af941a07f4749d3271ae3475a25cea`
+  (tree `3964e9e4f538203de7164c150da82baa5a630e6e`): five VGA chained/slow/
+  ET4000/unchained handlers now select independent write bank instead of read
+  bank; printer uses independent FreeType library-owned face and retained copied
+  display-font backing, disposes face before backing/library, handles absent
+  face/empty font path and failed page allocation. Tests add active ET4000 banks,
+  720/1440KB AH08 geometry, real LPT ESC font refresh/PS output and TTF route.
+  This does **not** implement full active printer/UART/spool checkpoint state.
 
-The owner-engine identity is now `original-owner-engine-10`. New callback layout
-and continuation semantics are incompatible with engine9 archives, even though the
-outer archive representation remains revision9. Older engine9 results below prove
-those earlier inputs only; they are not engine10 archive compatibility evidence.
-Used-target restore remains fresh-launch-required. Initialized-unused restore stays
-held until explicit Run/step; native output/provider binding and root disposal stay
-owned by the common implementation. There is no replay or host-content rollback.
+Engine11 / outer representation9. `-restore-state <archive>` attaches once to an
+initialized-unused disposable process, before FILE/INLINE evaluation, held until
+explicit Run/step. Used target load returns fresh-launch-required. No guest replay,
+rollback, implicit CPU/PIC/TIMER advance or binary-equality compatibility rule.
+Native no-debug/no-Agent/no-Lua uses `-restore-console`, not a Bridge listener.
+Unsafe timed-callback refusal followed by held save is not nondebug integrated
+autosave success. External boot/nonempty-device/shell-root/unrepresented lazy/LFN
+limits remain. MIDI unqualified lower-priority follow-up.
 
-## Reproduction and exact build handoff
+## Core media correction and applicability
 
-Work root: `/work/dosbox-y/.saivage/work/cards/card-n-c-l-a/`.
-`build-lua/src/dosbox-x`: heavy debugger/Agent/SDL2/Lua, no OpenGL/avcodec.
-Configure flags: `--enable-debug=heavy --enable-dosbox_agent --enable-sdl2
---disable-opengl --disable-avcodec --enable-debug-lua`.
-`build-native/src/dosbox-x`: `--disable-debug --disable-dosbox_agent --enable-sdl2
---disable-opengl --disable-avcodec --disable-debug-lua`.
-Both rebuilt with `make -j6` after engine10. Compiler Ubuntu GCC13.3.0
-(13.3.0-6ubuntu2~24.04.1); NASM2.16.01. Generated config headers retained in builds.
+Engine10 valid FAT12 proc-a78e949881d0/run-ik_uiw24 failed repeated unchanged-Dos
+capture (producer run-l8x4lkoh): global Opts scratch leaked geometry at Dos offsets
+66396..66415/69800..69819. Separate fresh attempt proc-904de828d3d2 /
+fresh-native-entry/run-z3ybbeeq failed BIOS image attachment/Bridge EOF before
+any evaluator. Its sequential tail exit0 was not restore success. Earlier
+nonformatted proc-ba4b18897250 and malformed proc-e0a0de55daea remain historical
+failed inputs, not substituted as valid-medium evidence.
+
+Core owner delivered `3b2e13a799087441654cc27e70397aebb807adca`, tree
+`34580e34a598688bec628586b954e56a6b248843`, incorporated in combined HEAD above:
+invocation-local zeroed Opts/padding; exact-path/geometry fresh BIOS image attachment
+sharing locked DOS-owned handle; saved pending-change bool avoids AH06/root99.
+Directly read core status9 reports independent k-b status13 approval; that review
+was not independently repeated here. No unilateral core repair authored by this card.
+Core proc-911fc1b98ada reports repeated FAT12/fresh held/INT13/root42 plus affected
+font/waits/search/files/E2Es; proc-383318b6b3e8 reports native media and missing/
+mismatch/fault disposal. Parent's failed SSH publication is separate, no remote
+success or trust/push action authorized here.
+
+## Exact current build handoff
+
+Work root `/work/dosbox-y/.saivage/work/cards/card-n-c-l-a/` (denoted `$W` below).
+GCC Ubuntu13.3.0-6ubuntu2~24.04.1; NASM2.16.01. Two out-of-tree configured builds:
+
+* `build-lua`: `--enable-debug=heavy --enable-dosbox_agent --enable-sdl2
+  --disable-opengl --disable-avcodec --enable-debug-lua`.
+* `build-native`: `--disable-debug --disable-dosbox_agent --enable-sdl2
+  --disable-opengl --disable-avcodec --disable-debug-lua`.
+
+Both rebuilt with `make -j4` in proc-0fc90d83cac6 after final printer page guards;
+logs `$W/build-{lua,native}-font-final.log`. SHA256 from proc-58e6997c14f8:
 
 | Input | SHA256 |
 |---|---|
-| Lua binary | f9d2b9d53f3bed2f69d23e4e84cc54dae3a3c66cc3d0765758c7183e19682ae3 |
-| native binary | 4ad2de1403b09a6af43413dcf07245d143c22e8087c2d9a8e0f2a1b7016f97f8 |
+| Lua binary | 592cf21b7fe06c8d9a59576eca388cd11c46ab174543b66f4c1a8ba9d6cb7739 |
+| native binary | cc35079a003c66ce3d1e130901a19691f84f034f8e534e493c2f41324b0e3f97 |
 | Lua config.h | f3b2dd74f8cb9d7526b5bd8f976af4e04d416227c1dd5bc009dfcc7663e39975 |
 | native config.h | 5a6293639a5798fdb3a5160d194f3529ca42ca09e7b0be24d0c11c0b298a132b |
+| Lua config.status | 1da1be2e3e101ee762808fcffcbb1af26979ca703520056dab3b013687c65c60 |
+| native config.status | 0910ab26954778fe5b46731d809819a646228bc5e2384b81691cb6dd26565f1c |
 
-Set `DOSBOX_TEST_BINARY` to Lua binary. Run
-`python3 tests/original-foundation/fresh-root-matrix.py`;
-optional `DOSBOX_TEST_CASES=ah86-held,pause-held,keyboard-d1-held,gameport-timed,gameport-untimed`
-selects exact cases and rejects unknown names. ASM is authored in this directory,
-assembled deterministically with NASM. Set `DOSBOX_TEST_NATIVE_BINARY` to native
-binary for `fresh-native-console.py`. Run `fresh-e2e-milestone.py` for debugger,
-FILE and INLINE consumers. Native no-Agent binary cannot serve the Bridge socket;
-use its actual `-restore-console`, not the socket harness.
+`DOSBOX_TEST_BINARY=$W/build-lua/src/dosbox-x python3
+ tests/original-foundation/fresh-root-matrix.py` runs the finite cases; optionally
+set `DOSBOX_TEST_CASES=floppy-720-held,floppy-held,font-held,ah86-held,pause-held,bank-held,bank-service`.
+ASM/BPB/FAT generation is deterministic, not checked-in runtime disk images.
+`DOSBOX_TEST_NATIVE_BINARY=$W/build-native/src/dosbox-x python3
+ tests/original-foundation/printer-runtime.py` exercises real DOS LPT/ESC close,
+PS header/EOF/nonempty payload and guest completion witness with empty/missing
+font paths and display TTF output. It does not compare rendered page pixels.
+`fresh-native-console.py` accepts `DOSBOX_TEST_CONSOLE_FIXTURE=font|ah86|pause|sb-fifo|floppy`.
+`fresh-e2e-milestone.py` runs debugger→fresh FILE/INLINE→explicit continuation.
+Full-library Lua remains enabled, not sandboxed. Reduced ASan/UBSan probes:
+`printer-font-lifetime.py`, `vga-banks.py`, `bridge-capture.py`; those are actual
+extracted production bodies with doubles, not full integration certification.
 
-## Author evidence, with applicability
+## Current author evidence (raw logs retained, not versioned)
 
-Engine10: `work:///cards/card-n-c-l-a/processes/proc-e806c340ce45/stdout.log`
-(exit0) records all39 fresh-root cases, native console, and four combined
-save/fresh-process FILE/INLINE restore/held observation/explicit continuation/root42
-workloads. Raw receipts under `fresh-root-matrix/run-kkwppssv`,
-`native-console-l1_nmjrp`, `e2e-milestone-elf2tivu` in the work root.
-New held cases include active AH86 and Pause interrupt frames, pending8042-D1 with
-unread synchronous D0 output, partially consumed untimed gameport counts and timed
-discharge. No physical joystick/keyboard input claim. Existing cases exercise
-shared handles/current file content and searches, XMS/EMS/HMA/UMB/A20/hooks,
-mouse/video/VESA/keyboard services and active SB FIFO/speaker/timer state.
+Tool process IDs below resolve under `work:///cards/card-n-c-l-a/processes/`;
+these are author evidence, not independent acceptance or installed-host certification.
 
-Engine9 dirty-source frontend regression chain exit0:
-`work:///cards/card-n-c-l-a/processes/proc-8d29b6c63520/stdout.log`:
-exclusive runtime (persistent Interactive expressions/sink/error repair/ownership),
-RPC (including REAL_RPC_STOP_CONDITIONS_PASS), production Lua (full libraries,
-C require, file/callback/finalizer), four E2E cases. Chain used `&&`, not an exit0
-from an unrelated final command. Those nonarchive frontend implementations are
-unchanged by engine10. It is not installed-host/native-MCP certification.
+* proc-5dc01f53ae43 exit0, pre-page-guard binaries: matrix run-pxv8hnps720/1440KB,
+  font/AH86/Pause/ET4000 mode13 service; four E2Es e2e-milestone-kyhl1y6s
+  (speaker/timer,shared-file,SB-FIFO,new-shell-child), plus printer/VGA sanitizers.
+* proc-709e134c6725 exit0: exclusive-runtime, rpc-runtime, production Lua,
+  native font console and real printer PS output, same pre-page-guard input.
+* proc-d4a46f3bd3c0 exit0: reduced render allocation/codec/stride (including
+  CGA4/3270), SDL owner, completed-frame/clock, input vocabulary/cursor,
+  eight mixer policies, BIOS attachment and RAM backing sanitizers. Not full
+  backend/playback/physical input qualification.
+* proc-0fc90d83cac6 exit0: both final builds, real printer empty/missing/TTF
+  routes (printer-runtime-iv_p3clo),24 face factory render/dispose cycles under
+  ASan/UBSan, five VGA handlers separate/alias byte/word/dword aligned/unaligned,
+  diff check. proc-58e6997c14f8: repaired actual-body Bridge cleanup sanitizer
+  test and final hashes. proc-3d6a297161b5 first exposed stale Bridge test doubles
+  after successful printer and frame-observer tests; proc-d2ff41bbb37e exposed
+  one remaining resume stub. Those compile failures were test drift, not passing
+  tests or production repairs.
+* proc-263e670f1003 exit0 final binaries: bank-held and bank-service actual
+  fresh consumers, matrix run-sj9zef0z. Active mode13 ET4000 retains distinct
+  read1/write2 banks and VRAM through held restore/resaves; explicit continuation
+  writes through write2 while observing read1, changes read bank, verifies byte,
+  exits42. Not VESA101 active-bank qualification.
 
-Reduced actual-code UBSan probes: keyboard, timer, XMS, EMS, mixer, render passed
-in proc-f8fe0b34b92c before DOS fixture compilation failed (stale missing native
-binding/HMA stubs). Repaired reduced DOS fixture passes proc-898e19adda36;
-DOS allocator all65536 strategy values also pass there. DOS-table fixture's old
-expectation of replacing a different native allocator cursor failed there; actual
-owner deliberately requires equality to avoid overwriting retained allocations.
-Updated assertion now tests that refusal. Pass recorded proc-34747fe9407f, followed
-by stale MSCDEX stub compile failure (missing callback binding / bool audio results).
-Updated MSCDEX stubs preserve focused inventory/audio tests; proc-7395887e3e2e
-passes MSCDEX, native MSCDEX callback identity and HMA probes. Its subsequent
-diff check failed on two CRLF new lines; normalized only added lines, final
-`git diff --check` passes proc-5559b9d1c1ef. Reduced probes do not qualify media playback.
+Failed fixture development preserved: VESA101 bank variant root99
+proc-73b455902177/run-9gs7p8vt, changed to mode13 (service pass
+proc-6f4db18f75df/run-34yhitdy), not a production VESA repair. Initial active-bank
+NASM `%if defined` syntax failure proc-a78ad3471a9c; wrong bank1 byte assertion
+root99 proc-4dab1f3a8a27, corrected to expected byte0 without weakening the
+separate read/write bank contract. Initial printer probes completed guest witness
+but no PS until fixture explicitly sent form feed; not a production output fix.
 
-Earlier incorrect keyboard D2/A5 fixture root99 and no-Agent socket listener timeout
-are not hidden: corrected synchronous D0 fixture and actual native-console route
-pass. These were fixture/route failures, not evidence of a fixed device defect.
+Earlier engine10 evidence and failures remain in accepted status history; their
+archive compatibility does not extend to engine11. In particular full39-case
+proc-e806c340ce45, engine10 font32MB/native waits, and earlier engine9/frontend
+chains are not claims of a current exhaustive matrix. Engine11 pre-bank/font
+42-case proc-981e7d2d8f48 passed matrix/E2E/native media before wrong third
+script path (overall exit2); corrected frontend chain proc-dc21464b381e passed.
 
-## Additional active font / geometry evidence (2026-11-06)
+## Remaining implementation and disposition obligations
 
-`fresh-font.asm` uploads a nondefault sixteen-row glyph through actual BIOS
-INT10/1100, leaves plane2 read mapping active at IP0200, then after fresh restore
-compares every glyph byte through guest A000 memory and returns through ordinary
-BIOS text output. This exercises actual font backing/plane bindings, not just
-interface presence. It does not inspect pixels or qualify every PC98/TTF font.
-`font-held` passes at default RAM (proc-8bc81d328e52/run-9fi6pdr4) and32MB,
-alongside XMS/EMS active-state workloads (proc-9c7b831542c4/run-y6pc9c4a).
-The latter also passes actual BIOS image attachment refcount/ordering and RAM
-backing lifetime ASan/UBSan probes, explicitly not live mounted-media restore.
-All production inputs and engine10 binary/config pins above remain unchanged.
+Finite419-path/283-production ledger and105 helper bodies are mapping evidence,
+not certification. Full source-grounded finite closure is still unfinished.
+Actual remaining seams include selected effective scan/layout/output histories
+and single text-column primitive (current TTF still directly assigns address_add),
+active serial/parallel/printer parser/raster/timing/spool/future font-bank state
+(no original owner serializer in those directories), and real provider/output
+consumers. Ordinary independent printer face lifetime repair does not settle them.
+Existing Render codec transports geometry/palette and reconstructs output; it
+must not be described as completed canvas/history parity without implementation
+and actual consumers. IDE's selected delta is catalogue-only, not active nonempty
+IDE qualification. Broader hardware/composed and installed-host work remains with
+parents, but this is not authority to silently parent-retain required missing
+foundation behavior. Continue bounded implementation and escalate only genuine
+material tradeoffs/unavailable decisions. No current external blocker demonstrated.
 
-Actual native-console/no-Lua consumers now accept the finite selector
-`DOSBOX_TEST_CONSOLE_FIXTURE=font|ah86|pause|sb-fifo` (default sb-fifo).
-Font, active AH86 and active Pause each pass held delay/status invariance,
-explicit Run/root42, malformed Shell binding rejection/disposal and quit disposal,
-archive unchanged: proc-8e092e16b638 (native-console-k1sywu_n, -sa2ww8hm,
--yp78yujg). This supplies affected no-debug consumer evidence for the repaired waits,
-not merely a binary build. Root matrix now has40 cases including font-held;
-the full39-case run above predates that added case, which was run separately.
-`DOSBOX_TEST_MEMSIZE` now propagates to producer and matching fresh consumer.
-
-## Reproduced prior-core media defect requiring owner coordination
-
-Opt-in `DOSBOX_TEST_CASES=floppy-held` is a **known failing regression**, not a
-qualified41st matrix case. `fresh-floppy.asm` reads a generated valid FAT12
-1.44MB medium through INT13, holds a real DMA buffer at IP0200, and intends to
-verify saved bytes plus a current-medium read after explicit continuation.
-Generation is deterministic BPB/FAT/signature data, no checked-in disk image.
-On engine10 source70bbe/2d77, proc-a78e949881d0/run-ik_uiw24 captures successfully
-then fails its unchanged-Dos assertion; archive producer run-l8x4lkoh retained.
-The generated image is valid FAT12 per actual emulator log. Earlier nonformatted
-fixture proc-ba4b18897250/run-jlftmqa2 also failed, superseded only as fixture input.
-
-Exact source finding: `src/dos/dos_files.cpp:2642` global `Opts opts` is reused
-across drive and BIOS image records. `POD_Save_DOS_Files` writes it for local
-Drives before the later BIOS image loop assigns geometry. Subsequent saves thus
-serialize previous-save geometry into unrelated local-drive records. First versus
-post-refusal `Dos` differences at offsets66396..66415 and69800..69819 encode
-512/18/2/80/mediaf0 rather than zero, with no guest advance. This is capture scratch
-state leakage, not a justified host-content mutation or relaxed byte oracle.
-
-A separate fresh attempt from that first archive fails safely before evaluator:
-proc-904de828d3d2, fresh-native-entry/run-z3ybbeeq/native.log (actual filename
-see run directory), `Cannot restore save-state BIOS disk image`, after FAT12 drive
-construction. That command's final tail exit0 **does not make restore pass**;
-Python raises bridge EOF. The earlier malformed-medium attempt proc-e0a0de55daea
-also failed. No installed target was continued. Archive/source preserved.
-BIOS-loop reconstruction still needs root-cause resolution; no claim that fixing
-scratch-state leakage alone fixes attachment. This is the prior-core DOS media
-codec/attachment path covered by the accepted coordination restriction. Request
-its owner to repair or explicitly coordinate delegation before changing it.
-Do not weaken unchanged-owner assertions or hide the failing case.
-
-## Remaining scope, not acceptance by mapping
-
-Finite map/ledger is a work aid, not line-by-line runtime certification. IDE's
-selected net delta is only IO02 catalogue registration; its removal does not
-implement nonempty IDE state. Need source-grounded disposition and useful common
-media/geometry/provider/font variations, remaining real consumer coverage and dated
-project §7/API/CLI claims before whole delegated completion. MIDI remains explicitly
-unqualified lower priority; exhaustive hardware/composed testing stays with parent,
-installed host/MCP/Saivage with its owner. No claim of nondebug integrated autosave:
-unsafe timed callback refusal plus held save is the qualified behavior. External
-boot/nonempty device/shell root/unrepresented lazy/LFN limits remain explicit.
-
-No service, branch switch, merge, rebase, publication or cleanup was performed.
-Inherited unknown processes/resources and caches remain preserved. New tests own
-their run directories; full raw captures are not committed. Independent affected
-assessment remains required and is arranged by the parent.
+Independent affected assessment is arranged by parent. Preserve existing PID208/
+port8080, old Xvfb584020/display106, uncertain inherited processes/archives/damaged
+builds and caches; no cleanup established. All new commands collected, test-owned
+raw evidence retained. No source switch/rebase/reset/service/publication action.

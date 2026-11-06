@@ -21,6 +21,9 @@
 #include <unistd.h>
 #include <assert.h>
 #include <math.h>
+#include <memory>
+#include <vector>
+#include <limits>
 
 #include "dosbox.h"
 #include "dos_inc.h"
@@ -1284,12 +1287,36 @@ void GFX_EndTextLines(bool force) {
     }
 }
 
-FT_Face GetTTFFace() {
-    if (ttf.inUse && ttfFont && ttfSize) {
-        TTF_Font *font = TTF_OpenFontRW(SDL_RWFromConstMem(ttfFont, (int)ttfSize), 1, ttf.pointsize);
-        return font?font->face:NULL;
-    } else
-        return NULL;
+// Independently owned printer face: no orphaned TTF_Font or SDL stream.
+FT_Face GetTTFFace(FT_Library library,
+                  std::shared_ptr<std::vector<unsigned char>> &backing) {
+    if(!ttf.inUse || !ttfFont || !ttfSize ||
+       ttfSize>static_cast<unsigned long>(std::numeric_limits<FT_Long>::max()))return nullptr;
+    auto bytes=std::make_shared<std::vector<unsigned char>>(
+        static_cast<const unsigned char*>(ttfFont),
+        static_cast<const unsigned char*>(ttfFont)+ttfSize);
+    FT_Face face=nullptr;
+    if(FT_New_Memory_Face(library,bytes->data(),FT_Long(bytes->size()),0,&face))return nullptr;
+    // Same preferred map order as TTF_OpenFontIndexRW.
+    for(int i=0;i<face->num_charmaps;++i){
+        const auto map=face->charmaps[i];
+        if((map->platform_id==3 && (map->encoding_id==1 || map->encoding_id==0)) ||
+           (map->platform_id==2 && map->encoding_id==1) || map->platform_id==0){
+            FT_Set_Charmap(face,map);break;
+        }
+    }
+    FT_Error error=0;
+    if(FT_IS_SCALABLE(face))error=FT_Set_Char_Size(face,0,ttf.pointsize*64,0,0);
+    else {
+        int size=ttf.pointsize;
+        if(size>=face->num_fixed_sizes)size=face->num_fixed_sizes-1;
+        if(size<0)size=0;
+        if(!face->num_fixed_sizes){FT_Done_Face(face);return nullptr;}
+        error=FT_Set_Pixel_Sizes(face,face->available_sizes[size].height,
+                                 face->available_sizes[size].width);
+    }
+    if(error){FT_Done_Face(face);return nullptr;}
+    backing.swap(bytes);return face;
 }
 
 void resetFontSize() {

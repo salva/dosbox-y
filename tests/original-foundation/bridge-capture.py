@@ -40,6 +40,29 @@ void BeginCapture() {assert(!capture);capture=true;}
 std::vector<std::string> EndCapture() {assert(capture);capture=false;++ends;return {};}
 bool DEBUG_ExecuteCommand(const char *) {++calls;if(fail)throw Failure{};return accepted;}
 void DEBUG_EnableDebugger() {++calls;if(fail)throw Failure{};}
+namespace NativeControl { bool rawEffectAllowed() {return true;} }
+bool DEBUG_ContinuationUnavailable() {return false;}
+std::string FirstWordUpper(const std::string &s) {return s;}
+namespace NativeDebug {
+ enum class Frontend {Bridge};
+ enum class Admission {Accepted};
+ struct Request {
+  enum class Action {RunInterrupt,TraceInterrupt};
+  Frontend frontend;int attachment=0,expected=0;bool resume=false;
+  Action action;uint8_t interrupt=0;
+ };
+}
+bool DEBUG_ResumeNativeExecution(NativeDebug::Frontend,bool,bool,int) {return true;}
+int g_native_attachment=0;
+bool g_pending_resume=false;
+std::string g_pending_step;
+int DEBUG_NativeExecutionContext() {return 0;}
+bool DEBUG_AdmitNativeEffect(int) {return true;}
+bool DEBUG_ParseInterruptArgument(const char *,uint8_t &) {return true;}
+NativeDebug::Admission DEBUG_RequestNativeExecution(const NativeDebug::Request &) {
+ return NativeDebug::Admission::Accepted;
+}
+bool DEBUG_ExecuteSessionCommand(const char *s,int) {return DEBUG_ExecuteCommand(s);}
 ''' + body + r'''
 int main() {
  ProcessControlCommand("request");

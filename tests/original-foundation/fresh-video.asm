@@ -27,16 +27,62 @@ program_start:
     cmp ax,004fh
     jne failed
 %endif
+%ifdef BANK_SERVICE
+    mov ax,0013h
+    int 10h
+    mov ax,0a000h
+    mov es,ax
+    ; Tseng ET4000 port 3CD: write bank in low nibble, read in high.
+    mov dx,3cdh
+    mov al,21h
+    out dx,al
+    mov byte [es:0],5ah
+    mov al,11h
+    out dx,al
+    cmp byte [es:0],5ah
+    jne failed
+    mov al,22h
+    out dx,al
+    mov byte [es:0],0a5h
+    mov al,12h
+    out dx,al
+    cmp byte [es:0],5ah
+    jne failed
+    mov byte [es:1],3ch
+    mov al,22h
+    out dx,al
+    cmp byte [es:1],3ch
+    jne failed
+%ifdef CAPTURE_ACTIVE
+    mov al,12h
+    out dx,al
+    jmp bank_capture
+    times 100h-($-program_start) db 90h
+bank_capture:
+    nop ; IP0200: distinct read/write banks and their bytes remain active
+    cmp byte [es:0],5ah
+    jne failed
+    mov byte [es:2],69h ; write bank2 while read bank1 is retained
+    cmp byte [es:2],69h
+    je failed
+    mov al,22h
+    out dx,al
+    cmp byte [es:2],69h
+    jne failed
+%endif
+%endif
     mov ax,0003h
     int 10h
     mov ax,0b800h
     mov es,ax
     mov word [es:0],1f59h
 %ifdef CAPTURE_ACTIVE
+%ifndef BANK_SERVICE
     jmp active_capture
     times 100h-($-program_start) db 90h
 active_capture:
     nop ; IP0200: verify saved video mode and VRAM, not newly redrawn state
+%endif
 %endif
     cmp word [es:0],1f59h
     jne failed
