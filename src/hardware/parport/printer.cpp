@@ -1403,11 +1403,11 @@ static void PRINTER_EventHandler(Bitu param);
 
 void CPrinter::newPage(bool save, bool resetx)
 {
+    // Refused publication must retain the pending raster, cursor and timer.
+    if (!page || (save && !outputPage())) return;
 	PIC_RemoveEvents(PRINTER_EventHandler);
 	if (printer_timout)
         timeout_dirty=false;
-	if (save)
-		outputPage();
 	if (resetx)
         curX = leftMargin;
 	curY = topMargin;
@@ -2055,8 +2055,9 @@ void CPrinter::doAction(const char *fname) {
     }
 }
 
-void CPrinter::outputPage() 
+bool CPrinter::outputPage()
 {
+    if (!page) return false;
 	char fname[512];
 
 	if (strcasecmp(output, "printer") == 0)
@@ -2108,7 +2109,7 @@ void CPrinter::outputPage()
 
 			if (StartDoc(printerDC, &docinfo)<=0) {
                 LOG_MSG("PRINTER: Cannot start print.");
-                return;
+                return false;
             }
 			multiPageCounter = 1;
 		}
@@ -2116,7 +2117,7 @@ void CPrinter::outputPage()
 		if (StartPage(printerDC) < 0)
         {
 			LOG_MSG("PRINTER: Cannot start page.");
-			return;
+			return false;
 		}
 
         // Create a memory DC for the printer bitmap
@@ -2139,7 +2140,7 @@ void CPrinter::outputPage()
             LOG_MSG("PRINTER: CreateDIBSection failed");
             DeleteDC(memHDC);
             EndPage(printerDC);
-            return;
+            return false;
         }
 
         if(!oldBitmap) {
@@ -2147,7 +2148,7 @@ void CPrinter::outputPage()
             DeleteObject(bitmap);
             DeleteDC(memHDC);
             EndPage(printerDC);
-            return;
+            return false;
         }
 
         if(SDL_LockSurface(page) != 0) {
@@ -2156,7 +2157,7 @@ void CPrinter::outputPage()
             DeleteObject(bitmap);
             DeleteDC(memHDC);
             EndPage(printerDC);
-            return;
+            return false;
         }
 
         for(int y = 0; y < page->h; y++) {
@@ -2217,6 +2218,7 @@ void CPrinter::outputPage()
 		DeleteDC(memHDC);
 #else
 		LOG_MSG("PRINTER: Direct printing not supported under this OS");
+        return false;
 #endif
 	}
 #ifdef C_LIBPNG
@@ -2234,21 +2236,21 @@ void CPrinter::outputPage()
 		if (!fp) 
 		{
 			LOG(LOG_MISC,LOG_ERROR)("PRINTER: Can't open file %s for printer output", fname);
-			return;
+			return false;
 		}
 
 		/* First try to allocate the png structures */
 		png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
         if(!png_ptr) {
             fclose(fp);
-            return;
+            return false;
         }
 		info_ptr = png_create_info_struct(png_ptr);
 		if (!info_ptr)
         {
 			png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
             fclose(fp);
-            return;
+            return false;
 		}
 
 		/* Finalize the initing of png library */
@@ -2270,7 +2272,7 @@ void CPrinter::outputPage()
             LOG_MSG("PRINTER: SDL_LockSurface failed");
             png_destroy_write_struct(&png_ptr, &info_ptr);
             fclose(fp);
-            return;
+            return false;
         }
 
         const int width = page->w;
@@ -2373,7 +2375,7 @@ void CPrinter::outputPage()
 			if (!psfile) 
 			{
 				LOG(LOG_MISC,LOG_ERROR)("PRINTER: Can't open file %s for printer output", fname);
-				return;
+				return false;
 			}
 
 			// Print header
@@ -2461,9 +2463,10 @@ void CPrinter::outputPage()
 	{	
 		// Find a page that does not exists
 		findNextName("page", ".bmp", &fname[0]);
-		SDL_SaveBMP(page, fname);
+		if (SDL_SaveBMP(page, fname) != 0) return false;
 		doAction(fname);
 	}
+    return true;
 }
 
 void CPrinter::fprintASCII85(FILE* f, uint16_t b)

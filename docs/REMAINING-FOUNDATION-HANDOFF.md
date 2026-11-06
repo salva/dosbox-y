@@ -270,6 +270,26 @@ refresh/close/PS routes (`printer-runtime-46w97x4e`). Logs
 Configuration and engine13 unchanged; previous E2E is prior to these boundary
 fixes, not a final all-input pass.
 
+## Printer refused-page preservation (2026-11-06)
+
+`newPage` now asks the ordinary publication owner before removing its event or
+clearing raster/cursor/timeout. `outputPage` returns refusal for null page,
+existing Windows acquisition failure branches, unsupported direct output,
+PNG acquisition failure, PS file-open failure and BMP save failure. Successful
+normal branches preserve prior behavior. This is the selected ordinary-path
+preservation seam, not a spool/checkpoint codec or a claim that every PS/PNG/
+Windows write/close error is now diagnosed. Such failure accounting remains
+unfinished with active printer state. Actual `newPage` body null/refusal/success/
+reset branches pass ASan/UBSan. Both builds and five native ordinary font/LPT/PS
+routes pass proc-0caf002f9a2e (`printer-runtime-qj8d1454`); that command then
+failed diff check for trailing whitespace. Whitespace fixed; proc-3b25c5a664f5
+repasses sanitizer/diff and pins binaries Lua
+`5ecd4cd4dab3b5d3b36268ac86f56ed6934f2e1c30a7421a267eea2530ce5289`, native
+`7c0a6f51b83276b8328a589538625c1e366fcee579c856c9f2b4620a368a2625`.
+Build logs `$W/build-{lua,native}-printer-page.log`; no config/engine change.
+The reduced failure test stubs publication; real failed acquisition is not yet
+qualified. No final combined E2E on this input claimed.
+
 ## Remaining implementation and disposition obligations
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,

@@ -163,7 +163,7 @@ private:
     void doAction(const char *fname);
 
 	// Output current page 
-	void outputPage();
+	bool outputPage();
 
 	// Prints out a byte using ASCII85 encoding (only outputs something every four bytes). When b>255, closes the ASCII85 string
 	void fprintASCII85(FILE* f, uint16_t b);
