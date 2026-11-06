@@ -49,6 +49,14 @@ four combined E2Es. Final complete-clear uniform hook then `proc-e3e6dcdf510c`
 `e2e-milestone-iajy6luq`, hashes/diff. Each E2E captures stopped, restores in
 fresh process held, verifies observation, explicitly continues and exits root42.
 
+`proc-d0cdf0222247` && exit0 adds real guest
+`fresh-text-producer.asm`/`text-producer-restore.py`: 80-column text/VRAM,
+explicitly enabled SMZX attribute mode, live loop before held save, fresh held
+restore then explicit ordinary-text/panning loop/VRAM check/root42. Both configs
+set `enable supermegazeux tweakmode=true`. Earlier `proc-bf5ec8a1bf84` lacked
+that enable, so its pass is ordinary text only, NOT SMZX qualification. Neither
+is a pixel golden or channel-swapped SDL/BIOS fixture.
+
 Final Lua SHA256 `323603e95cd9cb71256099478cfee550ab6883d667cfc61d910c7ef2d9969dd9`,
 native `8a047e98d3d0b46ef11fdb92bbc4d8b3bbaf2f7f371f821d9090a3c502c39cc8`.
 Same generated headers/toolchain/configuration as INT10/FileLPT handoff;

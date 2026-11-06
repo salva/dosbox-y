@@ -52,6 +52,8 @@ if os.environ.get('DOSBOX_TEST_FLOPPY'):
  image[510:512]=b'\x55\xaa'
  for offset in (512,512*(1+fat_sectors)): image[offset:offset+3]=bytes((0xf9 if floppy_kb==720 else 0xf0,255,255))
  (w/'floppy.img').write_bytes(image)
+if os.environ.get('DOSBOX_TEST_TEXT_PRODUCER'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-text-producer.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_DAC'):
  subprocess.run(['nasm','-f','bin',*(['-DGRAPHICS'] if os.environ.get('DOSBOX_TEST_DAC_GRAPHICS') else []),str(pathlib.Path(__file__).with_name('fresh-dac.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_FONT'):
@@ -107,6 +109,8 @@ def run():
  listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(20)
  flag_command = 'flagsave FLAG.TXT\n' if flagged else ''
  conf=d/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[autoexec]\nmount c {w}\nc:\n{flag_command}debugbox TINY.COM\n')
+ if os.environ.get('DOSBOX_TEST_TEXT_PRODUCER'):
+  conf.write_text(conf.read_text()+'\n[video]\nenable supermegazeux tweakmode=true\n')
  if os.environ.get('DOSBOX_TEST_FILELPT'):
   conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(w/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:100000\n')
  if os.environ.get('DOSBOX_TEST_PRINTER'):
