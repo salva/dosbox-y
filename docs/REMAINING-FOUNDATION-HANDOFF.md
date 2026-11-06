@@ -1,14 +1,27 @@
 # Remaining foundation port: author handoff (2026-11-06)
 
-This is a useful committed increment, **not whole-foundation or independent
-acceptance**. Checkout `/work/dosbox-y/original-savestate-restart`, branch
+This is the committed bounded author implementation handoff, **not independent
+acceptance**. Current finite §7/API/CLI disposition and qualification limits are
+in `REMAINING-FOUNDATION-DISPOSITION.md`; subsequent sections retain historical
+input applicability rather than describing today's binary. Checkout `/work/dosbox-y/original-savestate-restart`, branch
 `original-savestate-restart`. Selected74b5fa198 versus029bd65 remains the finite
 scope; original4b7ffec is provenance. Fresh disposable progressive import supersedes
 historical same-process/whole-preflight proposals; approved packets are unchanged.
 
 ## Current successor applicability (2026-11-06)
 
-Current engine29/representation9 production follows `d6f509a9e41ca83a416ddd124035be1924676fbd`
+Current production is `d69e0b40a9a4459a29c05d96a457438a6ee72e63`, engine29 /
+representation9. `ORDINARY-SCREENSHOT-PORT.md` pins final binaries, three builds,
+combined E2Es/native-console; `VOODOO-CALLOUT-PARITY.md` records the other final
+ordinary selected fix. `REMAINING-FOUNDATION-DISPOSITION.md` reconciles the finite
+map and real frontend/common-device evidence. Engine29 all47 variations to two
+fresh consumers passed on preceding ed293 input; current final real frontend
+chain is proc-8efe756fb980. Full-body renderer witness and Epson interrupted-job
+requirements are implemented in original owners, not merely map dispositions.
+The following opening previously described an intermediate engine29 input and
+is retained for evidence applicability only:
+
+Engine29/representation9 production follows `d6f509a9e41ca83a416ddd124035be1924676fbd`
 (MPU parser and SB address omission), with GUS DRAM address omission next.
 `MPU-SB-OWNER-CONTINUATION.md` pins direct owner repairs and exact checks.
 Tandy native scalar traversal is `994dc2ab64acf1950c043661b7e3a38c8c707f28`;

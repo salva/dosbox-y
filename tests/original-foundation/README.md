@@ -1,6 +1,17 @@
 ## Current remaining-foundation successor (2026-11-06)
 
-Engine29/representation9: `docs/MPU-SB-OWNER-CONTINUATION.md` describes current
+Engine29/representation9 final production is d69e0b40a9a4459a29c05d96a457438a6ee72e63.
+`docs/REMAINING-FOUNDATION-DISPOSITION.md` is the current finite §7/API/CLI and
+verification handoff; `docs/ORDINARY-SCREENSHOT-PORT.md` pins final three binaries,
+reproduction and combined E2E. `ordinary-screenshot.py` decodes every pixel for
+all four bpp/four doubling combinations and failures; `voodoo-callout.py` tests
+ordinary presence/callout ownership, not accelerator continuation. Current real
+exclusive/Interactive/Bridge/RPC/full Lua/debug-no-Lua chain passes
+proc-8efe756fb980. All47 engine29 roots to TWO Lua/no-Lua fresh consumers passed
+proc-154819bb76b1 on preceding ed293 input, before the two ordinary-only fixes.
+Historical inventories below retain exact-input applicability, not current pins.
+
+Engine29/representation9: `docs/MPU-SB-OWNER-CONTINUATION.md` describes
 original-owner parser and native-binding corrections, exact hashes, three builds,
 real frontend checks and combined fresh-process E2Es. `mpu-parser-history.py`
 compiles actual channel/system parsers with an explicit byte sink, not physical
