@@ -241,6 +241,20 @@ native `e1c5c2052b0ab6daf250cd98118441aeea562ab1ce5fce70cbe4fbad93c0c157`.
 Engine12/13 archives are intentionally incompatible. No full output-history or
 active printer closure follows; those remain below.
 
+Follow-on TempLine consumption fix: validate the saved extent before subtraction,
+allocation or read (1024-byte guard through8192 pixels, four-byte alignment), and
+fail allocation rather than seeking past missing storage and falsely succeeding.
+`vga-buffer.py` runs actual consumed body against min/max/undersize/overflow/
+misalignment/truncation and injected allocation refusal under ASan/UBSan.
+proc-2ab038d1285a built both and passed font/bank/VESA-service fresh consumers
+`run-dhg2v4gn`; proc-1c136d52ce83 passed both VGA sanitizers and four combined
+E2Es `e2e-milestone-zioo_9fl`. Current Lua SHA256
+`ee72d09382eb0e7e23bb99bec4b8929d9a7114944d6f092bb78a9e9825a1129c`, native
+`66dba503a72433ac763d27c004280b35ddfb4dea8028034966767e78aa83284d`.
+Logs `$W/build-{lua,native}-vga-buffer.log`, unchanged config/toolchain.
+Native font on prior relocation-only binary passed proc-2f6c733a7cb0 /
+`native-console-9a95ng3o`; it is not the final buffer-fix binary.
+
 ## Remaining implementation and disposition obligations
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,
