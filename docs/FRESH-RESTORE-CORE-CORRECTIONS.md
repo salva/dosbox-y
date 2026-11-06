@@ -6,7 +6,63 @@ committed with this document. Evidence root below is
 `/work/dosbox-y/.saivage/work/cards/card-n-c-k-a/` (W). Logs are retained work
 evidence, not versioned fixtures. No prior binary is relabeled current.
 
-## R1 — effective initialized CPU owner
+## R1 successor — independent F1 corrected (2026-11-06)
+
+Independent assessor `record:///status.md?card=card-n-c-k-b&v=10` rejected full
+R1 closure on f0af4e: a title-only change and BIOS isapnpport auto/true or APM
+auto/1.2 rejected identical initialized machines. The CPU-only closure language
+below was insufficient; keeping independent-owner *requested* checks did not
+fulfil the initialized-owner requirement. That finding remains valid for f0af4e,
+not retrospectively erased by this successor. R2/R3 independent bounded evidence
+in that same record remains applicable where owning primitives are unchanged.
+
+`BIOS_StateConfigIdentity()` in `src/ints/bios.cpp` now contributes original
+initialized native variables, not config reparsing: integration-device/PnP,
+ISA PnP BIOS/port, APM presence/PnP/allowed connection modes/version/power-button
+policy, ISA holes and default IRQ handler policy. `savestates.cpp` removes only
+these owning properties from requested identity and contributes this value.
+`[dosbox] title` is excluded as host presentation, not guest hardware. Strict
+loaded-ROM/native roles/slots/spans and genuine machine guards remain.
+
+Proportionate nearby disposition: both BIOS CPU-section auto decisions were
+confirmed at ISAPNP_Cfg_Reset; integration-device forced enable for DOSBoxIG is
+also represented by the actual variable. DOSBox-section ISA holes resolve
+aliases/auto and address-bits/architecture overrides; default IRQ method resolves
+architecture default. These now use the same BIOS owner contribution. Other
+nearby bools are typed bool properties, already canonical, and integers are typed
+values (e.g. dos mem limit); no demonstrated alias cause justifies deleting their
+guards. Keyboard aux/reset are typed bools; auxdevice is explicit enum selection,
+not the BIOS auto/version parser. Arbitrary fonts/providers/peripheral equivalence
+is not claimed solved. This is no new all-device gate or parallel metadata engine.
+
+`fresh-effective-bios.py`, proc-8e7bf077e582,
+`effective-bios-s_1n1o94`: new actual producer; PnP auto/true, APM auto/1.2,
+ISA-hole auto/false and IRQ default/simple positives through fresh held save/
+delay/step/Run. Matching and title-only evaluator controls pass. PnP false,
+APM1.1, disabled protected connection mode, ISA hole true, cooperative IRQ and
+integration enabled reject Config_Identity exit1 before evaluator, dispose, source
+unchanged. Initial `effective-bios-fzb77x1j` tested ISA hole in the wrong section
+and integration false (already default); test setup corrected to actual owners/
+nondefault values, no guard weakened. Its passing prefix is not a whole pass.
+
+proc-a6d331855da6 passes effective-machine regression `effective-machine-8lqzw6gu`
+and debug producer→no-debug/no-Agent/no-Lua `native-console-fau34iu9` with useful
+SB FIFO/root42, held status/delay and mismatch/quit disposal. No blanket33-root/
+full combined E2E/fault/deadline rerun: independent k-b status10 supports those
+on f0af4e; their execution/restore/close owners are unchanged by this identity fix.
+
+Exact successor binaries W/build/{lua,no-debug}/src/dosbox-x (build logs
+`build/bios-{lua,native}.log`, proc-0ab3d8db70d3 then proc-8e7bf077e582):
+Lua **e637b0cc56c3d41444707e5e19cd54ece3181dbdf03762f0dcadbd2de97c3893**;
+native **e6454809a55cf4b7fdeef67698a913e8e286dd2cc7ef5867832c05b770766814**.
+config.h/config.status hashes unchanged from the profiles recorded below.
+Extraction config-identity and diff-check pass; extraction is not an independent
+integration test. Independent affected reassessment must use successor source
+and binaries, not the historical f0af paths/hashes. No new independent approval
+claimed. §7 interface policy below unchanged; its R1 closure is qualified by
+this actual F1 correction and remaining parent scope, not CPU-only evidence.
+
+## R1 — effective initialized CPU owner (f0af4e input)
 
 `src/cpu/cpu.cpp` now exports the constructor's resolved policy, architecture/
 prefetch width, PSE presence/width, instruction capabilities, REP limit and

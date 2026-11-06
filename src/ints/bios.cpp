@@ -2166,6 +2166,21 @@ static Bitu INT15_Handler(void);
 // FIXME: This initializes both APM BIOS and ISA PNP emulation!
 //        Need to separate APM BIOS init from ISA PNP init from ISA PNP BIOS init!
 //        It might also be appropriate to move this into the BIOS init sequence.
+// Read the original native owners after initialization on both capture and
+// fresh startup. No config reparse: auto/aliases compare their installed values.
+std::string BIOS_StateConfigIdentity() {
+    std::string identity;
+    const auto field = [&](uint64_t value) { identity += std::to_string(value) + ":"; };
+    field(enable_integration_device); field(enable_integration_device_pnp);
+    field(ISAPNPBIOS); field(ISAPNPPORT);
+    field(APMBIOS); field(APMBIOS_pnp);
+    field(APMBIOS_allow_realmode); field(APMBIOS_allow_prot16); field(APMBIOS_allow_prot32);
+    field(APM_BIOS_minor_version); field(APM_PowerButtonSendsSuspend);
+    field(isa_memory_hole_512kb); field(isa_memory_hole_15mb);
+    field(unhandled_irq_method);
+    return identity;
+}
+
 void ISAPNP_Cfg_Reset(Section *sec) {
     (void)sec;//UNUSED
     const Section_prop* section = static_cast<Section_prop*>(control->GetSection("cpu"));

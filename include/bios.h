@@ -468,6 +468,9 @@ bool ACPI_init();
         ((1 << (dma)) & 0xFF), \
         (flags)
 
+// Initialized native BIOS policy, not requested config spellings.
+std::string BIOS_StateConfigIdentity();
+
 #define ISAPNP_DMA(dma,flags) \
         ISAPNP_SMALL_TAG(5,2), \
         ((dma) & 0xFF), \

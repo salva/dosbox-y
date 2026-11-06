@@ -22,6 +22,7 @@
 #include "native_frontier.h"
 #include "restored_session.h"
 #include "cpu.h"
+#include "bios.h"
 #include "dos_inc.h"
 #if C_DEBUG && C_DEBUG_LUA
 #include "../debug/debug_lua.h"
@@ -128,6 +129,20 @@ static std::string state_config_identity() {
                 property->propname=="saveslot" || property->propname=="savefile" ||
                 property->propname=="saveremark" || property->propname=="autosave" ||
                 property->propname=="forceloadstate")) continue;
+            // Window title is host presentation, never guest hardware.
+            if (name=="dosbox" && property->propname=="title") continue;
+            // BIOS owns the effective auto/alias decisions and native policy.
+            if (name=="cpu" && (property->propname=="integration device" ||
+                property->propname=="integration device pnp" ||
+                property->propname=="isapnpbios" || property->propname=="isapnpport" ||
+                property->propname=="apmbios" || property->propname=="apmbios pnp" ||
+                property->propname=="apmbios allow realmode" ||
+                property->propname=="apmbios allow 16-bit protected mode" ||
+                property->propname=="apmbios allow 32-bit protected mode" ||
+                property->propname=="apmbios version" || property->propname=="apm power button event")) continue;
+            if (name=="dosbox" && (property->propname=="isa memory hole at 512kb" ||
+                property->propname=="isa memory hole at 15mb" ||
+                property->propname=="unhandled irq handler")) continue;
             // RAM geometry is resolved (rounded/clamped) by Memory. Equivalent
             // requested sizes are not different hardware; its owning consumer
             // also checks allocated/handler/address/A20 geometry on install.
@@ -177,6 +192,8 @@ static std::string state_config_identity() {
     field(CPU_StateCpuidVendor());
     field("initialized PSE v1");
     field(std::to_string(CPU_StatePseIdentity()));
+    field("initialized native BIOS policy v1");
+    field(BIOS_StateConfigIdentity());
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }

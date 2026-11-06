@@ -23,6 +23,7 @@ struct Control{std::vector<Section*>sections;Section*GetSection(int i){return un
 unsigned resolved_pages=4096;
 unsigned MEM_TotalPages(){return resolved_pages;}
 unsigned MEM_TotalPagesAt4GB(){return 0;}
+std::string BIOS_StateConfigIdentity(){return "initialized BIOS";}
 uint32_t CPU_StateFpuIdentity(){return 0x100;}
 std::string CPU_StateCpuidVendor(){return "GenuineIntel";}
 const std::string &CPU_StateConfigIdentity(){static const std::string value="resolved";return value;}
