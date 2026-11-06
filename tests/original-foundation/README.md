@@ -1,4 +1,35 @@
-## Current candidate: fresh disposable restore (2026-11-04)
+## Current remaining-foundation successor (2026-11-06)
+
+Engine21/representation9 production `1ec04fc9c5356295799476c1aaf85500d707b4a1`
+retains fresh-only restore and includes Render acquired-output/cache/aspect
+continuation, interrupted-Epson destination fault policy, original Int10/DAC/
+aperture/text-producer history, current-content append FileLPT and safe native
+cursor color loads. `docs/REMAINING-FOUNDATION-HANDOFF.md` consolidates exact
+build/config/binary identities, dated §7/API/CLI/test owner docs, failed checks
+and limitations. Later test/docs commits do not change those binaries. No
+whole-foundation or independent approval follows from this test inventory.
+
+No-debug/no-Agent/no-Lua **is now qualified on the actual console route**:
+set `DOSBOX_TEST_BINARY` to matching Lua/debug producer,
+`DOSBOX_TEST_NATIVE_BINARY` to native binary, and run `fresh-native-console.py`.
+`DOSBOX_TEST_CONSOLE_FIXTURE` selects `sb-fifo`, `font`, `serial`, `floppy`,
+`ah86`, `pause`, `gameport-timed`, `gameport-untimed`, `keyboard-d1`, `xms-a20`,
+`ems`, `shared-file`, or `filelpt`. These are actual held/status/delay then
+explicit Run/root42 consumers, followed by wrong-slot and quit disposal; serial
+also corrupts UART state and floppy hides its owned medium. FileLPT tests
+99-byte/cp437 lookahead, current external append, held no-output and silent
+mismatch/quit disposal. They do not establish physical hardware fidelity.
+The native binary lacks debugger MCP: do not feed it as a `fresh-startup.py`
+consumer and interpret its missing control connection as a restore defect.
+
+`fresh-root-matrix.py` selects its explicit finite cases using comma-separated
+`DOSBOX_TEST_CASES`; `DOSBOX_TEST_CONSUMERS` must support its debugger control
+route and match effective fixture hardware. `vga-selected-arithmetic.py` compares
+actual original split/visibility/blank/CRTC scan-policy calculations with pinned
+selected helpers under ASan/UBSan. `scan-stride.py` preserves upstream all-branch
+stride behavior including 3270PC CGA2/CGA4. These are arithmetic, not pixels.
+
+## Earlier fresh disposable restore candidate (2026-11-04)
 
 The original-foundation baseline reports below are historical unless explicitly
 updated here. Candidate commit `448596413d47407283564b50684d3876fa8b7dc9`
