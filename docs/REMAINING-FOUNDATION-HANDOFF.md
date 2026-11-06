@@ -8,6 +8,15 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
+Current engine24/representation9 production `3a8f6485eb37c7c507f2930446899d414fe3edb5`
+is documented in `ADLIB-BOOST-CONTINUATION.md` (current three binary hashes,
+all-profile builds, final combined FILE/INLINE/native/exclusive/Lua consumers)
+and `PC-SPEAKER-HISTORY-PARITY.md`. Both directly complete missing selected
+ordinary owner history; no new engine/duplicate codec/Prepared/replay. Earlier
+engine21–23 archives incompatible; historical receipts below do not imply
+archive interchangeability. Tests README opening updated; complete dated §7
+finite semantic disposition remains actionable, not declared complete here.
+
 Latest production `3d76253745d1e22c0f22b8799fdcd00079e45717`, tree
 `2f305168a502a4644a53d6180b1ed1cb7ab238c7`: see
 `MIXER-SAMPLE-SCALING-PARITY.md` for two selected signed-scaling fixes, current

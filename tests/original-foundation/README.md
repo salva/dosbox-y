@@ -1,20 +1,26 @@
 ## Current remaining-foundation successor (2026-11-06)
 
-Engine21/representation9 production `1ec04fc9c5356295799476c1aaf85500d707b4a1`
-retains fresh-only restore and includes Render acquired-output/cache/aspect
-continuation, interrupted-Epson destination fault policy, original Int10/DAC/
-aperture/text-producer history, current-content append FileLPT and safe native
-cursor color loads. `docs/REMAINING-FOUNDATION-HANDOFF.md` consolidates exact
-build/config/binary identities, dated §7/API/CLI/test owner docs, failed checks
-and limitations. Later test/docs commits do not change those binaries. No
-whole-foundation or independent approval follows from this test inventory.
+Engine24/representation9 production `3a8f6485eb37c7c507f2930446899d414fe3edb5`
+retains fresh-only restore and includes RTC calendar/alarm/lock/NMI state,
+selected bounded Tandy DMA producer, defined signed mixer sample scaling,
+PC speaker edge-filter/raw-gate owner history and adaptive Adlib gain/DC/write
+history, in addition to Render acquired-output/cache/aspect continuation,
+interrupted-Epson destination fault policy, original Int10/DAC/aperture/text
+producer history, current-content append FileLPT and safe native cursor colors.
+See `docs/{CMOS-CALENDAR-CONTINUATION,TANDY-DMA-PRODUCER-PARITY,
+MIXER-SAMPLE-SCALING-PARITY,PC-SPEAKER-HISTORY-PARITY,
+ADLIB-BOOST-CONTINUATION}.md` for current exact inputs, failed/corrected checks
+and bounded coverage. Engine21–23 archives are not interchangeable with24;
+earlier evidence applies only to unchanged code/profile assertions.
+`docs/REMAINING-FOUNDATION-HANDOFF.md` retains configured profiles and prior
+handoffs. No whole-foundation or independent approval follows from this inventory.
 
 No-debug/no-Agent/no-Lua **is now qualified on the actual console route**:
 set `DOSBOX_TEST_BINARY` to matching Lua/debug producer,
 `DOSBOX_TEST_NATIVE_BINARY` to native binary, and run `fresh-native-console.py`.
 `DOSBOX_TEST_CONSOLE_FIXTURE` selects `sb-fifo`, `font`, `serial`, `floppy`,
 `ah86`, `pause`, `gameport-timed`, `gameport-untimed`, `keyboard-d1`, `xms-a20`,
-`ems`, `shared-file`, or `filelpt`. These are actual held/status/delay then
+`ems`, `shared-file`, `cmos`, or `filelpt`. These are actual held/status/delay then
 explicit Run/root42 consumers, followed by wrong-slot and quit disposal; serial
 also corrupts UART state and floppy hides its owned medium. FileLPT tests
 99-byte/cp437 lookahead, current external append, held no-output and silent
