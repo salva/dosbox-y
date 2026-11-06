@@ -8,6 +8,33 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
+`VGA-APPLIED-SCAN-DISPOSITION.md` now grounds selected addressing/layout/row/
+schedule/panning/split/visibility/timing recipes in actual original draw POD and
+consumers. Actual split/visibility/blank/CRTC scan-policy differential ASan/UBSan
+and upstream all-branch scan regression pass (`proc-ec751d108dd9`,
+`proc-fc0cd2971452`). No duplicate helper codec or raster replay was added.
+`VGA-CURSOR-NATIVE-COLOR.md` pins current production1ec04fc9c binaries and both
+builds after 16 alignment/alias-safe color loads; later scan disposition commits
+change tests/docs only.
+
+Current-production bounded common-device rerun `proc-0da6778150e6` passes 17
+actual fresh-process held/explicit continuation cases: dummy UART, 720/1440 FAT12,
+active AH86/Pause, timed/untimed logical gameport, 8042-D1, three current-directory
+search variants, shared file cursor, UMB, XMS/HMA/EMS composition, XMS/A20, EMS,
+and active speaker. Raw receipts: card work `fresh-root-matrix/run-hw7dudgw`.
+Configured no-debug/no-Agent/no-Lua is **not** a debugger MCP consumer:
+`proc-576429778003` tried it with `fresh-startup.py`, timed out accepting a control
+connection; native log `fresh-native-entry/run-vqys9lvy/native.log` truthfully
+refused held target without `-restore-console`. This is not a restore success or
+production defect. Correct actual native console route `proc-36feae214364`
+passes serial/floppy/AH86/Pause held-delay-status invariance, explicit Run/root42,
+wrong-slot and quit disposal, plus missing medium and invalid UART cases.
+Reproduce with `DOSBOX_TEST_BINARY` Lua producer, `DOSBOX_TEST_NATIVE_BINARY`
+native consumer and `DOSBOX_TEST_CONSOLE_FIXTURE=serial|floppy|ah86|pause` using
+`tests/original-foundation/fresh-native-console.py`. These receipts qualify the
+named logical/media routes, not physical inputs, audio waveform, host IDE or
+all hardware. FileLPT refusal/timeout evidence remains in its dedicated doc.
+
 Current continuation receipts are consolidated in
 `INT10-APERTURE-FILELPT-CONTINUATION.md` and
 `PRINTER-PUBLICATION-REFUSAL.md`. Engine20 adds original Int10 mode identities,
