@@ -97,7 +97,7 @@ device_LPT::~device_LPT() {
 
 static void Parallel_EventHandler(Bitu val) {
 	Bitu serclassid=val&0xf;
-	if (parallelPortObjects[serclassid])
+	if (serclassid < 9 && parallelPortObjects[serclassid])
 		parallelPortObjects[serclassid]->handleEvent((uint16_t)(val>>4ul));
 }
 

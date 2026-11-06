@@ -255,6 +255,21 @@ Logs `$W/build-{lua,native}-vga-buffer.log`, unchanged config/toolchain.
 Native font on prior relocation-only binary passed proc-2f6c733a7cb0 /
 `native-console-9a95ng3o`; it is not the final buffer-fix binary.
 
+## Parallel boundary increment (2026-11-06)
+
+`Parallel_EventHandler` now bounds the nine-port index before array access,
+matching retained selected behavior. FileLPT destructor and timed close clear the
+closed FILE pointer before any ordinary action. No old output is replayed. This
+is not the still-missing full FileLPT/printer checkpoint implementation.
+proc-1b36c8333b96 exit0 passes actual parallel dispatch sanitizer ids0..15,
+null port/type0,1,7,65535, both builds and all five real native DOS LPT/ESC font
+refresh/close/PS routes (`printer-runtime-46w97x4e`). Logs
+`$W/build-{lua,native}-parallel-bounds.log`. Current binary SHA256 Lua
+`c6559ca3a8a3b9ecb3fda3a2e101a14e0a380d2bdde69693b556a29851bf3f3d`, native
+`b5b414a50931e8f195bb769e171981b83941be92fd0003a88702365c085a9461`.
+Configuration and engine13 unchanged; previous E2E is prior to these boundary
+fixes, not a final all-input pass.
+
 ## Remaining implementation and disposition obligations
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,

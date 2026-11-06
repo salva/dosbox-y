@@ -208,6 +208,7 @@ CFileLPT::~CFileLPT () {
 	// close file
 	if(fileOpen) {
 		fclose(file);
+		file = nullptr;
 		lastChar = 0;
 		fileOpen=false;
 		doAction();
@@ -313,6 +314,7 @@ void CFileLPT::handleUpperEvent(uint16_t type) {
 				fputc(12,file);
 			}
 			fclose(file);
+			file = nullptr;
 			lastChar = 0;
 			fileOpen=false;
 			LOG_MSG("Parallel %d: File closed.",(int)port_nr+1);
