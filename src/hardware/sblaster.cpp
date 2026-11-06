@@ -4832,7 +4832,11 @@ void POD_Save_Sblaster( std::ostream& stream )
 			stream.setstate(std::ostream::failbit);
 			return;
 		}
-		WRITE_POD(&sb[card], sb[card]);
+		// Transfer logical history, never source native binding addresses.
+		SB_INFO logical = sb[card];
+		logical.chan = nullptr;
+		logical.dma.chan = nullptr;
+		WRITE_POD(&logical, logical);
 		WRITE_POD(&dma_idx, dma_idx);
 		sb[card].chan->SaveState(stream);
 		if (!stream) return;

@@ -28,6 +28,8 @@ int main(){
  for(unsigned mask=0;mask<4;++mask){
   for(unsigned c=0;c<2;++c){sb[c]={{{nullptr}},nullptr,0,{}};sb[c].dma.chan=&channels[c+1];sb[c].chan=(mask&(1<<c))?&mix[c]:nullptr;sb[c].value=9+c;mix[c].value=31+c;}
   std::ostringstream out;POD_Save_Sblaster(out);assert(out);const auto bytes=out.str();
+  size_t offset=32;
+  for(unsigned c=0;c<2;++c){assert(unsigned(uint8_t(bytes[offset++]))==unsigned(bool(mask&(1<<c))));if(mask&(1<<c)){SB_INFO wire;memcpy(&wire,bytes.data()+offset,sizeof(wire));assert(!wire.chan&&!wire.dma.chan);offset+=sizeof(wire)+1+sizeof(unsigned);}}
   for(unsigned c=0;c<2;++c){sb[c].chan=(mask&(1<<c))?&fresh[c]:nullptr;sb[c].value=0;sb[c].dma.chan=nullptr;fresh[c].value=0;}
   std::istringstream in(bytes);POD_Load_Sblaster(in);assert(in);
   for(unsigned c=0;c<2;++c)if(mask&(1<<c)){assert(sb[c].chan==&fresh[c]&&sb[c].dma.chan==&channels[c+1]&&sb[c].value==9+c&&fresh[c].value==31+c);}

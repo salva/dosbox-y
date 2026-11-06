@@ -63,6 +63,8 @@ static void MPU401_WriteData(Bitu port,Bitu val,Bitu iolen);
 #define MSG_MPU_ACK                     0xfe
 
 static struct {
+    // In-flight direct/system/track parser belongs to MPU continuation.
+    Bitu parser_length, parser_count, parser_position;
 	bool intelligent;
 	MpuMode mode;
 	Bitu irq;
@@ -370,7 +372,7 @@ static void MPU401_WriteData(Bitu port,Bitu val,Bitu iolen) {
 			mpu.state.command_byte=0;
 			return;
 	}
-	static Bitu length,cnt,posd;
+	Bitu &length=mpu.parser_length, &cnt=mpu.parser_count, &posd=mpu.parser_position;
 	if (mpu.state.wsd) {	/* Directly send MIDI message */
 		if (mpu.state.wsd_start) {
 			mpu.state.wsd_start=0;
