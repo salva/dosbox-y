@@ -8545,16 +8545,46 @@ void *VGA_VertInterrupt_PIC_Event = (void*)((uintptr_t)VGA_VertInterrupt);
 void *VGA_VerticalTimer_PIC_Event = (void*)((uintptr_t)VGA_VerticalTimer);
 
 
+// One owner-local relocation table, used symmetrically in both directions.
+// Never leave an unrecognized source handler as a destination startup handler.
+static const VGA_Line_Handler saved_vga_line_handlers[] = {
+    nullptr, VGA_Draw_1BPP_Line, VGA_Draw_2BPP_Line, VGA_Draw_2BPPHiRes_Line,
+    VGA_Draw_CGA16_Line, VGA_Draw_4BPP_Line, VGA_Draw_4BPP_Line_Double,
+    VGA_Draw_Linear_Line, VGA_Draw_Xlat32_Linear_Line,
+    VGA_Draw_VGA_Line_HWMouse, VGA_Draw_LIN16_Line_HWMouse,
+    VGA_Draw_LIN32_Line_HWMouse, VGA_TEXT_Draw_Line, VGA_TEXT8_Herc_Draw_Line,
+    VGA_TEXT_Xlat32_Draw_Line, VGA_Draw_3270_1BPP_Line, VGA_Draw_3270_2BPP_Line,
+    VGA_Draw_AMS_4BPP_Line, VGA_Draw_HercInColor_Mono_1BPP_Line,
+    VGA_Draw_1BPP_Blend_Line, VGA_Draw_1BPP_Line_as_MCGA,
+    VGA_Draw_1BPP_Line_as_VGA_J3_Cga4Dcga, VGA_Draw_2BPP_Line_as_MCGA,
+    VGA_Draw_Linear_Line_24_to_32, VGA_Draw_Linear_Line_24_to_32_HWMouse,
+    VGA_Draw_Xlat32_VGA_CRTC_bmode_Line, EGA_Draw_VGA_Planar_Xlat8_LineOddEven,
+    EGA_Draw_VGA_Planar_Xlat8_Line, VGA_Draw_VGA_Planar_Xlat8_LineOddEven,
+    VGA_Draw_VGA_Planar_Xlat32_Line, EGA_Draw_2BPP_Line_as_EGA,
+    VGA_Draw_2BPP_Line_as_VGA, VGA_Draw_VGA_Packed4_Xlat32_Line,
+    VGA_Draw_VGA_Line_Xlat32_HWMouse, VGA_Draw_LIN16_Line_2x,
+    VGA_CGASNOW_TEXT_Draw_Line, MCGA_TEXT_Draw_Line, VGA_TEXT8_MDA_Draw_Line,
+    VGA_TEXT9_MDA_Draw_Line, VGA_TEXT9_Herc_Draw_Line,
+    VGA_TEXT8_HercInColor_Draw_Line, VGA_TEXT9_HercInColor_Draw_Line,
+    EGA_TEXT_Xlat8_Draw_Line, VGA_PC98_Xlat32_Draw_Line,
+    VGA_Draw_DOSBOXIG_None, VGA_Draw_DOSBOXIG_1bpp, VGA_Draw_DOSBOXIG_4bpp,
+    VGA_Draw_DOSBOXIG_1bpp4plane, VGA_Draw_DOSBOXIG_8bpp,
+    VGA_Draw_DOSBOXIG_16bpp, VGA_Draw_DOSBOXIG_24bpp,
+    VGA_Draw_DOSBOXIG_32bpp10, VGA_Draw_DOSBOXIG_32bpp
+};
+
 void POD_Save_VGA_Draw( std::ostream& stream )
 {
-	uint8_t linear_base_idx;
-	uint8_t font_tables_idx[2];
-	uint8_t drawline_idx = 0u; // fix: was uninitialised; if/else below covers only 14 of ~46 VGA_DrawLine variants, so unmatched modes wrote stack garbage
+	uint8_t linear_base_idx = 255;
+	uint8_t font_tables_idx[2] = {255,255};
+	uint8_t drawline_idx = 255;
 
-
-	if(0) {}
-	else if( vga.draw.linear_base == vga.mem.linear ) linear_base_idx = 0;
-	//else if( vga.draw.linear_base == vga.fastmem ) linear_base_idx = 1;
+	if (vga.draw.linear_base == vga.mem.linear) linear_base_idx = 0;
+	for (unsigned i=0; i<sizeof(saved_vga_line_handlers)/sizeof(*saved_vga_line_handlers); ++i)
+		if (VGA_DrawLine == saved_vga_line_handlers[i]) {drawline_idx=uint8_t(i);break;}
+	if (linear_base_idx == 255 || drawline_idx == 255) {
+		stream.setstate(std::ios::failbit);return;
+	}
 
 	if (IS_EGAVGA_ARCH) {
 		for( int lcv=0; lcv<2; lcv++ ) {
@@ -8582,22 +8612,11 @@ void POD_Save_VGA_Draw( std::ostream& stream )
 	}
 
 
-	if( VGA_DrawLine == VGA_Draw_1BPP_Line ) drawline_idx = 1;
-	else if( VGA_DrawLine == VGA_Draw_2BPP_Line ) drawline_idx = 3;
-	else if( VGA_DrawLine == VGA_Draw_2BPPHiRes_Line ) drawline_idx = 4;
-	else if( VGA_DrawLine == VGA_Draw_CGA16_Line ) drawline_idx = 5;
-	else if( VGA_DrawLine == VGA_Draw_4BPP_Line ) drawline_idx = 6;
-	else if( VGA_DrawLine == VGA_Draw_4BPP_Line_Double ) drawline_idx = 7;
-	else if( VGA_DrawLine == VGA_Draw_Linear_Line ) drawline_idx = 8;
-	else if( VGA_DrawLine == VGA_Draw_Xlat32_Linear_Line ) drawline_idx = 9;
-	else if( VGA_DrawLine == VGA_Draw_VGA_Line_HWMouse ) drawline_idx = 11;
-	else if( VGA_DrawLine == VGA_Draw_LIN16_Line_HWMouse ) drawline_idx = 12;
-	else if( VGA_DrawLine == VGA_Draw_LIN32_Line_HWMouse ) drawline_idx = 13;
-	else if( VGA_DrawLine == VGA_TEXT_Draw_Line ) drawline_idx = 14;
-	else if( VGA_DrawLine == VGA_TEXT8_Herc_Draw_Line ) drawline_idx = 15;
-	else if( VGA_DrawLine == VGA_TEXT_Xlat32_Draw_Line ) drawline_idx = 17;
-	else if( VGA_DrawLine == VGA_Draw_3270_1BPP_Line ) drawline_idx = 18;
-	else if( VGA_DrawLine == VGA_Draw_3270_2BPP_Line ) drawline_idx = 19;
+
+
+	if (font_tables_idx[0]>7 || font_tables_idx[1]>7) {
+		stream.setstate(std::ios::failbit);return;
+	}
 
 	//**********************************************
 	//**********************************************
@@ -8695,10 +8714,12 @@ void POD_Load_VGA_Draw( std::istream& stream )
 	//**********************************************
 	//**********************************************
 
-	switch( linear_base_idx ) {
-		case 0: vga.draw.linear_base = vga.mem.linear; break;
-		//case 1: vga.draw.linear_base = vga.fastmem; break;
+	if (!stream || linear_base_idx!=0 ||
+	    drawline_idx>=sizeof(saved_vga_line_handlers)/sizeof(*saved_vga_line_handlers) ||
+	    font_tables_idx[0]>7 || font_tables_idx[1]>7) {
+		stream.setstate(std::ios::failbit);return;
 	}
+	vga.draw.linear_base = vga.mem.linear;
 
 
 	if (IS_EGAVGA_ARCH) {
@@ -8731,22 +8752,5 @@ void POD_Load_VGA_Draw( std::istream& stream )
 	}
 
 
-	switch( drawline_idx ) {
-		case 1: VGA_DrawLine = VGA_Draw_1BPP_Line; break;
-		case 3: VGA_DrawLine = VGA_Draw_2BPP_Line; break;
-		case 4: VGA_DrawLine = VGA_Draw_2BPPHiRes_Line; break;
-		case 5: VGA_DrawLine = VGA_Draw_CGA16_Line; break;
-		case 6: VGA_DrawLine = VGA_Draw_4BPP_Line; break;
-		case 7: VGA_DrawLine = VGA_Draw_4BPP_Line_Double; break;
-		case 8: VGA_DrawLine = VGA_Draw_Linear_Line; break;
-		case 9: VGA_DrawLine = VGA_Draw_Xlat32_Linear_Line; break;
-		case 11: VGA_DrawLine = VGA_Draw_VGA_Line_HWMouse; break;
-		case 12: VGA_DrawLine = VGA_Draw_LIN16_Line_HWMouse; break;
-		case 13: VGA_DrawLine = VGA_Draw_LIN32_Line_HWMouse; break;
-		case 14: VGA_DrawLine = VGA_TEXT_Draw_Line; break;
-		case 15: VGA_DrawLine = VGA_TEXT8_Herc_Draw_Line; break;
-		case 17: VGA_DrawLine = VGA_TEXT_Xlat32_Draw_Line; break;
-		case 18: VGA_DrawLine = VGA_Draw_3270_1BPP_Line; break;
-		case 19: VGA_DrawLine = VGA_Draw_3270_2BPP_Line; break;
-	}
+	VGA_DrawLine = saved_vga_line_handlers[drawline_idx];
 }

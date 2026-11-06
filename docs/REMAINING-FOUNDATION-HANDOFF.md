@@ -28,7 +28,7 @@ historical same-process/whole-preflight proposals; approved packets are unchange
   720/1440KB AH08 geometry, real LPT ESC font refresh/PS output and TTF route.
   This does **not** implement full active printer/UART/spool checkpoint state.
 
-Engine12 / outer representation9 (prior increment receipts below name engine11). `-restore-state <archive>` attaches once to an
+Engine13 / outer representation9 (prior increment receipts below name engines11/12). `-restore-state <archive>` attaches once to an
 initialized-unused disposable process, before FILE/INLINE evaluation, held until
 explicit Run/step. Used target load returns fresh-launch-required. No guest replay,
 rollback, implicit CPU/PIC/TIMER advance or binary-equality compatibility rule.
@@ -215,6 +215,31 @@ Prior engine11 final resolver E2E passed proc-6201e7ab07f3 /
 `e2e-milestone-2mv6k85k` on `a986e886fd64a9290362060150949c19dee6edd8`, tree
 `8d89b322e792d59a1986c0cf71c491aaf2446e87`. It does not assert engine12
 compatibility with engine11 archives.
+
+## VGA line-handler relocation increment (2026-11-06)
+
+Engine13 replaces the original partial/uninitialized drawline relocation with one
+symmetric owner-local table of52 handlers plus null; it includes planar, EGA text,
+packed4, linear24 conversion, MCGA/MDA/Hercules and integrated routes. Unknown
+handlers (notably transient host BIOS-logo overlay) refuse capture instead of
+silently retaining destination startup state. Pointer indices are initialized;
+unknown font-table/native linear-base pointers refuse capture, and bad indices
+fail consumed load. This does not change guest scan arithmetic or add another
+validator/engine. The table is relocation, not certification of every machine.
+`vga-handler-relocation.py` audits actual live assignment coverage and distinct
+stub identity roundtrips with ASan/UBSan. Initial build proc-e8dc32ce51b9 failed
+because VGA_CACHE_OFFSET occurs only in commented historical code; removed that
+nonexistent relocation route, retaining the sole actual live linear base.
+
+Final proc-9e44283be5ec exit0: both builds, table sanitizer, real serial/font/
+ET4000-bank/VESA-service held fresh matrix (`run-flpvczi5`), and four combined
+FILE/INLINE E2Es (`e2e-milestone-6lbg41vj`) with explicit continuation/root42.
+VESA-service is not the previously failing active VESA101-bank fixture. Logs
+`$W/build-{lua,native}-vga-identity-final.log`; generated configuration unchanged.
+Final SHA256 Lua `baa52cda49e4e3577c5d8f20f6f88705a03f74ce8448edbf331b53e273d040c5`,
+native `e1c5c2052b0ab6daf250cd98118441aeea562ab1ce5fce70cbe4fbad93c0c157`.
+Engine12/13 archives are intentionally incompatible. No full output-history or
+active printer closure follows; those remain below.
 
 ## Remaining implementation and disposition obligations
 
