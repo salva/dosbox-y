@@ -96,6 +96,8 @@ static struct {
 	Bitu minimum_counter;
 	DelayEntry entries[SPKR_ENTRIES];
 	Bitu used;
+	bool previous_output_level;
+	bool raw_clock_gate_enabled;
 } spkr;
 
 inline static void AddDelayEntry(pic_tickindex_t index, bool new_output_level) {
@@ -104,11 +106,10 @@ inline static void AddDelayEntry(pic_tickindex_t index, bool new_output_level) {
 		LOG_MSG("AddDelayEntry: index out of range %f at %f", index, PIC_FullIndex());
 	}
 #endif
-	static bool previous_output_level = 0;
-	if (new_output_level == previous_output_level) {
+	if (new_output_level == spkr.previous_output_level) {
 		return;
 	}
-	previous_output_level = new_output_level;
+	spkr.previous_output_level = new_output_level;
 	if (spkr.used == SPKR_ENTRIES) {
         LOG(LOG_MISC,LOG_WARN)("PC speaker delay entry queue overrun");
 		return;
@@ -372,12 +373,11 @@ void PCSPEAKER_SetCounter_NoNewMode(Bitu cntr) {
 	}
 }
 
-static bool pit_raw_clock_gate_enabled = false;
 
 bool TIMER2_ClockGateEnabled(void);
 
 void PCSPEAKER_UpdateType(void) {
-    PCSPEAKER_SetType(pit_raw_clock_gate_enabled,spkr.pit_output_enabled);
+    PCSPEAKER_SetType(spkr.raw_clock_gate_enabled,spkr.pit_output_enabled);
 }
 
 void PCSPEAKER_SetCounter(Bitu cntr, Bitu mode) {
@@ -477,7 +477,7 @@ void PCSPEAKER_SetType(bool pit_clock_gate_enabled, bool pit_output_enabled) {
     if (spkr.chan == NULL)
         return;
 
-    pit_raw_clock_gate_enabled = pit_clock_gate_enabled;
+    spkr.raw_clock_gate_enabled = pit_clock_gate_enabled;
 
 #ifdef SPKR_DEBUGGING
 	fprintf(
@@ -731,6 +731,8 @@ public:
 		spkr.minimum_counter = PIT_TICK_RATE/(spkr.rate*10);
 		SPKR_SPEED = (pic_tickindex_t)((SPKR_VOLUME*2*44100)/(0.010*spkr.rate));
 		spkr.used=0;
+		spkr.previous_output_level=false;
+		spkr.raw_clock_gate_enabled=false;
 		/* Register the sound channel */
 		spkr.chan=MixerChan.Install(&PCSPEAKER_CallBack,spkr.rate,"SPKR");
 		if (!spkr.chan) {
@@ -764,6 +766,8 @@ static PCSPEAKER* test;
 void PCSPEAKER_ShutDown(Section* sec){
     (void)sec;//UNUSED
 	delete test;
+	test = nullptr;
+	spkr.chan = nullptr;
 }
 
 void PCSPEAKER_OnReset(Section* sec) {
