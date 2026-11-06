@@ -133,14 +133,41 @@ static std::string state_config_identity() {
             // also checks allocated/handler/address/A20 geometry on install.
             if (name=="dosbox" && (property->propname=="memsize" ||
                                    property->propname=="memsizekb")) continue;
-            // CPU initialization resolves true/1/auto and explicit FPU models.
-            // Hash installed presence/model rather than the input spelling.
-            if (name=="cpu" && (property->propname=="fpu" ||
-                                 property->propname=="cpuid string")) continue;
+            // Only properties consumed by CPU's constructor belong to this
+            // resolved identity. The same section also contains BIOS services
+            // and frontend policy; retain those independent owners' checks.
+            if (name=="cpu" && (property->propname=="core" ||
+                property->propname=="cputype" || property->propname=="fpu" ||
+                property->propname=="cpuid string" || property->propname=="processor serial number" ||
+                property->propname=="rdtsc rate" || property->propname=="segment limits" ||
+                property->propname=="lds wraparound" || property->propname=="double fault" ||
+                property->propname=="clear trap flag on unhandled int 1" ||
+                property->propname=="reset on triple fault" ||
+                property->propname=="always report double fault" || property->propname=="always report triple fault" ||
+                property->propname=="mask stack pointer for enter leave instructions" ||
+                property->propname=="allow lmsw to exit protected mode" ||
+                property->propname=="report fdiv bug" || property->propname=="enable msr" ||
+                property->propname=="enable pse" || property->propname=="enable cmpxchg8b" ||
+                property->propname=="enable sse2" || property->propname=="enable syscall" ||
+                property->propname=="ignore undefined msr" || property->propname=="interruptible rep string op" ||
+                property->propname=="dynamic core cache block size" || property->propname=="cycles" ||
+                property->propname=="cycleup" || property->propname=="cycledown" ||
+                property->propname=="use dynamic core with paging on" ||
+                property->propname=="ignore opcode 63" || property->propname=="realbig16")) continue;
             field(property->propname);
             field(property->GetValue().ToString());
         }
     }
+    field("initialized CPU policy v1");
+    field(CPU_StateConfigIdentity());
+    field("initialized CPU architecture/prefetch v1");
+    field(std::to_string(CPU_StateArchitectureIdentity()));
+    field("initialized processor serial v1");
+    field(CPU_StateSerialIdentity());
+    field("initialized REP limit v1");
+    field(std::to_string(CPU_StateRepIdentity()));
+    field("initialized instruction switches v1");
+    field(std::to_string(CPU_StateInstructionIdentity()));
     field("resolved RAM pages");
     field(std::to_string(MEM_TotalPages()));
     field(std::to_string(MEM_TotalPagesAt4GB()));
@@ -148,6 +175,8 @@ static std::string state_config_identity() {
     field(std::to_string(CPU_StateFpuIdentity()));
     field("initialized CPUID vendor v1");
     field(CPU_StateCpuidVendor());
+    field("initialized PSE v1");
+    field(std::to_string(CPU_StatePseIdentity()));
     field(STATE_MachineInputsIdentity());
     char hex[65]; hash.finish(hex); return hex;
 }

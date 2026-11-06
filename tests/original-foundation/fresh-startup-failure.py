@@ -239,6 +239,33 @@ if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION'):
  # No unchanged-destination assumption: every attempt is a fresh process.
  for name in ('CPU','Memory'):
   cases.append((name,lambda b:b[:1],False))
+if os.environ.get('DOSBOX_TEST_MEMORY_SAFETY'):
+ # Derive actual configured descriptor offsets; mutate geometry before RAM,
+ # then handle graphs and handler tags after RAM consumption.
+ import re
+ expressions=['sizeof(memory)','sizeof(MemHandle)',
+              '(char*)&memory.pages-(char*)&memory',
+              'sizeof(memory.pages)',
+              '(char*)&memory.lfb.end_page-(char*)&memory',
+              'sizeof(memory.lfb.end_page)']
+ result=subprocess.run(['gdb','-q','-batch',os.environ['DOSBOX_TEST_BINARY'],
+                        *[arg for expr in expressions for arg in ('-ex','p '+expr)]],
+                       capture_output=True,text=True,check=True)
+ descriptor,handle_size,page_offset,page_size,end_offset,end_size=map(int,re.findall(r'\$\d+ = (\d+)',result.stdout))
+ with zipfile.ZipFile(source) as z:
+  pages=int.from_bytes(z.read('Memory')[page_offset:page_offset+page_size],'little')
+ assert 0<pages<65536 and handle_size==4
+ def overwrite(offset,value,size):
+  def mutate(data):
+   data=bytearray(data);data[offset:offset+size]=value.to_bytes(size,'little');return bytes(data)
+  return mutate
+ cases.append(('Memory',overwrite(page_offset,pages+1,page_size),False))
+ cases.append(('Memory',overwrite(end_offset,(1<<(end_size*8))-1,end_size),False))
+ handles=descriptor+pages*4096
+ cases.append(('Memory',overwrite(handles+handle_size,1,handle_size),False)) # self-cycle
+ cases.append(('Memory',overwrite(handles+handle_size,pages,handle_size),False))
+ cases.append(('Memory',overwrite(handles+handle_size,0xfffffffe,handle_size),False))
+ cases.append(('Memory',overwrite(handles+pages*handle_size+1,0xfe,1),False))
 if os.environ.get('DOSBOX_TEST_CPU_BOOLS'):
  # Derive serialized extents from this configured ABI; C++ object padding
  # between CPUBlock members is not part of the field-by-field owner codec.
@@ -360,8 +387,8 @@ if os.environ.get('DOSBOX_TEST_BINDINGS'):
   fields=struct.unpack('<13I',z.read('Shell bindings'))
  import re
  _,descriptor=map(int,re.findall(r'\$\d+ = (\d+)',(source.parent/'layout.txt').read_text()))
- def wrong_native_body(data):
-  offset=descriptor+fields[3]
+ def wrong_native_body(data,address=fields[3],descriptor=descriptor):
+  offset=descriptor+address
   assert 0<=offset<len(data)
   data=bytearray(data);data[offset]^=1
   return bytes(data)
@@ -579,6 +606,7 @@ for case_index,(owner,mutate,corrupt_crc) in enumerate(cases):
 assert hashlib.sha256(source.read_bytes()).hexdigest()==original
 print(w,('changed loaded immutable ROM bytes' if os.environ.get('DOSBOX_TEST_CHANGED_BASIC_ROM') else 'malformed Mouse masks/truncated suffix, Pic/late Keyboard, late CRC settlement and missing late owner')+
       ('/truncated CPU and Memory' if os.environ.get('DOSBOX_TEST_CORE_TRUNCATION') else '')+
+      ('/Memory geometry/LFB/handle cycle-range/handler tag' if os.environ.get('DOSBOX_TEST_MEMORY_SAFETY') else '')+
       ('/CPU pmode/stack/code/trap bool representations' if os.environ.get('DOSBOX_TEST_CPU_BOOLS') else '')+
       ('/DBOPL volume-wave-synth roles/LFO scalar bounds' if os.environ.get('DOSBOX_TEST_DBOPL') else '')+
       ('/active native search tag/path/truncation' if os.environ.get('DOSBOX_TEST_SEARCH_STATE') else '')+

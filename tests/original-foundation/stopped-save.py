@@ -80,6 +80,8 @@ def run():
   memory=int(os.environ['DOSBOX_TEST_MEMSIZE'])
   assert 1 <= memory <= 256
   conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nmemsize={memory}\n'))
+ if os.environ.get('DOSBOX_TEST_TIMED_AUTOSAVE'):
+  conf.write_text(conf.read_text().replace('[dosbox]\n','[dosbox]\nautosave=1 1-2\n'))
  if os.environ.get('DOSBOX_TEST_CLEAR_TF'):
   conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nclear trap flag on unhandled int 1=true\n'))
  if os.environ.get('DOSBOX_TEST_AUTO_CYCLES'):
@@ -90,6 +92,8 @@ def run():
   conf.write_text(conf.read_text().replace('cycles=fixed 3000',f'cycles=fixed {cycles}'))
  if 'DOSBOX_TEST_CPUID' in os.environ:
   conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\ncpuid string='+os.environ['DOSBOX_TEST_CPUID']+'\n'))
+ if os.environ.get('DOSBOX_TEST_INSTRUCTIONS'):
+  conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\n'+os.environ['DOSBOX_TEST_INSTRUCTIONS']+'\n'))
  if os.environ.get('DOSBOX_TEST_FPU'):
   conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nfpu='+os.environ['DOSBOX_TEST_FPU']+'\n'))
  if os.environ.get('DOSBOX_TEST_AUDIO'):
@@ -109,12 +113,12 @@ def run():
  with os.fdopen(xr) as pipe: display=pipe.readline().strip()
  master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',50,160,0,0));os.set_blocking(master,False)
  log=open(d/'pty.log','wb');wire=open(d/'wire.log','wb')
- argv=[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
+ argv=[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode or os.environ.get('DOSBOX_TEST_TIMED_AUTOSAVE') else [])
  if os.environ.get('DOSBOX_SAVE_BACKTRACE'):
   argv=['gdb','-batch','-ex','break '+os.environ['DOSBOX_SAVE_BACKTRACE'],'-ex','run','-ex','bt']
   for expression in os.environ.get('DOSBOX_SAVE_PROBE','').split(';'):
    if expression:argv+=['-ex',expression]
-  argv+=['-ex','continue','--args']+[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode else [])
+  argv+=['-ex','continue','--args']+[str(binary),'-conf',str(conf)]+(['-savedir',str(d)] if slot_mode or os.environ.get('DOSBOX_TEST_TIMED_AUTOSAVE') else [])
  p=subprocess.Popen(argv,stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,DISPLAY=':'+display,TERM='xterm',SDL_AUDIODRIVER=os.environ.get('DOSBOX_TEST_AUDIO_DRIVER','dummy'),SDL_DISKAUDIOFILE=str(d/'host-audio.raw')));os.close(slave)
  conn=None;buf=b''
  def drain():
@@ -148,6 +152,17 @@ def run():
  try:
   conn,_=listener.accept();conn.setblocking(False)
   time.sleep(2);drain()
+  if os.environ.get('DOSBOX_TEST_TIMED_AUTOSAVE'):
+   request('autosave-run','RUN')
+   time.sleep(4);drain()
+   request('autosave-break','BREAK')
+   text=(d/'pty.log').read_bytes()
+   assert text.count(b'Save refused: unsafe native continuation')>=2,text[-6000:]
+   assert not list(d.glob('*.sav')),list(d.iterdir())
+   print('Integrated VGA timed autosave: repeated callback refusals, no publication; explicit Run then Break',flush=True)
+   request('autosave-held-save',f'STATEWRITE {w}/autosave-held.sav')
+   assert (w/'autosave-held.sav').exists()
+   return
   if os.environ.get('DOSBOX_TEST_BASIC_ROM'):
    # Change only the pathname contents after initialization. The archive must
    # continue describing the bytes actually loaded by the BIOS owner.
@@ -275,6 +290,9 @@ def run():
   except subprocess.TimeoutExpired:p.kill();p.wait()
   drain();os.close(master);log.close();wire.close();listener.close();x.terminate();x.wait(timeout=5);xlog.close()
 run()
+if os.environ.get('DOSBOX_TEST_TIMED_AUTOSAVE'):
+ print('integrated timed-autosave refusal and subsequent explicit stopped save completed',flush=True)
+ raise SystemExit(0)
 if os.environ.get('DOSBOX_TEST_LFN_HELD'):
  print('real LFN search capture refusal/no publication/explicit step probe completed',flush=True)
  raise SystemExit(0)

@@ -23,6 +23,17 @@ struct Control{std::vector<Section*>sections;Section*GetSection(int i){return un
 unsigned resolved_pages=4096;
 unsigned MEM_TotalPages(){return resolved_pages;}
 unsigned MEM_TotalPagesAt4GB(){return 0;}
+uint32_t CPU_StateFpuIdentity(){return 0x100;}
+std::string CPU_StateCpuidVendor(){return "GenuineIntel";}
+const std::string &CPU_StateConfigIdentity(){static const std::string value="resolved";return value;}
+uint32_t CPU_StateArchitectureIdentity(){return 0xfe;}
+std::string CPU_StateSerialIdentity(){return "disabled";}
+unsigned rep_identity=4;
+uint32_t CPU_StateRepIdentity(){return rep_identity;}
+unsigned instruction_identity=7;
+uint32_t CPU_StateInstructionIdentity(){return instruction_identity;}
+unsigned pse_identity=0x104;
+uint32_t CPU_StatePseIdentity(){return pse_identity;}
 std::string STATE_MachineInputsIdentity(){return "loaded-rom-identity";}
 std::string identity(){
 '''+body+r'''
@@ -33,6 +44,27 @@ int main(){
  for(unsigned i=1;i<machine.props.size();++i){auto old=machine.props[i].value.s;machine.props[i].value.s="different-policy";assert(identity()==baseline);machine.props[i].value.s=old;}
  machine.props[0].value.s="32";assert(identity()==baseline);
  resolved_pages=8192;assert(identity()!=baseline);
+ resolved_pages=4096;
+ Section_prop cpu;cpu.name="cpu";cpu.props={{"enable pse",{"auto"}}};
+ owner.sections.push_back(&cpu);baseline=identity();
+ cpu.props[0].value.s="pse36";assert(identity()==baseline);
+ pse_identity=0x100;assert(identity()!=baseline);
+ pse_identity=0;assert(identity()!=baseline);
+ pse_identity=0x104;
+ cpu.props={{"enable msr",{"false"}},{"enable syscall",{"true"}},
+ {"enable cmpxchg8b",{"true"}},
+ {"mask stack pointer for enter leave instructions",{"auto"}},
+ {"allow lmsw to exit protected mode",{"auto"}},
+ {"interruptible rep string op",{"-1"}}};
+ instruction_identity=4;baseline=identity();
+ cpu.props[1].value.s="false";assert(identity()==baseline);
+ cpu.props[3].value.s="false";cpu.props[4].value.s="false";
+ assert(identity()==baseline);
+ cpu.props[5].value.s="4";assert(identity()==baseline);
+ rep_identity=8;assert(identity()!=baseline);rep_identity=4;
+ for(unsigned changed:{0u,5u,7u,12u,20u}){
+   instruction_identity=changed;assert(identity()!=baseline);
+ }
 }
 '''
 (w/'test.cpp').write_text(code)

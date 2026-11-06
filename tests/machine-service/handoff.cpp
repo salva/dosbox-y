@@ -20,6 +20,29 @@ int main() {
     // Close with uncertain/completed native effects never erases their result.
     h.close();Response s;s.reason="published";assert(h.complete(std::move(s)));
     worker.get();assert(h.isLuaClosed());
+    // Exact claimed save effects survive close; retirement waits for the
+    // worker's final Lua-close fence. Transport test, not a native fsync mock.
+    Handoff fenced;assert(fenced.ready());
+    std::promise<void> entered, release_finalizer;
+    auto release=release_finalizer.get_future();
+    auto fenced_worker=std::async(std::launch::async,[&]{
+        Request save;save.operation=Operation::Save;save.path="exact-owned-path";
+        Response terminal;assert(fenced.call(std::move(save),terminal));
+        assert(terminal.save.valid && terminal.save.published);
+        assert(!terminal.save.completed && !terminal.save.durable);
+        assert(terminal.save.archive_bytes==123 && terminal.save.code=="close_failed");
+        assert(!fenced.call({},terminal));
+        entered.set_value();release.wait();fenced.luaClosed();
+    });
+    while(!fenced.take(r))std::this_thread::yield();
+    assert(r.operation==Operation::Save && r.path=="exact-owned-path");
+    fenced.close();assert(!fenced.isLuaClosed());
+    Response effects;effects.save.valid=true;effects.save.published=true;
+    effects.save.archive_bytes=123;effects.save.code="close_failed";
+    assert(fenced.complete(std::move(effects)));
+    entered.get_future().wait();assert(!fenced.isLuaClosed());
+    assert(fenced_worker.wait_for(std::chrono::milliseconds(0))==std::future_status::timeout);
+    release_finalizer.set_value();fenced_worker.get();assert(fenced.isLuaClosed());
     Handoff before;before.close();assert(!before.waitReady());assert(!before.ready());
     Handoff pending;assert(pending.ready());
     auto canceled=std::async(std::launch::async,[&]{Response result;return pending.call({},result);});

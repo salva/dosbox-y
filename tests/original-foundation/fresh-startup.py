@@ -85,6 +85,10 @@ if 'DOSBOX_TEST_CPUID' in os.environ:
  conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\ncpuid string='+os.environ['DOSBOX_TEST_CPUID']+'\n'))
 if os.environ.get('DOSBOX_TEST_FPU'):
  conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nfpu='+os.environ['DOSBOX_TEST_FPU']+'\n'))
+if os.environ.get('DOSBOX_TEST_INSTRUCTIONS'):
+ conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\n'+os.environ['DOSBOX_TEST_INSTRUCTIONS']+'\n'))
+if os.environ.get('DOSBOX_TEST_PSE'):
+ conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nenable pse='+os.environ['DOSBOX_TEST_PSE']+'\n'))
 if os.environ.get('DOSBOX_TEST_AUDIO'):
  conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
 log=(w/'native.log').open('wb')

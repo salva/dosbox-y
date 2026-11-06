@@ -26,6 +26,12 @@
 uint32_t CPU_InspectFlags();
 // Initialized guest FPU identity, not the requested configuration spelling.
 uint32_t CPU_StateFpuIdentity();
+uint32_t CPU_StatePseIdentity();
+uint32_t CPU_StateInstructionIdentity();
+uint32_t CPU_StateRepIdentity();
+std::string CPU_StateSerialIdentity();
+uint32_t CPU_StateArchitectureIdentity();
+const std::string &CPU_StateConfigIdentity();
 std::string CPU_StateCpuidVendor();
 
 #define CPU_AUTODETERMINE_NONE		0x00

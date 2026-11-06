@@ -83,6 +83,12 @@ bool enable_pse = false;
 uint8_t enable_pse_extbits = 0;
 uint8_t enable_pse_extmask = 0;
 
+uint32_t CPU_StatePseIdentity() {
+    // Disabled PSE ignores the retained extension width. This is the same
+    // enable/width pair consumed by CPUID and paging, not requested spelling.
+    return enable_pse ? (0x100u | uint32_t(enable_pse_extbits)) : 0u;
+}
+
 bool enable_fpu = true;
 
 uint32_t CPU_StateFpuIdentity() {
@@ -91,6 +97,14 @@ uint32_t CPU_StateFpuIdentity() {
 bool enable_msr = true;
 bool enable_syscall = true;
 bool enable_cmpxchg8b = true;
+uint32_t CPU_StateInstructionIdentity() {
+    // Change_Config disables SYSENTER/SYSEXIT when MSRs are unavailable.
+    // Use the initialized switches consumed by CPUID and instructions.
+    return (enable_msr ? 1u : 0u) | (enable_syscall ? 2u : 0u) |
+           (enable_cmpxchg8b ? 4u : 0u) |
+           (mask_stack_ptr_on_enter ? 8u : 0u) |
+           (lmsw_allow_clear_pe_bit ? 16u : 0u);
+}
 bool enable_sse2 = false;
 bool ignore_undefined_msr = true;
 bool report_fdiv_bug = false;
@@ -127,7 +141,17 @@ struct P3_PSN {
 	bool		enabled;
 } p3psn;
 
+std::string CPU_StateSerialIdentity() {
+    if (!p3psn.enabled) return "disabled";
+    return std::to_string(p3psn.hi) + ":" + std::to_string(p3psn.lo);
+}
+
 int cpu_rep_max = 0;
+
+uint32_t CPU_StateRepIdentity() {
+    // Change_Config resolves -1 to four; instruction consumers use this value.
+    return uint32_t(cpu_rep_max);
+}
 
 Bitu DEBUG_EnableDebugger(void);
 extern void GFX_SetTitle(int32_t cycles, int frameskip, Bits timing, bool paused);
@@ -236,6 +260,12 @@ unsigned char FPU_ArchitectureType = FPU_ARCHTYPE_BEST;
 Bitu CPU_extflags_toggle=0;	// ID and AC flags may be toggled depending on emulated CPU architecture
 
 unsigned int CPU_PrefetchQueueSize=0;
+
+uint32_t CPU_StateArchitectureIdentity() {
+    // The queue width distinguishes prefetch machines with the same ISA.
+    // Read initialized ownership, not the movable current decoder/HLT wrapper.
+    return uint32_t(CPU_ArchitectureType) | (uint32_t(CPU_PrefetchQueueSize) << 16);
+}
 
 void CPU_Core_Normal_Init(void);
 #if !defined(C_EMSCRIPTEN)
@@ -3631,6 +3661,10 @@ void Weitek_Init() {
 	}
 }
 
+static std::string initialized_cpu_config_identity;
+const std::string &CPU_StateConfigIdentity() { return initialized_cpu_config_identity; }
+uint16_t CPU_FindDecoderType(CPU_Decoder *decoder);
+
 class CPU: public Module_base {
 private:
 	static bool inited;
@@ -3963,6 +3997,7 @@ public:
 		CPU_Core_Dynrec_Cache_Init((core == "dynamic" && GetDynamicType()==2) || (core == "dynamic_rec"));
 #endif
 
+        CPU_PrefetchQueueSize = 0;
 		CPU_ArchitectureType = CPU_ARCHTYPE_MIXED;
 		std::string cputype(section->Get_string("cputype"));
 		if (cputype == "auto") {
@@ -4315,6 +4350,27 @@ public:
 		else GFX_SetTitle((int32_t)CPU_CycleMax,-1,-1,false);
 		// savestate support
 		cpu.hlt.old_decoder=cpudecoder;
+        // Freeze initialized policy, not the guest-mutated decoder/cycle budget.
+        // This is the constructor's resolved configuration, not another parser.
+        initialized_cpu_config_identity.clear();
+        const auto field = [&](uint64_t value) {
+            initialized_cpu_config_identity += std::to_string(value) + ":";
+        };
+        field(CPU_FindDecoderType(cpudecoder));
+        field(CPU_AutoDetermineMode);
+        field(CPU_CycleAutoAdjust); field(CPU_CycleMax);
+        field(CPU_CyclePercUsed); field(CPU_CycleLimit);
+        field(CPU_CycleUp); field(CPU_CycleDown);
+        field(CPU_fixed_RDTSC_rate);
+        field(report_fdiv_bug); field(ignore_opcode_63);
+        field(cpu_double_fault_enable); field(cpu_triple_fault_reset);
+        field(dos_clear_tf_on_int01); field(cpu_allow_big16);
+        field(do_lds_wraparound); field(do_seg_limits);
+        field(ignore_undefined_msr); field(enable_sse2);
+        field(auto_determine_dynamic_core_paging);
+        // Auto is a policy, not its transient startup paging decision.
+        if (!auto_determine_dynamic_core_paging) field(use_dynamic_core_with_paging);
+        field(dynamic_core_cache_block_size);
 		return true;
 	}
 	~CPU(){ /* empty */};
