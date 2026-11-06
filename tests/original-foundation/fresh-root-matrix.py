@@ -20,6 +20,8 @@ consumers = os.environ.get('DOSBOX_TEST_CONSUMERS', producer).split(os.pathsep)
 assert all(consumers)
 # Prefix steps are explicit guest execution in the producer, before capture.
 cases = (
+    ('font-held', {'DOSBOX_TEST_FONT':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('ah86-held', {'DOSBOX_TEST_AH86':'1','DOSBOX_TEST_AH86_ACTIVE':'1',
                     'DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
      '0814:0201', 'code=42 resident=0 self-parent=0'),
@@ -131,7 +133,7 @@ env = {key: value for key, value in os.environ.items()
 env['DOSBOX_TEST_AUDIO'] = '1'
 # Optional timing qualification changes the producer and every matching
 # consumer, never just the saved archive's metadata or the continuation oracle.
-for key in ('DOSBOX_TEST_AUTO_CYCLES', 'DOSBOX_TEST_HELD_DELAY'):
+for key in ('DOSBOX_TEST_MEMSIZE', 'DOSBOX_TEST_AUTO_CYCLES', 'DOSBOX_TEST_HELD_DELAY'):
     if key in os.environ:
         env[key] = os.environ[key]
 # Consumer-only variation must survive the fixture-selection environment reset.

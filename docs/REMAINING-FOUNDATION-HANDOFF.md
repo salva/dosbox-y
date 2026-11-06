@@ -90,6 +90,29 @@ Earlier incorrect keyboard D2/A5 fixture root99 and no-Agent socket listener tim
 are not hidden: corrected synchronous D0 fixture and actual native-console route
 pass. These were fixture/route failures, not evidence of a fixed device defect.
 
+## Additional active font / geometry evidence (2026-11-06)
+
+`fresh-font.asm` uploads a nondefault sixteen-row glyph through actual BIOS
+INT10/1100, leaves plane2 read mapping active at IP0200, then after fresh restore
+compares every glyph byte through guest A000 memory and returns through ordinary
+BIOS text output. This exercises actual font backing/plane bindings, not just
+interface presence. It does not inspect pixels or qualify every PC98/TTF font.
+`font-held` passes at default RAM (proc-8bc81d328e52/run-9fi6pdr4) and32MB,
+alongside XMS/EMS active-state workloads (proc-9c7b831542c4/run-y6pc9c4a).
+The latter also passes actual BIOS image attachment refcount/ordering and RAM
+backing lifetime ASan/UBSan probes, explicitly not live mounted-media restore.
+All production inputs and engine10 binary/config pins above remain unchanged.
+
+Actual native-console/no-Lua consumers now accept the finite selector
+`DOSBOX_TEST_CONSOLE_FIXTURE=font|ah86|pause|sb-fifo` (default sb-fifo).
+Font, active AH86 and active Pause each pass held delay/status invariance,
+explicit Run/root42, malformed Shell binding rejection/disposal and quit disposal,
+archive unchanged: proc-8e092e16b638 (native-console-k1sywu_n, -sa2ww8hm,
+-yp78yujg). This supplies affected no-debug consumer evidence for the repaired waits,
+not merely a binary build. Root matrix now has40 cases including font-held;
+the full39-case run above predates that added case, which was run separately.
+`DOSBOX_TEST_MEMSIZE` now propagates to producer and matching fresh consumer.
+
 ## Remaining scope, not acceptance by mapping
 
 Finite map/ledger is a work aid, not line-by-line runtime certification. IDE's

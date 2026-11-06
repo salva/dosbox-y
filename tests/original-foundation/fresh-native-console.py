@@ -5,7 +5,15 @@ here=pathlib.Path(__file__).resolve().parent
 work=pathlib.Path(tempfile.mkdtemp(prefix='native-console-',dir=os.environ['SAIVAGE_CARD_WORK_ROOT']))
 print(work,flush=True)
 env={k:v for k,v in os.environ.items() if not k.startswith('DOSBOX_TEST_')}
-producer=dict(env,DOSBOX_TEST_BINARY=os.environ['DOSBOX_TEST_BINARY'],DOSBOX_TEST_AUDIO='1',DOSBOX_TEST_SB_HELD='1',DOSBOX_TEST_CAPTURE_IP='0814:0200',DOSBOX_TEST_REFUSAL_REGISTERS='CS:IP=0814:0201')
+fixture=os.environ.get('DOSBOX_TEST_CONSOLE_FIXTURE','sb-fifo')
+assert fixture in ('sb-fifo','font','ah86','pause'), fixture
+setup={
+ 'sb-fifo':{'DOSBOX_TEST_SB_HELD':'1'},
+ 'font':{'DOSBOX_TEST_FONT':'1'},
+ 'ah86':{'DOSBOX_TEST_AH86':'1','DOSBOX_TEST_AH86_ACTIVE':'1'},
+ 'pause':{'DOSBOX_TEST_PAUSE':'1'},
+}[fixture]
+producer=dict(env,**setup,DOSBOX_TEST_BINARY=os.environ['DOSBOX_TEST_BINARY'],DOSBOX_TEST_AUDIO='1',DOSBOX_TEST_CAPTURE_IP='0814:0200',DOSBOX_TEST_REFUSAL_REGISTERS='CS:IP=0814:0201')
 r=subprocess.run(['python3',str(here/'stopped-save.py')],env=producer,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=120)
 (work/'producer.log').write_text(r.stdout)
 r.check_returncode()
@@ -55,4 +63,4 @@ quit_result=subprocess.run(args,env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODR
 assert quit_result.returncode==1 and 'Restored console quit; target discarded' in quit_result.stdout
 assert 'Restored session ended' not in quit_result.stdout
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
-print('native held/delay/status invariant; explicit Run/SB FIFO/root42/disposal; mismatch/quit disposal; source unchanged PASS')
+print(f'native held/delay/status invariant; explicit Run/{fixture}/root42/disposal; mismatch/quit disposal; source unchanged PASS')

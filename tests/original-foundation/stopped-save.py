@@ -37,6 +37,8 @@ if os.environ.get('DOSBOX_TEST_INT27'):
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm'),('MOUSE','fresh-mouse.asm')):
  if os.environ.get('DOSBOX_TEST_'+option):
   subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),*(['-DVESA_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_VESA_SERVICE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_FONT'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-font.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_KEYBOARD_D1'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-keyboard-d1.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_GAMEPORT'):
