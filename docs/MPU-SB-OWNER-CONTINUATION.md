@@ -39,7 +39,7 @@ Evidence:
   four combined E2Es passed; later SB capture changed binary hashes, so that
   earlier receipt is not the final SB evidence.
 
-Final binary SHA256 (all profiles SDL2/FreeType/printer/TTF, GCC13.3/NASM2.16.01;
+Final binary SHA256 before the subsequent GUS-address-only repair (all profiles SDL2/FreeType/printer/TTF, GCC13.3/NASM2.16.01;
 configured headers/status unchanged from TANDY-NATIVE-CONTINUATION.md):
 * Lua heavy-debug/Agent: dca4f314763ab700d5692cc530de62175102ede820ef5b9fb81093329b594199
 * native no-debug/no-Agent/no-Lua: 387ae4bd0f73b579df2df4618d6faab572cb45e1ec46566d33d829a5da9287c7

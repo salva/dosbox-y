@@ -8,7 +8,22 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
-Current engine27/representation9 production `66f6317a8b0ee2221d8c932c1d9ab7bcb4478283`
+Current engine29/representation9 production follows `d6f509a9e41ca83a416ddd124035be1924676fbd`
+(MPU parser and SB address omission), with GUS DRAM address omission next.
+`MPU-SB-OWNER-CONTINUATION.md` pins direct owner repairs and exact checks.
+Tandy native scalar traversal is `994dc2ab64acf1950c043661b7e3a38c8c707f28`;
+`TANDY-NATIVE-CONTINUATION.md` gives its evidence. Tests-only
+`26cf49db09dff8db7dab27bec8aa95d8bbb78bd5` verifies actual active CMS/PSG
+future samples; no production codec change was needed there.
+All47 engine28 fresh-root cases pass proc-43632d4cefec; engine29 final combined
+FILE/INLINE and native-console SB FIFO pass proc-655b2410e3f2. Engine29 real
+exclusive Interactive/Bridge, RPC and full Lua pass proc-c28e2d0df46f before the
+GUS address-only change. No cross-engine archive compatibility claimed.
+
+The following engine27 and older inventories are historical applicability,
+not assertions of the current binary or archive layout.
+
+Prior engine27/representation9 production `66f6317a8b0ee2221d8c932c1d9ab7bcb4478283`
 (tree `8c786174539d2d6de22004a9fea2523d2c75e84f`) supersedes the historical
 engine24 account below. `MIXER-GUEST-TIME-CONTINUATION.md`,
 `DMA-CALLBACK-CONTINUATION.md` and `DISNEY-NATIVE-CONTINUATION.md` give direct

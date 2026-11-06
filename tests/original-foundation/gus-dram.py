@@ -10,7 +10,7 @@ fields=s[a:b]+'\n};\n'
 a=s.index('\t// Archived host addresses do not own native DRAM.')
 b=s.index('\n\tfor( int lcv=0; lcv<32;',a)
 body=s[a:b]
-a=s.index('\t// DRAM is guest sound state,')
+a=s.index('\tGFGus logical = myGUS;')
 b=s.index('\n\n',a)
 save=s[a:b]
 w=Path(os.environ['SAIVAGE_CARD_WORK_ROOT'])/'gus-dram';w.mkdir(exist_ok=True)
@@ -22,6 +22,7 @@ code=r'''
 using Bitu=uintptr_t;
 '''+fields+r'''
 GFGus myGUS={};
+#define WRITE_POD(p,v) stream.write(reinterpret_cast<const char*>(p),sizeof(v))
 #define READ_POD(p,v) stream.read(reinterpret_cast<char*>(p),sizeof(v))
 void save_content(std::ostream& stream){
 '''+save+r'''
@@ -38,9 +39,9 @@ int main(){
  myGUS=live;std::istringstream in(capture(incoming));load(in);assert(in);assert(myGUS.GUSRam==native && myGUS.midiData==17);
  assert(native[0]==0x55 && native[31]==0x55 && native[32]==0);
  myGUS.GUSRam[31]=9;assert(native[31]==9);
- myGUS=live;std::ostringstream saved;save_content(saved);assert(saved && saved.str()==std::string(reinterpret_cast<const char*>(native),32));
+ myGUS=live;std::ostringstream saved;save_content(saved);assert(saved);GFGus wire;memcpy(&wire,saved.str().data(),sizeof(wire));assert(!wire.GUSRam&&myGUS.GUSRam==native);assert(saved.str().substr(sizeof(wire))==std::string(reinterpret_cast<const char*>(native),32));
  myGUS.GUSRam=nullptr;std::ostringstream missing;save_content(missing);assert(missing.fail());
- myGUS.memsize=0;std::ostringstream empty;save_content(empty);assert(empty && empty.str().empty());
+ myGUS.memsize=0;std::ostringstream empty;save_content(empty);assert(empty && empty.str().size()==sizeof(GFGus));
  myGUS=live;myGUS.GUSRam=nullptr;std::istringstream absent(capture(incoming));load(absent);assert(absent.fail());
 }
 '''

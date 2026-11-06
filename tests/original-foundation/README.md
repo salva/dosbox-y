@@ -1,6 +1,17 @@
 ## Current remaining-foundation successor (2026-11-06)
 
-Engine27/representation9 production `66f6317a8b0ee2221d8c932c1d9ab7bcb4478283`
+Engine29/representation9: `docs/MPU-SB-OWNER-CONTINUATION.md` describes current
+original-owner parser and native-binding corrections, exact hashes, three builds,
+real frontend checks and combined fresh-process E2Es. `mpu-parser-history.py`
+compiles actual channel/system parsers with an explicit byte sink, not physical
+MIDI qualification. `sb-bindings.py` additionally asserts null source native
+bindings on the wire. `gus-dram.py` verifies local DRAM and address omission.
+`TANDY-NATIVE-CONTINUATION.md` and `CMS-PSG-ACTIVE-DISPOSITION.md` cover the
+intervening Tandy owner repair and actual nonzero CMS/PSG future sample equality.
+All47 engine28 roots passed proc-43632d4cefec; older engine archives incompatible.
+The following engine27 inventory is historical, not current archive identity.
+
+Prior engine27/representation9 production `66f6317a8b0ee2221d8c932c1d9ab7bcb4478283`
 adds original mixer interpolation/filter/accumulation, DMA userdata/mode/mask/bank
 history, and scalar-only Disney continuation with destination-local resources.
 See `docs/{MIXER-GUEST-TIME-CONTINUATION,DMA-CALLBACK-CONTINUATION,

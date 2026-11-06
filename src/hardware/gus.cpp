@@ -2814,7 +2814,9 @@ const char pod_name[32] = "GUS2";
 	WRITE_POD( &pantable, pantable );
 
 	// - pure struct data
-	WRITE_POD( &myGUS, myGUS );
+	GFGus logical = myGUS;
+	logical.GUSRam = nullptr;
+	WRITE_POD( &logical, logical );
 	// DRAM is guest sound state, not the native address in the descriptor.
 	if (myGUS.memsize && !myGUS.GUSRam) {
 		stream.setstate(std::ostream::failbit);
