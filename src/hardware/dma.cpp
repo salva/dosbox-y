@@ -854,6 +854,10 @@ void DmaChannel::SaveState( std::ostream& stream )
 	WRITE_POD( &masked, masked );
 	WRITE_POD( &tcount, tcount );
 	WRITE_POD( &request, request );
+	WRITE_POD( &userData, userData );
+	WRITE_POD( &transfer_mode, transfer_mode );
+	WRITE_POD( &masked_by, masked_by );
+	WRITE_POD( &page_bank_increment_wraparound, page_bank_increment_wraparound );
 
 	//******************************************
 	//******************************************
@@ -891,6 +895,14 @@ void DmaChannel::LoadState( std::istream& stream )
 	READ_POD( &masked, masked );
 	READ_POD( &tcount, tcount );
 	READ_POD( &request, request );
+	READ_POD( &userData, userData );
+	READ_POD( &transfer_mode, transfer_mode );
+    unsigned int actor=0;
+    static_assert(sizeof(actor)==sizeof(masked_by),"native DMA actor framing");
+    READ_POD(&actor,actor);
+    if (actor>DMAA_REISSUE) {stream.setstate(std::ios::failbit);return;}
+    masked_by=static_cast<DMAActor>(actor);
+	READ_POD( &page_bank_increment_wraparound, page_bank_increment_wraparound );
 
 	//********************************
 	//********************************
@@ -899,7 +911,8 @@ void DmaChannel::LoadState( std::istream& stream )
 	// - reloc func ptr
 	READ_POD( &dma_callback, dma_callback );
 	if (!stream) E_Exit("Short save-state DMA channel");
-	if (channum != expected_channel || DMA16 != expected_width)
+	if (channum != expected_channel || DMA16 != expected_width || transfer_mode>3 ||
+        ((dma_callback==2 || dma_callback==3 || dma_callback==4) && userData>1))
 		E_Exit("Invalid save-state DMA channel identity");
 
 	callback = (DMA_CallBack) POD_State_Index_DMA_Callback( dma_callback );
