@@ -42,6 +42,7 @@
 #if (C_SSHOT) || (C_AVCODEC)
 #include <zlib.h>
 #include <png.h>
+#include "capture_png.h"
 #include "../libs/zmbv/zmbv.h"
 #endif
 
@@ -800,13 +801,6 @@ void CAPTURE_VideoStop() {
 #endif
 }
 
-#ifdef PNG_pHYs_SUPPORTED
-static inline unsigned long math_gcd_png_uint_32(const png_uint_32 a,const png_uint_32 b) {
-        if (b) return math_gcd_png_uint_32(b,a%b);
-        return a;
-}
-#endif
-
 void CAPTURE_AddImage(Bitu width, Bitu height, Bitu bpp, Bitu pitch, Bitu flags, float fps, uint8_t * data, uint8_t * pal) {
 #if (C_SSHOT)
 	Bitu i;
@@ -820,173 +814,27 @@ void CAPTURE_AddImage(Bitu width, Bitu height, Bitu bpp, Bitu pitch, Bitu flags,
 		width *= 2;
 
 	if (CaptureState & CAPTURE_IMAGE) {
-		png_structp png_ptr;
-		png_infop info_ptr;
-		png_color palette[256];
-
-		CaptureState &= ~((unsigned int)CAPTURE_IMAGE);
-		/* Open the actual file */
-		FILE * fp=OpenCaptureFile("Screenshot",".png");
-		if (!fp) goto skip_shot;
-		/* First try to allocate the png structures */
-		png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL,NULL, NULL);
-		if (!png_ptr) goto skip_shot;
-		info_ptr = png_create_info_struct(png_ptr);
-		if (!info_ptr) {
-			png_destroy_write_struct(&png_ptr,(png_infopp)NULL);
-			goto skip_shot;
-		}
-	
-		/* Finalize the initing of png library */
-		png_init_io(png_ptr, fp);
-		png_set_compression_level(png_ptr,Z_BEST_COMPRESSION);
-		
-		/* set other zlib parameters */
-		png_set_compression_mem_level(png_ptr, 8);
-		png_set_compression_strategy(png_ptr,Z_DEFAULT_STRATEGY);
-		png_set_compression_window_bits(png_ptr, 15);
-		png_set_compression_method(png_ptr, 8);
-		png_set_compression_buffer_size(png_ptr, 8192);
-
-#ifdef PNG_pHYs_SUPPORTED
-		if (width >= 8 && height >= 8) {
-			png_uint_32 x=0,y=0,g;
-			x = (png_uint_32)(4 * height);
-			y = (png_uint_32)(3 * width);
-			g = math_gcd_png_uint_32(x,y);
-			png_set_pHYs(png_ptr, info_ptr, x/g, y/g, PNG_RESOLUTION_UNKNOWN);
-		}
-#endif
-
-		if (bpp==8) {
-			png_set_IHDR(png_ptr, info_ptr, (png_uint_32)width, (png_uint_32)height,
-				8, PNG_COLOR_TYPE_PALETTE, PNG_INTERLACE_NONE,
-				PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-			for (i=0;i<256;i++) {
-				palette[i].red=pal[i*4+0];
-				palette[i].green=pal[i*4+1];
-				palette[i].blue=pal[i*4+2];
-			}
-			png_set_PLTE(png_ptr, info_ptr, palette,256);
-		} else {
-			png_set_bgr( png_ptr );
-			png_set_IHDR(png_ptr, info_ptr, (png_uint_32)width, (png_uint_32)height,
-				8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
-				PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-		}
-#ifdef PNG_TEXT_SUPPORTED
-		int fields = 1;
-		png_text text[1] = {};
-		const char* text_s = "DOSBox-X " VERSION;
-		size_t strl = strlen(text_s);
-		char* ptext_s = new char[strl + 1];
-		strcpy(ptext_s, text_s);
-		char software[9] = { 'S','o','f','t','w','a','r','e',0};
-		text[0].compression = PNG_TEXT_COMPRESSION_NONE;
-		text[0].key  = software;
-		text[0].text = ptext_s;
-		png_set_text(png_ptr, info_ptr, text, fields);
-#endif
-		png_write_info(png_ptr, info_ptr);
-#ifdef PNG_TEXT_SUPPORTED
-		delete [] ptext_s;
-#endif
-		for (i=0;i<height;i++) {
-			void *rowPointer;
-			void *srcLine;
-			if (flags & CAPTURE_FLAG_DBLH)
-				srcLine=(data+(i >> 1)*pitch);
-			else
-				srcLine=(data+(i >> 0)*pitch);
-			rowPointer=srcLine;
-			switch (bpp) {
-			case 8:
-				if (flags & CAPTURE_FLAG_DBLW) {
-   					for (Bitu x=0;x<countWidth;x++)
-						doubleRow[x*2+0] =
-						doubleRow[x*2+1] = ((uint8_t *)srcLine)[x];
-					rowPointer = doubleRow;
-				}
-				break;
-			case 15:
-				if (flags & CAPTURE_FLAG_DBLW) {
-					for (Bitu x=0;x<countWidth;x++) {
-						Bitu pixel = ((uint16_t *)srcLine)[x];
-						doubleRow[x*6+0] = doubleRow[x*6+3] = ((pixel& 0x001f) * 0x21) >>  2;
-						doubleRow[x*6+1] = doubleRow[x*6+4] = (uint8_t)(((pixel& 0x03e0) * 0x21) >> 7);
-						doubleRow[x*6+2] = doubleRow[x*6+5] = ((pixel& 0x7c00) * 0x21) >>  12;
-					}
-				} else {
-					for (Bitu x=0;x<countWidth;x++) {
-						Bitu pixel = ((uint16_t *)srcLine)[x];
-						doubleRow[x*3+0] = ((pixel& 0x001f) * 0x21) >>  2;
-						doubleRow[x*3+1] = (uint8_t)(((pixel& 0x03e0) * 0x21) >> 7);
-						doubleRow[x*3+2] = ((pixel& 0x7c00) * 0x21) >>  12;
-					}
-				}
-				rowPointer = doubleRow;
-				break;
-			case 16:
-				if (flags & CAPTURE_FLAG_DBLW) {
-					for (Bitu x=0;x<countWidth;x++) {
-						Bitu pixel = ((uint16_t *)srcLine)[x];
-						doubleRow[x*6+0] = doubleRow[x*6+3] = ((pixel& 0x001f) * 0x21) >> 2;
-						doubleRow[x*6+1] = doubleRow[x*6+4] = ((pixel& 0x07e0) * 0x41) >> 9;
-						doubleRow[x*6+2] = doubleRow[x*6+5] = ((pixel& 0xf800) * 0x21) >> 13;
-					}
-				} else {
-					for (Bitu x=0;x<countWidth;x++) {
-						Bitu pixel = ((uint16_t *)srcLine)[x];
-						doubleRow[x*3+0] = ((pixel& 0x001f) * 0x21) >>  2;
-						doubleRow[x*3+1] = ((pixel& 0x07e0) * 0x41) >>  9;
-						doubleRow[x*3+2] = ((pixel& 0xf800) * 0x21) >>  13;
-					}
-				}
-				rowPointer = doubleRow;
-				break;
-			case 32:
+        CaptureState &= ~((unsigned int)CAPTURE_IMAGE);
+        FILE *fp = OpenCaptureFile("Screenshot", ".png");
+        if (!fp) goto skip_shot;
+        // The shared writer owns fp on every path, including close failure.
+        const bool shot_ok = CapturePNG::write(fp, countWidth,
+                (flags & CAPTURE_FLAG_DBLH) ? height / 2 : height,
+                bpp, pitch, flags & CAPTURE_FLAG_DBLW,
+                flags & CAPTURE_FLAG_DBLH, data, pal,
 #if defined(MACOSX) && !C_SDL2
-                if (flags & CAPTURE_FLAG_DBLW) {
-					for (Bitu x=0;x<countWidth;x++) {
-						doubleRow[x*6+2] = doubleRow[x*6+5] = ((uint8_t *)srcLine)[x*4+1];
-						doubleRow[x*6+1] = doubleRow[x*6+4] = ((uint8_t *)srcLine)[x*4+2];
-						doubleRow[x*6+0] = doubleRow[x*6+3] = ((uint8_t *)srcLine)[x*4+3];
-					}
-				} else {
-					for (Bitu x=0;x<countWidth;x++) {
-						doubleRow[x*3+2] = ((uint8_t *)srcLine)[x*4+1];
-						doubleRow[x*3+1] = ((uint8_t *)srcLine)[x*4+2];
-						doubleRow[x*3+0] = ((uint8_t *)srcLine)[x*4+3];
-					}
-				}
+                true,
 #else
-                if (flags & CAPTURE_FLAG_DBLW) {
-					for (Bitu x=0;x<countWidth;x++) {
-						doubleRow[x*6+0] = doubleRow[x*6+3] = ((uint8_t *)srcLine)[x*4+0];
-						doubleRow[x*6+1] = doubleRow[x*6+4] = ((uint8_t *)srcLine)[x*4+1];
-						doubleRow[x*6+2] = doubleRow[x*6+5] = ((uint8_t *)srcLine)[x*4+2];
-					}
-				} else {
-					for (Bitu x=0;x<countWidth;x++) {
-						doubleRow[x*3+0] = ((uint8_t *)srcLine)[x*4+0];
-						doubleRow[x*3+1] = ((uint8_t *)srcLine)[x*4+1];
-						doubleRow[x*3+2] = ((uint8_t *)srcLine)[x*4+2];
-					}
-				}
+                false,
 #endif
-                rowPointer = doubleRow;
-				break;
-			}
-			png_write_row(png_ptr, (png_bytep)rowPointer);
-		}
-		/* Finish writing */
-		png_write_end(png_ptr, nullptr);
-		/*Destroy PNG structs*/
-		png_destroy_write_struct(&png_ptr, &info_ptr);
-		/*close file*/
-		fclose(fp);
-		if (show_recorded_filename && pathscr.size()) systemmessagebox("Recording completed",("Saved screenshot to the file:\n\n"+pathscr).c_str(),"ok", "info", 1);
-
+                "DOSBox-X " VERSION);
+        if (!shot_ok) {
+            LOG_MSG("Screenshot PNG write or close failed");
+            if (!pathscr.empty() && remove(pathscr.c_str()) != 0)
+                LOG_MSG("Screenshot cleanup failed; incomplete file quarantined: %s", pathscr.c_str());
+        } else if (show_recorded_filename && !pathscr.empty()) {
+            systemmessagebox("Recording completed", ("Saved screenshot to the file:\n\n" + pathscr).c_str(), "ok", "info", 1);
+        }
 	}
 	pathscr = "";
 skip_shot:
