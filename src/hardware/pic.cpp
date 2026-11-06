@@ -44,6 +44,11 @@ unsigned long PIC_irq_delay_ns = 0;
 bool never_mark_cascade_in_service = false;
 bool ignore_cascade_in_service = false;
 
+std::string PIC_StateConfigIdentity() {
+    return std::to_string(ignore_cascade_in_service) + ":" +
+           std::to_string(PIC_irq_delay_ns);
+}
+
 struct PIC_Controller {
     Bitu icw_words;
     Bitu icw_index;

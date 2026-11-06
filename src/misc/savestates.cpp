@@ -23,6 +23,7 @@
 #include "restored_session.h"
 #include "cpu.h"
 #include "bios.h"
+#include "pic.h"
 #include "dos_inc.h"
 #if C_DEBUG && C_DEBUG_LUA
 #include "../debug/debug_lua.h"
@@ -131,6 +132,10 @@ static std::string state_config_identity() {
                 property->propname=="forceloadstate")) continue;
             // Window title is host presentation, never guest hardware.
             if (name=="dosbox" && property->propname=="title") continue;
+            // Registered config placeholder: no constructor or port consumer
+            // reads it. Machine selects the controller; aux/reset/type and
+            // native binding checks remain, rather than inventing new hardware.
+            if (name=="keyboard" && property->propname=="controllertype") continue;
             // BIOS owns the effective auto/alias decisions and native policy.
             if (name=="cpu" && (property->propname=="integration device" ||
                 property->propname=="integration device pnp" ||
@@ -142,7 +147,10 @@ static std::string state_config_identity() {
                 property->propname=="apmbios version" || property->propname=="apm power button event")) continue;
             if (name=="dosbox" && (property->propname=="isa memory hole at 512kb" ||
                 property->propname=="isa memory hole at 15mb" ||
-                property->propname=="unhandled irq handler")) continue;
+                property->propname=="unhandled irq handler" ||
+                property->propname=="memalias" ||
+                property->propname=="cascade interrupt ignore in service" ||
+                property->propname=="irq delay ns")) continue;
             // RAM geometry is resolved (rounded/clamped) by Memory. Equivalent
             // requested sizes are not different hardware; its owning consumer
             // also checks allocated/handler/address/A20 geometry on install.
@@ -183,6 +191,10 @@ static std::string state_config_identity() {
     field(std::to_string(CPU_StateRepIdentity()));
     field("initialized instruction switches v1");
     field(std::to_string(CPU_StateInstructionIdentity()));
+    field("initialized memory address lines");
+    field(std::to_string(MEM_get_address_bits()));
+    field("initialized PIC policy v1");
+    field(PIC_StateConfigIdentity());
     field("resolved RAM pages");
     field(std::to_string(MEM_TotalPages()));
     field(std::to_string(MEM_TotalPagesAt4GB()));

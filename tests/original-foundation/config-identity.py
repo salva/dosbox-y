@@ -21,6 +21,8 @@ struct Section{virtual ~Section(){};virtual const char*GetName()=0;};
 struct Section_prop:Section {std::string name;std::vector<Property> props;const char*GetName()override{return name.c_str();}Property*Get_prop(int i){return unsigned(i)<props.size()?&props[i]:nullptr;}};
 struct Control{std::vector<Section*>sections;Section*GetSection(int i){return unsigned(i)<sections.size()?sections[i]:nullptr;}} owner,*control=&owner;
 unsigned resolved_pages=4096;
+unsigned MEM_get_address_bits(){return 36;}
+std::string PIC_StateConfigIdentity(){return "0:838";}
 unsigned MEM_TotalPages(){return resolved_pages;}
 unsigned MEM_TotalPagesAt4GB(){return 0;}
 std::string BIOS_StateConfigIdentity(){return "initialized BIOS";}

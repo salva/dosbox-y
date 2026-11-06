@@ -20,6 +20,10 @@
 #define DOSBOX_PIC_H
 
 #include "dosbox.h"
+#include <string>
+
+// Reset-owned policy, not guest-mutated controller/queue state.
+std::string PIC_StateConfigIdentity();
 
 /* CPU Cycle Timing */
 extern cpu_cycles_count_t CPU_Cycles;

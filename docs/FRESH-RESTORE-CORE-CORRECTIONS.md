@@ -6,7 +6,73 @@ committed with this document. Evidence root below is
 `/work/dosbox-y/.saivage/work/cards/card-n-c-k-a/` (W). Logs are retained work
 evidence, not versioned fixtures. No prior binary is relabeled current.
 
-## R1 successor — independent F1 corrected (2026-11-06)
+## Current R1 successor — independent F2 and adjacent core aliases (2026-11-06)
+
+Independent `record:///status.md?card=card-n-c-k-b&v=11` confirms F1 repaired
+on492507 but rejects full closure: keyboard controllertype auto/at still rejected
+identical input. Source-wide search finds only registration/value list in
+src/dosbox.cpp; KEYBOARD_OnReset never reads it. Compatibility now omits this
+unconsumed placeholder, **not** the keyboard section or actual controller state.
+All spellings remain behaviorally inert; this does not implement XT/PCjr/PC98
+controller overrides. Machine remains the actual selector. Aux/reset/type guards,
+native input bindings and keyboard bounds/D1/latch codec are unchanged.
+
+Examined required core owners together rather than only this string: CPU and
+BIOS conversions above remain; keyboard has precisely aux/reset bools and
+auxdevice enum consumed by reset (machine/PCjr/slave-PIC conditions). PIC reset
+has another auto decision, cascade-ignore, plus default IRQ delay calculated
+from PIT rate. These two now contribute actual reset-owned values through
+PIC_StateConfigIdentity(); writes are reset-only, not guest-mutated PIC state.
+Memory memalias auto/clamping likewise now contributes MEM_get_address_bits(),
+not requested integer. Real address width and PIC policy changes still refuse.
+These additional demonstrated equivalences are included in the same regression,
+not deferred for serial assessor discoveries. No second parser/validator added.
+
+Other examined core controls have actual consumers: A20 mask/on/on_fake/off/
+off_fake/fast selects different gate policy; port92 is a typed bool with actual
+handler installation; RAM sizes already use resolved geometry. Keyboard enum
+selects actual mouse type; PIC remaining typed bools select cascade/NMI policy;
+PIT latch is a typed bool. DOS version/config parsing, files count/FCBs/lastdrive,
+SDA/MCB/private memory, XMS/EMS and native layout/service/loaded-input guards
+are real consumers rather than unconsumed placeholders. They retain checks;
+this audit is not a proof that every possible DOS spelling or architecture-
+conditional setting is equivalent or a license to blanket-drop their identity.
+Fonts/providers/external devices remain the parent's broader scope. This
+successor claims concrete F2 and adjacent core reset equivalences with genuine
+mismatch controls, not universal requested-property equivalence certification.
+
+New `fresh-effective-core-input.py`, proc-3b60c8fb7df6,
+`effective-core-input-mlryh05i`: fresh producer, auto→at/xt/pcjr/pc98 (all unused)
+positives through held save/delay/step/Run; address auto→36, cascade auto→false,
+IRQ delay default→838 and combined equivalence. Matching and explicit-at
+marker controls pass. Aux=false/reset=false/auxdevice=2button/address32/
+cascade=true/delay1000 all refuse Config_Identity exit1/no evaluator/dispose,
+source unchanged. Reduced config-identity extraction also passes.
+
+Sequential Lua/native builds and exact hashes proc-3b60c8fb7df6, logs
+W/build/core-input-{lua,native}.log:
+- Lua f16ac5e98cea3b38453e24a19c59195f3e05229ad12ba9d1f7fc0b89f97c9b8d
+- native86ad213f3f96d9ced597b1ede10b432768175e987f74da5009d4caae03d7a695
+config.h/config.status profiles unchanged below; previous mutable binaries now
+historical. proc-6ef2267378c9 passes BIOS/title regression effective-bios-w2hhgrgx,
+native SB no-Agent/no-Lua native-console-3800iwaf, and all33 Lua root/native
+workload cases fresh-root-matrix/run-sftfcfrk (includes input active/service,
+PIT, files/search, XMS/EMS/A20/hooks). Its subsequent fault invocation failed
+before testing: missing DOSBOX_TEST_ARCHIVE, not a safety pass. Corrected
+proc-02a03bb62558 actually creates matching audio producer then runs combined
+valid-CRC CPU/Memory/PIC/Mouse/late Keyboard faults failure-gammfefc with
+AUDIO/LUA/CORE_TRUNCATION/CPU_BOOLS/MEMORY_SAFETY enabled: rejects/disposes,
+no evaluator/continuation and unchanged archives. Same command passes CPU
+identity regression effective-machine-_w9xgukp. No runtime repair for tests.
+
+Independent status11 combined four-workload E2E and retained status10 R2/R3
+root/finalizer/deadline/publication/close evidence retain their input identities;
+current tests are author evidence, not independent adjudication. Same assessor
+should assess this bounded successor. Historical F2 on492507 remains valid.
+§7 CLI/Lua/debugger/slot contract unchanged; effective-identity claims are now
+qualified by this concrete correction/evidence, not a universal-device claim.
+
+## Prior R1 successor — independent F1 corrected (2026-11-06)
 
 Independent assessor `record:///status.md?card=card-n-c-k-b&v=10` rejected full
 R1 closure on f0af4e: a title-only change and BIOS isapnpport auto/true or APM
