@@ -160,6 +160,27 @@ native `f4fff7cf26c4cea9250979b47c1c83bbfa8d5897759729982d4ecfa4ba535286`.
 Generated config/header pins remain unchanged. Earlier table identifies previous
 final-printer inputs, not these later binaries.
 
+## Printer resolver increment (2026-11-06)
+
+After `fa21dbfdec817d0bab24ab70606afd0db75a830a` / tree
+`44c2bd7e0166f39db0fcb6ff7dd80190f16f1fdd`, the ordinary file/DBCS/system/embedded
+fallback policy is factored into one `ResolvePrinterFont(FT_Library,Typeface)`
+in printer.cpp, retaining ordering and independent face ownership. This is a
+runtime owning-primitive extraction, not active printer checkpoint coverage or
+a future-font-bank codec. The actual DOS LPT probe now exercises all six named
+families and explicit valid/corrupt deterministic font directories as well as
+empty/missing paths and TTF output. proc-477d0cac68a1 exit0 passes all five
+routes with real PS output (`printer-runtime-8b56w1by`). proc-30826bee03c8 exit0
+also passes independent native FreeType reload/render/dispose sanitizer test.
+proc-74971276a636 built both configurations then failed before runtime because
+the caller supplied DOSBOX_TEST_BINARY instead of DOSBOX_TEST_NATIVE_BINARY;
+that invocation is not a runtime pass. Corrected commands above supply the latter.
+Final binary hashes for resolver increment:
+Lua `2a9cd6e28360a46bb60c76a05208b90e5a879285cc7b2a1226707910355986b8`,
+native `d270cc6058658cac7e89dabd37a991ba18eda1c816f22ac0b9cb4145c7838ffa`.
+Rebuild logs `$W/build-{lua,native}-printer-resolver.log`; earlier combined E2E
+predates this behavior-preserving extraction and new family variations.
+
 ## Remaining implementation and disposition obligations
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,

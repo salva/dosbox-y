@@ -310,20 +310,12 @@ void CPrinter::selectCodepage(uint16_t cp)
 		curMap[i] = mapToUse[i];
 }
 
-void CPrinter::updateFont()
+// Resolve one independent face in the caller's library. Ordinary reload and
+// future-resource consumers must use the same ordered fallback policy.
+static FT_Face ResolvePrinterFont(FT_Library FTlib, Typeface LQtypeFace)
 {
-	if (curFont != NULL) {
-		FT_Done_Face(curFont);
-		curFont = NULL;
-	}
-    fontBytes.reset();
-
-#if defined(USE_TTF)
-    if (TTF_using()&&printfont) curFont = GetTTFFace(FTlib,fontBytes);
-    if (curFont == NULL)
-#endif
-    {
-
+    if (!FTlib) return nullptr;
+    FT_Face curFont = nullptr;
 	std::string fontName, basedir = font_path;
     if (!basedir.empty() && basedir.back()!='\\' && basedir.back()!='/')
         basedir += CROSS_FILESPLIT;
@@ -466,7 +458,18 @@ void CPrinter::updateFont()
             curFont = NULL;
         }
 	}
-    }
+    return curFont;
+}
+
+void CPrinter::updateFont()
+{
+    if (curFont) FT_Done_Face(curFont);
+    curFont = nullptr;
+    fontBytes.reset();
+#if defined(USE_TTF)
+    if (TTF_using() && printfont) curFont = GetTTFFace(FTlib, fontBytes);
+#endif
+    if (!curFont) curFont = ResolvePrinterFont(FTlib, LQtypeFace);
 
 	double horizPoints = 10.5;
 	double vertPoints = 10.5;
