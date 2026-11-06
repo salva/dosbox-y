@@ -2290,11 +2290,9 @@ private:
 		if( tandy_membase_idx == 0xffffffff ) vga.tandy.mem_base = vga.mem.linear;
 		else vga.tandy.mem_base = MemBase + tandy_membase_idx;
 
-		// fix: re-derive VGA_DrawLine, line_length, address_add, width, height, etc. from the
-		// freshly-loaded VGA registers. The serialised drawline_idx enum covers only 14 of ~46
-		// variants and the load-side switch has no default, so without this the renderer can be
-		// left pointing at a stale function (mode 13h → vertical colour bands).
-		VGA_SetupDrawing(0);
+        // POD_Load_VGA_Draw installs the complete handler identity and logical
+        // raster continuation. VGA_SetupDrawing is a mode transition: it resets
+        // lines_done and schedules a new frame, so must not run during import.
 	}
 } dummy;
 }

@@ -3266,6 +3266,73 @@ void GFX_ReleaseSurfacePtr(void) {
     }
 }
 
+// Direct software-surface history. Native pitch, pointers and color packing
+// are destination-local; only RGB pixels and whole-row progress cross processes.
+bool GFX_RenderHistory(std::ostream *output, std::istream *input,
+                       uint8_t *&cursor, Bitu &pitch)
+{
+    if (!sdl.active || sdl.desktop.type != SCREEN_SURFACE || !sdl.surface ||
+        !sdl.surface->pixels || !sdl.surface->format || sdl.blit.surface ||
+        SDL_MUSTLOCK(sdl.surface) || sdl.clip.x < 0 || sdl.clip.y < 0 ||
+        sdl.clip.w <= 0 || sdl.clip.h <= 0 ||
+        sdl.clip.x + sdl.clip.w > sdl.surface->w ||
+        sdl.clip.y + sdl.clip.h > sdl.surface->h) return false;
+#if C_XBRZ
+    if (sdl_xbrz.enable && sdl_xbrz.scale_on) return false;
+#endif
+#if C_SURFACE_POSTRENDER_ASPECT
+    if (render.aspect == ASPECT_NEAREST || render.aspect == ASPECT_BILINEAR) return false;
+#endif
+    auto *surface = sdl.surface;
+    const unsigned bytes = surface->format->BytesPerPixel;
+    if (!bytes || bytes > 4) return false;
+    auto *base = static_cast<uint8_t *>(surface->pixels) +
+        size_t(sdl.clip.y) * surface->pitch + size_t(sdl.clip.x) * bytes;
+    uint32_t width = sdl.clip.w, height = sdl.clip.h, rows = 0;
+    uint8_t acquired = cursor ? 1 : 0;
+    if (output) {
+        if (cursor) {
+            const uintptr_t start = reinterpret_cast<uintptr_t>(base);
+            const uintptr_t position = reinterpret_cast<uintptr_t>(cursor);
+            if (pitch != Bitu(surface->pitch) || position < start ||
+                (position-start) % pitch || (position-start)/pitch > height) return false;
+            rows = uint32_t((position-start)/pitch);
+        }
+        writePOD(*output,width); writePOD(*output,height);
+        writePOD(*output,acquired); writePOD(*output,rows);
+    } else {
+        uint32_t saved_width=0,saved_height=0;
+        readPOD(*input,saved_width); readPOD(*input,saved_height);
+        readPOD(*input,acquired); readPOD(*input,rows);
+        if (!*input || saved_width != width || saved_height != height ||
+            acquired > 1 || rows > height || (!acquired && rows)) return false;
+    }
+    for (uint32_t y=0; y<height; ++y) for (uint32_t x=0; x<width; ++x) {
+        auto *pixel = base + size_t(y)*surface->pitch + size_t(x)*bytes;
+        uint8_t rgb[3];
+        if (output) {
+            uint32_t value=0; memcpy(&value,pixel,bytes);
+            SDL_GetRGB(value,surface->format,&rgb[0],&rgb[1],&rgb[2]);
+            output->write(reinterpret_cast<const char *>(rgb),3);
+        } else {
+            if (!input->read(reinterpret_cast<char *>(rgb),3)) return false;
+            const uint32_t value=SDL_MapRGB(surface->format,rgb[0],rgb[1],rgb[2]);
+            memcpy(pixel,&value,bytes);
+        }
+    }
+    if (input) {
+        sdl.updating = acquired != 0;
+        cursor = acquired ? base + size_t(rows)*surface->pitch : nullptr;
+        pitch = acquired ? Bitu(surface->pitch) : 0;
+#if C_SDL2
+        // Dirty-line continuation omits unchanged suffix rows: publish their
+        // restored canvas now, without manufacturing a guest frame.
+        if (SDL_UpdateWindowSurface(sdl.window) != 0) return false;
+#endif
+    }
+    return output ? bool(*output) : bool(*input);
+}
+
 bool GFX_StartUpdate(uint8_t* &pixels,Bitu &pitch)
 {
     if (!sdl.active || sdl.updating)

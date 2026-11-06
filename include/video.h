@@ -69,6 +69,10 @@ void GFX_Stop(void);
 void GFX_SwitchFullScreen(void);
 bool GFX_StartUpdate(uint8_t * & pixels,Bitu & pitch);
 void GFX_EndUpdate( const uint16_t *changedLines );
+// Software output history, consumed by the original Render owner traversal.
+// No acquisition, guest draw, or clock advancement during reconstruction.
+bool GFX_RenderHistory(std::ostream *output, std::istream *input,
+                       uint8_t *&cursor, Bitu &pitch);
 void GFX_GetSize(int &width, int &height, bool &fullscreen);
 void GFX_LosingFocus(void);
 

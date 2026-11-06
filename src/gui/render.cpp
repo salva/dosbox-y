@@ -337,16 +337,23 @@ static void RENDER_StartLineHandler(const void * s) {
 
     if (RENDER_DrawLine_scanline_cacheHit(s)) { // line has not changed
         render.scale.cacheRead += render.scale.cachePitch;
+        // Acquired lazy output must track hits, including aspect repeats.
+        if (render.scale.outWrite)
+            render.scale.outWrite += render.scale.outPitch * Scaler_Aspect[render.scale.inLine];
         Scaler_ChangedLines[0] += Scaler_Aspect[ render.scale.inLine ];
         render.scale.inLine++;
         render.scale.outLine++;
     }
     else {
-        if (!GFX_StartUpdate( render.scale.outWrite, render.scale.outPitch )) {
-            RENDER_DrawLine = RENDER_EmptyLineHandler;
-            return;
+        // Acquired output already has the completed-row offset. Do not
+        // reacquire it or apply skipped rows twice after a lazy hit.
+        if (!render.scale.outWrite) {
+            if (!GFX_StartUpdate( render.scale.outWrite, render.scale.outPitch )) {
+                RENDER_DrawLine = RENDER_EmptyLineHandler;
+                return;
+            }
+            render.scale.outWrite += render.scale.outPitch * Scaler_ChangedLines[0];
         }
-        render.scale.outWrite += render.scale.outPitch * Scaler_ChangedLines[0];
 #if defined(C_SCALER_FULL_LINE)
         RENDER_scaler_countdown = RENDER_scaler_countdown_init;
         RENDER_DrawLine = RENDER_DrawLine_countdown;
@@ -608,6 +615,8 @@ void RENDER_Shutdown() {
 	TempLineFree();
 }
 
+static bool render_restoring_resources = false;
+
 void RENDER_Reset( void ) {
 	Bitu width=render.src.width;
 	Bitu height=render.src.height;
@@ -623,7 +632,7 @@ void RENDER_Reset( void ) {
 	scalerChangeCacheFree();
 	scalerFrameCacheFree();
 	scalerWriteCacheFree();
-	TempLineFree();
+	if (!render_restoring_resources) TempLineFree();
 
 	render.disablerender = false;
 
@@ -1090,7 +1099,7 @@ forcenormal:
 		scalerChangeCacheAlloc(render.src.width,render.src.height);
 	}
 
-	TempLineAlloc(render.src.width); // vga_draw.cpp make the scan line larger or smaller to match. that code also previously used scaler max width
+	if (!render_restoring_resources) TempLineAlloc(render.src.width); // VGA owner retains its restored buffer and relocations
 	if (use_wcache) scalerWriteCacheAlloc(wcpitch);
 
 	render.scale.blocks = render.src.width / SCALER_BLOCKSIZE;
@@ -1795,13 +1804,80 @@ public:
         registerPOD(render.src.fps);
         registerPOD(render.src.scrn_ratio);
         registerPOD(render.pal.rgb);
+        registerPOD(render.pal.first);
+        registerPOD(render.pal.last);
+        registerPOD(render.pal.changed);
+        registerPOD(render.pal.modified);
+        registerPOD(render.updating);
+        registerPOD(render.active);
+        registerPOD(render.disablerender);
+        registerPOD(render.fullFrame);
+        registerPOD(render.frameskip.count);
+        registerPOD(render.frameskip.max);
+        registerPOD(render.frameskip.index);
+        registerPOD(render.frameskip.hadSkip);
+        registerPOD(render.scale.clearCache);
+        registerPOD(render.scale.inLine);
+        registerPOD(render.scale.outLine);
     }
 
 private:
+    // Owner-local phase identity, never a native function address.
+    uint8_t phase() const {
+        if (RENDER_DrawLine == RENDER_EmptyLineHandler) return 0;
+        if (RENDER_DrawLine == RENDER_StartLineHandler) return 1;
+        if (RENDER_DrawLine == RENDER_FinishLineHandler) return 2;
+        if (RENDER_DrawLine == RENDER_ScalerLineHandler) return 3;
+        if (RENDER_DrawLine == RENDER_ClearCacheHandler) return 4;
+        if (RENDER_DrawLine && RENDER_DrawLine == render.scale.linePalHandler) return 5;
+        return 255;
+    }
+    bool history(std::ostream *out, std::istream *in) {
+        // Simple random scalers have no additional native write/complex cache.
+        // Refuse unrepresented complex/history paths rather than invalidate them.
+        if (render.scale.complexHandler || useTraditionalRenderCache ||
+            !scalerSourceCacheBuffer || !Scaler_Aspect || !Scaler_ChangedLines ||
+            render.scale.inLine > render.src.height ||
+            render.scale.outLine > render.src.height ||
+            Scaler_ChangedLineIndex >= render.src.height+16 ||
+            render.frameskip.index >= RENDER_SKIP_CACHE) return false;
+        uint8_t dispatch=phase();
+        Bitu changed=Scaler_ChangedLineIndex;
+        uint32_t cache_offset=0;
+        if (out && render.scale.cacheRead) {
+            const uintptr_t start=reinterpret_cast<uintptr_t>(scalerSourceCacheBuffer);
+            const uintptr_t pos=reinterpret_cast<uintptr_t>(render.scale.cacheRead);
+            if (pos < start || pos-start > scalerSourceCacheBufferSize) return false;
+            cache_offset=uint32_t(pos-start);
+        }
+        uint32_t size=scalerSourceCacheBufferSize;
+        if (out) {
+            if (dispatch == 255) return false;
+            writePOD(*out,dispatch); writePOD(*out,changed); writePOD(*out,size); writePOD(*out,cache_offset);
+            out->write(reinterpret_cast<const char *>(scalerSourceCacheBuffer),size);
+            out->write(reinterpret_cast<const char *>(Scaler_Aspect),render.src.height+16);
+            out->write(reinterpret_cast<const char *>(Scaler_ChangedLines),(render.src.height+16)*sizeof(uint16_t));
+        } else {
+            readPOD(*in,dispatch); readPOD(*in,changed); readPOD(*in,size); readPOD(*in,cache_offset);
+            if (!*in || dispatch > 5 || changed >= render.src.height+16 ||
+                size != scalerSourceCacheBufferSize || cache_offset > size) return false;
+            if (!in->read(reinterpret_cast<char *>(scalerSourceCacheBuffer),size) ||
+                !in->read(reinterpret_cast<char *>(Scaler_Aspect),render.src.height+16) ||
+                !in->read(reinterpret_cast<char *>(Scaler_ChangedLines),(render.src.height+16)*sizeof(uint16_t))) return false;
+            Scaler_ChangedLineIndex=changed;
+            render.scale.cacheRead=scalerSourceCacheBuffer+cache_offset;
+            const ScalerLineHandler_t handlers[]={RENDER_EmptyLineHandler,RENDER_StartLineHandler,
+                RENDER_FinishLineHandler,RENDER_ScalerLineHandler,RENDER_ClearCacheHandler,
+                render.scale.linePalHandler};
+            if (!handlers[dispatch]) return false;
+            RENDER_DrawLine=handlers[dispatch];
+        }
+        return GFX_RenderHistory(out,in,render.scale.outWrite,render.scale.outPitch);
+    }
 	void getBytes(std::ostream& stream) override
 	{
-		// - pure data
 		SerializeGlobalPOD::getBytes(stream);
+        if (!history(&stream,nullptr)) stream.setstate(std::ios::failbit);
 	}
 
 	void setBytes(std::istream& stream) override
@@ -1820,13 +1896,36 @@ private:
             stream.setstate(std::ios::failbit);
             return;
         }
-        render.pal.first = 0;
-        render.pal.last = 255;
-        render.pal.changed = true;
-        memset(render.pal.modified, 1, sizeof(render.pal.modified));
-        render.scale.clearCache = true;
+        // Preserve only this owner's logical fields across local resource setup.
+        const auto saved_palette=render.pal;
+        const auto saved_frameskip=render.frameskip;
+        const bool updating=render.updating,active=render.active;
+        const bool disabled=render.disablerender,full=render.fullFrame;
+        const bool clear=render.scale.clearCache;
+        const Bitu in_line=render.scale.inLine,out_line=render.scale.outLine;
+        // Rebuilding local presentation must not force the restored VGA
+        // schedule to finish a frame whose Render phase was captured elsewhere.
+        const bool must_complete=vga.draw.must_complete_frame;
+        struct ResourceRebuild {
+            ResourceRebuild() { render_restoring_resources=true; }
+            ~ResourceRebuild() { render_restoring_resources=false; }
+        } resource_rebuild;
         RENDER_SetSize(render.src.width, render.src.height, render.src.bpp,
                        render.src.fps, render.src.scrn_ratio);
+        vga.draw.must_complete_frame=must_complete;
+        render.pal=saved_palette;
+        for (unsigned i=0;i<256;++i) {
+            const auto &rgb=render.pal.rgb[i];
+            const auto packed=GFX_GetRGB(rgb.red,rgb.green,rgb.blue);
+            if (render.scale.outMode == scalerMode32) render.pal.lut.b32[i]=packed;
+            else render.pal.lut.b16[i]=uint16_t(packed);
+        }
+        render.frameskip=saved_frameskip;
+        render.updating=updating; render.active=active;
+        render.disablerender=disabled; render.fullFrame=full;
+        render.scale.clearCache=clear;
+        render.scale.inLine=in_line; render.scale.outLine=out_line;
+        if (!history(nullptr,&stream)) stream.setstate(std::ios::failbit);
 	}
 } dummy;
 }
