@@ -506,7 +506,24 @@ void POD_Save_Disney( std::ostream& stream )
 	// *******************************************
 
 	// - near-pure struct data
-	WRITE_POD( &disney, disney );
+    if ((disney.leader && dac_leader_idx==0xff) || disney.da[0].used>DISNEY_SIZE ||
+        disney.da[1].used>DISNEY_SIZE || disney.state>DS_ANALYZING) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    // Scalar backing only: never publish native mo/channel/interior addresses.
+#define SAVE_DISNEY(field) WRITE_POD(&disney.field,disney.field);
+    SAVE_DISNEY(data) SAVE_DISNEY(status) SAVE_DISNEY(control)
+    for (const auto &dac:disney.da) {
+        WRITE_POD(&dac.buffer,dac.buffer); WRITE_POD(&dac.used,dac.used);
+        WRITE_POD(&dac.speedcheck_sum,dac.speedcheck_sum);
+        WRITE_POD(&dac.speedcheck_last,dac.speedcheck_last);
+        WRITE_POD(&dac.speedcheck_failed,dac.speedcheck_failed);
+        WRITE_POD(&dac.speedcheck_init,dac.speedcheck_init);
+        WRITE_POD(&dac.last_dac,dac.last_dac);
+    }
+    SAVE_DISNEY(last_used) SAVE_DISNEY(stereo) SAVE_DISNEY(state)
+    SAVE_DISNEY(interface_det) SAVE_DISNEY(interface_det_ext)
+#undef SAVE_DISNEY
 
 
 
@@ -554,7 +571,24 @@ void POD_Load_Disney( std::istream& stream )
 	//*******************************************
 
 	// - near-pure struct data
-	READ_POD( &disney, disney );
+    // Restore into local scalar backing, preserving native lifetime owners.
+    auto incoming=disney;
+#define LOAD_DISNEY(field) READ_POD(&incoming.field,incoming.field);
+    LOAD_DISNEY(data) LOAD_DISNEY(status) LOAD_DISNEY(control)
+    auto read_bool=[&](bool &v) {
+        unsigned char b=0;static_assert(sizeof(bool)==1,"bool framing");
+        READ_POD(&b,b);if(b>1)stream.setstate(std::ios::failbit);else v=b!=0;
+    };
+    for (auto &dac:incoming.da) {
+        READ_POD(&dac.buffer,dac.buffer); READ_POD(&dac.used,dac.used);
+        READ_POD(&dac.speedcheck_sum,dac.speedcheck_sum);
+        READ_POD(&dac.speedcheck_last,dac.speedcheck_last);
+        read_bool(dac.speedcheck_failed);read_bool(dac.speedcheck_init);
+        READ_POD(&dac.last_dac,dac.last_dac);
+    }
+    LOAD_DISNEY(last_used) read_bool(incoming.stereo); LOAD_DISNEY(state)
+    LOAD_DISNEY(interface_det) LOAD_DISNEY(interface_det_ext)
+#undef LOAD_DISNEY
 
 
 
@@ -565,6 +599,10 @@ void POD_Load_Disney( std::istream& stream )
 	//*******************************************
 	//*******************************************
 
+    if (!stream || (dac_leader_idx!=0xff && dac_leader_idx>1) ||
+        incoming.da[0].used>DISNEY_SIZE || incoming.da[1].used>DISNEY_SIZE ||
+        incoming.state>DS_ANALYZING) {stream.setstate(std::ios::failbit);return;}
+    disney=incoming;
 	disney.leader = NULL;
 	if( dac_leader_idx != 0xff ) disney.leader = &disney.da[dac_leader_idx];
 
