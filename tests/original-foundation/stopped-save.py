@@ -67,7 +67,7 @@ if os.environ.get('DOSBOX_TEST_AH86'):
 if os.environ.get('DOSBOX_TEST_PAUSE'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-pause.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_FILELPT'):
- subprocess.run(['nasm','-f','bin','-DPREFIX='+os.environ.get('DOSBOX_TEST_FILELPT_PREFIX','0'),str(pathlib.Path(__file__).with_name('fresh-filelpt.asm')),'-o',str(w/'TINY.COM')],check=True)
+ subprocess.run(['nasm','-f','bin',*(['-DWAIT_TIMEOUT'] if os.environ.get('DOSBOX_TEST_FILELPT_WAIT') else []),'-DPREFIX='+os.environ.get('DOSBOX_TEST_FILELPT_PREFIX','0'),str(pathlib.Path(__file__).with_name('fresh-filelpt.asm')),'-o',str(w/'TINY.COM')],check=True)
  (w/'printed.prt').write_bytes(b'current host prefix:')
 if os.environ.get('DOSBOX_TEST_PRINTER'):
  subprocess.run(['nasm','-f','bin','-DMODE='+os.environ['DOSBOX_TEST_PRINTER'],str(pathlib.Path(__file__).with_name('fresh-printer.asm')),'-o',str(w/'TINY.COM')],check=True)
@@ -112,7 +112,7 @@ def run():
  if os.environ.get('DOSBOX_TEST_TEXT_PRODUCER'):
   conf.write_text(conf.read_text()+'\n[video]\nenable supermegazeux tweakmode=true\n')
  if os.environ.get('DOSBOX_TEST_FILELPT'):
-  conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(w/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:100000\n')
+  conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(w/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:'+os.environ.get('DOSBOX_TEST_FILELPT_TIMEOUT','100000')+'\n')
  if os.environ.get('DOSBOX_TEST_PRINTER'):
   conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(w)+'\n[parallel]\nparallel1=printer\n')
  # Exercise represented geometry/timing, not just the default 16MB/3000 case.

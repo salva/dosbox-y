@@ -44,6 +44,17 @@ held:
  out dx,al
  xor al,al
  out dx,al
+%ifdef WAIT_TIMEOUT
+ ; BIOS ticks advance only during explicit continuation; allow idle close.
+ mov ax,40h
+ mov ds,ax
+ mov bx,[6ch]
+wait_tick:
+ mov ax,[6ch]
+ sub ax,bx
+ cmp ax,5
+ jb wait_tick
+%endif
  mov ax,4c2ah
  int 21h
 fail:

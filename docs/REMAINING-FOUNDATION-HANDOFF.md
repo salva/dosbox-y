@@ -15,7 +15,11 @@ actual VGA aperture mappings, destination-local FileLPT open-stream continuation
 and native binding agreement. Ordinary PS/PNG publication now refuses detected
 write/close failure before page clear/actions. Prior sections below retain their
 named historical applicability, not current build identities. Whole finite
-foundation disposition and native-format VGA producer history remain unfinished.
+foundation disposition remains unfinished. Native-format text producer recurrence
+is now implemented in engine21; see `VGA-PRODUCER-RECURRENCE.md` for current
+source/packing/codec tests, real enabled-SMZX fresh continuation, final binary
+hashes and remaining pixel/backend qualifications. That successor replaces the
+earlier omission, not whole-foundation acceptance.
 
 The earlier increment receipts below remain historical evidence on their named
 inputs, not current binary identities. Engine15/representation9 now includes

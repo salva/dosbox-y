@@ -3,6 +3,20 @@
 Author implementation/verification, not independent whole-foundation acceptance.
 Engine20/representation9; original owner traversal, no Prepared/replay/rollback.
 
+## Additional engine21 variations (2026-11-06)
+
+`proc-5d54012e374f` && exit0 extends actual FileLPT fixture to a 100ms
+pending timeout/addFF/cp437: fresh held comparison remains unchanged, explicit
+continuation writes X/addLF then waits five BIOS ticks; current external append
+survives and exactly one formfeed follows, root42. Reproduce with
+`DOSBOX_TEST_FILELPT_WAIT=1 DOSBOX_TEST_FILELPT_TIMEOUT=100
+DOSBOX_TEST_FILELPT_FLAGS='addLF addFF cp:437'` and the usual Lua binary env.
+`proc-66bf2b191bf2` && exit0 separately revalidates actual exclusive
+Interactive/Bridge, RPC stop conditions, full Lua production runtime and
+FileLPT99/cp437 on engine21 binaries. Full output retained at
+`work:///cards/card-n-c-l-a/processes/proc-66bf2b191bf2/stdout.log`.
+These do not certify nonregular/disposal/multiport/Windows behavior.
+
 ## Delivered owner state
 
 `src/ints/int10_modes.cpp` now transports all 22 mutable mode table spans,

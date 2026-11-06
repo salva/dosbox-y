@@ -56,7 +56,7 @@ conf=w/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockna
 if os.environ.get('DOSBOX_TEST_TEXT_PRODUCER'):
  conf.write_text(conf.read_text()+'\n[video]\nenable supermegazeux tweakmode=true\n')
 if os.environ.get('DOSBOX_TEST_FILELPT'):
- conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(archive.parent/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:100000\n')
+ conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(archive.parent/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:'+os.environ.get('DOSBOX_TEST_FILELPT_TIMEOUT','100000')+'\n')
 if os.environ.get('DOSBOX_TEST_PRINTER'):
  conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(archive.parent)+'\n[parallel]\nparallel1=printer\n')
 if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):

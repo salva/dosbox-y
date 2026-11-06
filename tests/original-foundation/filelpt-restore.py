@@ -17,7 +17,7 @@ before=target.read_bytes()
 env.update(DOSBOX_TEST_ARCHIVE=str(base/'first.sav'),DOSBOX_TEST_STEP_IP='0814:0201',DOSBOX_TEST_ROOT_EXIT='1',DOSBOX_TEST_ROOT_FACTS='code=42 resident=0 self-parent=0')
 p=subprocess.run(['python3',str(here/'fresh-startup.py')],env=env,capture_output=True,text=True)
 (w/'restore.log').write_text(p.stdout+p.stderr);p.check_returncode()
-assert target.read_bytes()==before+b'X\n',target.read_bytes()
+assert target.read_bytes()==before+b'X\n'+(b'\x0c' if os.environ.get('DOSBOX_TEST_FILELPT_WAIT') and 'addFF' in env.get('DOSBOX_TEST_FILELPT_FLAGS','') else b''),target.read_bytes()
 if os.environ.get('DOSBOX_TEST_FILELPT_ACTION'):
  assert (w/'action-ran').exists(),list(w.iterdir())
 print('FileLPT current host append/ACK continuation/addLF/no replay/root42 PASS')
