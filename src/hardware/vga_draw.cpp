@@ -2776,6 +2776,17 @@ struct first_equal {
 };
 
 template <const unsigned int card,typename templine_type_t> static inline uint8_t* EGAVGA_TEXT_Combined_Draw_Line(uint8_t *dst,Bitu vidstart,Bitu line) {
+    // The live producer writes complete glyph blocks, not merely draw.width.
+    // Include the panned extra character and the 16-pixel scratch prefix.
+    // Raw snapshot callers own their separate destination allocation.
+    if (card != MCH_RAW_SNAPSHOT) {
+        const uint64_t dots = vga.draw.char9dot ? 9u : 8u;
+        const uint64_t pixels = (uint64_t(vga.draw.blocks) +
+            (vga.draw.panning ? 1u : 0u)) * dots;
+        if (!dst || vga.draw.panning > 16 ||
+            (pixels + 16u - vga.draw.panning) * sizeof(templine_type_t) > TempLineSize)
+            E_Exit("VGA text producer exceeds scanline storage");
+    }
     if (vga.crtc.maximum_scan_line & 0x80) line >>= 1u; /* CGA modes (and 200-line EGA) have the VGA doublescan bit set. We need to compensate to properly map lines. */
     const uint8_t *vram = vga.draw.linear_base + (((line & vga.tandy.line_mask) << (2+vga.tandy.line_shift)) & vga.draw.linear_mask);
     const Bitu vidmask = vga.tandy.line_mask ? ((vga.tandy.addr_mask << 2) | 3) : vga.draw.linear_mask;
@@ -3035,6 +3046,12 @@ template <const unsigned int card,typename templine_type_t> static inline uint8_
 }
 
 static uint8_t* EGAVGA_TEXT_Combined_Draw_Line_SuperMegazeux(uint8_t *dst,Bitu vidstart,Bitu line) {
+    // Byte glyph output and expanded packed32 output have different extents.
+    // The final pair reads one historical nibble just beyond the even row.
+    if (!dst ||
+        uint64_t(16) + uint64_t(vga.draw.width) * 4 > TempLineSize ||
+        uint64_t(16) + (vga.draw.width & ~1u) >= TempLineSize)
+        E_Exit("VGA SuperMegazeux producer exceeds scanline storage");
 	/* Render it like EGA so that only that part of the VGA pipeline is simulated, to produce
 	 * the 6-bit attribute controller values PRIOR to color palette translation that this
 	 * function needs to pair, take the low 4 bits, and combine into an 8-bit value in the
