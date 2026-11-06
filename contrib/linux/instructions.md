@@ -18,38 +18,18 @@ sudo apt-get install ./dosbox-x_20260910nightly_amd64.deb
 
 APT will automatically install any required dependencies.
 
-3. DOSBox-X provides two executables:
+3. The CI package provides the SDL2 executable, `dosbox-x-sdl2`, launched by the
+   `dosbox-x` command.
 
-   dosbox-x-sdl1
-   dosbox-x-sdl2
-
-`dosbox-x-sdl2` is the SDL2 version and is the default version launched by the `dosbox-x` command.
-
-`dosbox-x-sdl1` is the SDL1 version. It can be useful on older systems or in environments where SDL2 is not available or does not work properly.
+SDL1 source remains in the repository, but it is not built, tested or included in
+these CI packages.
 
 4. Start the default SDL2 version:
 
    dosbox-x
 
-5. To make `dosbox-x` launch the SDL1 version instead, replace the symbolic link:
-
-   sudo ln -sf dosbox-x-sdl1 /usr/bin/dosbox-x
-
-After this, running:
+The installed SDL2 executable can also be launched directly:
 
 ```
-dosbox-x
-```
-
-will launch the SDL1 version.
-
-6. To switch back to the SDL2 version:
-
-   sudo ln -sf dosbox-x-sdl2 /usr/bin/dosbox-x
-
-The installed executables can also be launched directly:
-
-```
-dosbox-x-sdl1
 dosbox-x-sdl2
 ```
