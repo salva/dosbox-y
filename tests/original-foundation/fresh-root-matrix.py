@@ -143,9 +143,7 @@ consumer_policy = ({'DOSBOX_TEST_CAPTURE_POLICY': '1'}
                    if os.environ.get('DOSBOX_TEST_CAPTURE_POLICY') else {})
 print(work, flush=True)
 selected = os.environ.get('DOSBOX_TEST_CASES', '').split(',') if os.environ.get('DOSBOX_TEST_CASES') else []
-# Known failing prior-core media regression is opt-in, never silently accepted.
-if not selected:
-    cases = tuple(case for case in cases if case[0] != 'floppy-held')
+# Mounted-media capture and fresh native continuation are required coverage.
 if selected:
     assert set(selected) <= {case[0] for case in cases}, selected
     cases = tuple(case for case in cases if case[0] in selected)

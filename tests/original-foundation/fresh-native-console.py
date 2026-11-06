@@ -6,11 +6,12 @@ work=pathlib.Path(tempfile.mkdtemp(prefix='native-console-',dir=os.environ['SAIV
 print(work,flush=True)
 env={k:v for k,v in os.environ.items() if not k.startswith('DOSBOX_TEST_')}
 fixture=os.environ.get('DOSBOX_TEST_CONSOLE_FIXTURE','sb-fifo')
-assert fixture in ('sb-fifo','font','ah86','pause'), fixture
+assert fixture in ('sb-fifo','font','ah86','pause','floppy'), fixture
 setup={
  'sb-fifo':{'DOSBOX_TEST_SB_HELD':'1'},
  'font':{'DOSBOX_TEST_FONT':'1'},
  'ah86':{'DOSBOX_TEST_AH86':'1','DOSBOX_TEST_AH86_ACTIVE':'1'},
+ 'floppy':{'DOSBOX_TEST_FLOPPY':'1'},
  'pause':{'DOSBOX_TEST_PAUSE':'1'},
 }[fixture]
 producer=dict(env,**setup,DOSBOX_TEST_BINARY=os.environ['DOSBOX_TEST_BINARY'],DOSBOX_TEST_AUDIO='1',DOSBOX_TEST_CAPTURE_IP='0814:0200',DOSBOX_TEST_REFUSAL_REGISTERS='CS:IP=0814:0201')
@@ -44,6 +45,22 @@ with (work/'native.log').open('w') as log:
 text=(work/'native.log').read_text()
 assert 'code=42 resident=0 self-parent=0' in text,text
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
+if fixture == 'floppy':
+ # Resolve the exact producer-owned medium from its authored config.
+ configs = list((archive.parent/'capture').glob('fixture.conf'))
+ media = pathlib.Path(re.search(r'imgmount a (.*?) -t floppy', configs[0].read_text())[1])
+ hidden = media.with_suffix('.unavailable')
+ media.rename(hidden)
+ try:
+  failed = subprocess.run(args, env=dict(env,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy'),
+                          input='run\n', capture_output=True,text=True,timeout=40)
+  (work/'missing-media.log').write_text(failed.stdout+failed.stderr)
+  assert failed.returncode == 1
+  assert 'Restored console held:' not in failed.stdout+failed.stderr
+  assert 'Restored session ended:' not in failed.stdout+failed.stderr
+  assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
+ finally:
+  hidden.rename(media)
 # Original slot safety remains authoritative: mutate first Shell role slot with
 # valid ZIP CRC, so native mismatch must refuse before console attachment.
 import zipfile

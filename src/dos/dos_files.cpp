@@ -2639,7 +2639,6 @@ struct Opts {
     uint32_t cdrom_sector_offset;
     unsigned char floppy_emu_type;
 };
-Opts opts;
 char overlaydir[CROSS_LEN];
 void MSCDEX_SetCDInterface(int intNr, int forceCD);
 template <size_t N>
@@ -2657,6 +2656,7 @@ static bool DOS_SaveStateCopyString(std::ostream &stream, char (&dest)[N],
 }
 void POD_Save_DOS_Files( std::ostream& stream )
 {
+    Opts opts = {};
     char dinfo[256] = {0};
     WRITE_POD( &ZDRIVE_NUM, ZDRIVE_NUM);
 	if (!dos_kernel_disabled) {
@@ -2680,6 +2680,10 @@ void POD_Save_DOS_Files( std::ostream& stream )
 
             if (!DOS_SaveStateCopyString(stream, dinfo, Drives[lcv]->GetInfo())) return;
             WRITE_POD( &dinfo, dinfo);
+            // Complete per-drive records, including inapplicable fields/padding.
+            memset(&opts, 0, sizeof(opts));
+            memset(&lalloc, 0, sizeof(lalloc));
+            memset(&oalloc, 0, sizeof(oalloc));
             std::fill(overlaydir, overlaydir + sizeof(overlaydir), '\0');
             if (!strncmp(dinfo,"local directory ",16) || !strncmp(dinfo,"CDRom ",6) || !strncmp(dinfo,"PhysFS directory ",17) || !strncmp(dinfo,"PhysFS CDRom ",13) ) {
                 localDrive *ldp = dynamic_cast<localDrive*>(Drives[lcv]);
@@ -2800,6 +2804,7 @@ void POD_Save_DOS_Files( std::ostream& stream )
         bool valid=imageDiskList[d]!=NULL;
         WRITE_POD( &valid, valid );
         if (!valid) continue;
+        memset(&opts, 0, sizeof(opts));
         char diskname[256];
         imageDiskElToritoFloppy *image = dynamic_cast<imageDiskElToritoFloppy *>(imageDiskList[d]);
         if (!DOS_SaveStateCopyString(stream, diskname, image!=NULL?"El Torito floppy drive":imageDiskList[d]->diskname.c_str())) return;
@@ -2824,6 +2829,9 @@ void POD_Save_DOS_Files( std::ostream& stream )
                 opts.mounttype=0;
             }
         }
+        // BIOS records use mediaid for the pending media-change line, not a
+        // DOS allocation media byte. Reattachment itself is not guest change.
+        opts.mediaid = imageDiskChange[d] ? 1 : 0;
         WRITE_POD( &opts, opts);
     }
 }
@@ -2852,6 +2860,7 @@ void unmount(int lcv) {
 
 void POD_Load_DOS_Files( std::istream& stream )
 {
+    Opts opts = {};
     char dinfo[256];
     std::vector<int> clist;
     clist.clear();
@@ -3200,7 +3209,7 @@ void POD_Load_DOS_Files( std::istream& stream )
         char diskname[256];
         READ_POD( &diskname, diskname );
         READ_POD( &opts, opts);
-        if (!stream || !memchr(diskname, '\0', sizeof(diskname)))
+        if (!stream || !memchr(diskname, '\0', sizeof(diskname)) || opts.mediaid > 1)
             E_Exit("Invalid save-state DOS disk image description");
         Bitu sizes[4] = { 0,0,0,0 };
         ide_slave = false;
@@ -3252,17 +3261,40 @@ void POD_Load_DOS_Files( std::istream& stream )
             }
         } else if (!opts.mounttype && *diskname) {
 #if !defined(OSFREE)
-            std::vector<std::string> options;
-            fatDrive* newDrive = new fatDrive(diskname, opts.bytesector, opts.cylsector, opts.headscyl, opts.cylinders, options);
-            const bool attached = newDrive && newDrive->created_successfully &&
-                newDrive->loadedDisk && AttachToBiosAndIdeByIndex(newDrive->loadedDisk, d,
-                                                               (unsigned char)ide_index, ide_slave);
-            delete newDrive;
-            if (!attached) E_Exit("Cannot restore save-state BIOS disk image");
+            // DOS FAT reconstruction may already own this exact native image.
+            // Share it with the BIOS slot, as IMGMOUNT does, rather than opening
+            // the same lock-mounted file a second time (which fails flock).
+            imageDisk *shared = nullptr;
+            for (unsigned drive = 0; drive < DOS_DRIVES; ++drive) {
+                const auto *fat = dynamic_cast<fatDrive *>(Drives[drive]);
+                imageDisk *candidate = fat ? fat->loadedDisk : nullptr;
+                if (candidate && candidate->diskname == diskname &&
+                    candidate->sector_size == opts.bytesector &&
+                    candidate->sectors == opts.cylsector &&
+                    candidate->heads == opts.headscyl &&
+                    candidate->cylinders == opts.cylinders) {
+                    shared = candidate;
+                    break;
+                }
+            }
+            if (shared) {
+                if (!AttachToBiosAndIdeByIndex(shared, d,
+                        (unsigned char)ide_index, ide_slave))
+                    E_Exit("Cannot restore save-state shared BIOS disk image");
+            } else {
+                std::vector<std::string> options;
+                fatDrive* newDrive = new fatDrive(diskname, opts.bytesector, opts.cylsector, opts.headscyl, opts.cylinders, options);
+                const bool attached = newDrive && newDrive->created_successfully &&
+                    newDrive->loadedDisk && AttachToBiosAndIdeByIndex(newDrive->loadedDisk, d,
+                                                                   (unsigned char)ide_index, ide_slave);
+                delete newDrive;
+                if (!attached) E_Exit("Cannot restore save-state BIOS disk image");
+            }
 #else
             E_Exit("Cannot restore save-state BIOS disk image in this build");
 #endif
         } else E_Exit("Invalid save-state BIOS image reconstruction type");
+        imageDiskChange[d] = opts.mediaid != 0;
         if (i==MAX_DISK_IMAGES-1)
             for (auto &it : clist) {
                 ide_slave = false;

@@ -1,4 +1,51 @@
-# Fresh disposable restore: core correction and qualification — 2026-11-06
+# Mounted FAT12 correction — 2026-11-06
+
+Successor to engine10 candidate e21978e7625abea21560043afb6649e0b6468b02,
+tree96881f39e656e694cd93654cb985c81d2a3386ed. AH86/Pause/font/history preserved.
+Author evidence only; same k-b affected assessment remains parent coordinated.
+
+Two distinct failures: stopped Dos capture inherited global Opts geometry from
+preceding BIOS capture; fresh DOS then BIOS reconstruction separately opened the
+same lock-mounted image, so the second fopen_lock failed flock. Capture now
+clears complete per-record options/allocation padding and uses invocation-local
+Opts. BIOS shares the exact-path/geometry DOS-owned native image via original
+retained attachment. No raw pointer serialization or disabled locking.
+
+After successful attachment a real INT13 continuation exposed a third issue:
+attachment sets imageDiskChange, returning AH06/root99 on first read. BIOS records
+now preserve/validate the pending change boolean in their unused mediaid byte,
+restore it after attachment. Engine11 separates changed semantics from engine10;
+representation9 remains. No guest retry/advance/rollback or weaker unchanged-owner
+assertion. Failure still disposes fresh target without evaluator/source mutation.
+
+Changed source: src/dos/dos_files.cpp and src/misc/savestates.cpp. Tests:
+fresh-root-matrix.py now includes floppy-held by default; fresh-native-console.py
+adds floppy plus missing-medium failure/no held console/no continuation/archive
+unchanged, restoring its test-owned medium. Existing fresh-floppy.asm consumes
+saved buffer and new INT13 signature read; no feature refusal substituted.
+
+W=/work/dosbox-y/.saivage/work/cards/card-n-c-k-a. Final sequential builds at
+W/build/{lua,no-debug}/src/dosbox-x, media-final-{lua,native}.log:
+Lua b291a0bac2d5ea996647bea156522eb8f728f9d8a04720526eb49f919a98f18f;
+native 170589d61e981c50b9c7ba0bd5d9e5f79563d0ddc7c64c11955cf45c7d5743db.
+config.h/config.status unchanged from F2 below. proc-1016bf05a48f passing prefix:
+root run-puu9v99c and native-console-id7wm7un repeated held saves/unchanged-owner,
+fresh held/delay/save then explicit root42; no-debug/no-Agent/no-Lua native;
+mismatch/quit/missing-medium disposal. Subsequent fetch SSH host verification
+failed: whole command not pass, no remote effects.
+
+proc-bf9f6c33dad1 passed six cases (floppy/font/AH86/Pause/search/shared-file),
+native console and valid-CRC CPU/Memory/Mouse/PIC/late Keyboard/CRC/missing owner
+failures, source/attempt unchanged (failure-18vfvld9). proc-a16fc4276e50 passed
+four-workload debugger/FILE/INLINE E2E ro60rzdh, missing-medium and Python checks.
+Final delta only removes early continue to retain common CD attachment tail and
+formats that branch; final builds/floppy tests cover it. No full41 rerun claimed.
+proc-fd5679743303 root99 and proc-d48a15fa6820 fixture config-path error remain
+real failures corrected before passes. Prior l-b engine10 failures remain true.
+Wider composed/devices/font/frontend acceptance and previously unqualified scope
+remain parent-owned; no service action, history rewrite or cleanup performed.
+
+# Fresh disposable restore: historical core correction and qualification — 2026-11-06
 
 Author delivery against review R1–R3 (`record:///review.md?card=card-n-c-k&v=1`),
 not independent approval. Source is FINAL2033 ancestry plus the correction
