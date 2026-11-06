@@ -620,11 +620,23 @@ public:
     {
         registerPOD(cmos.regs);
         registerPOD(cmos.nmi);
+        registerPOD(cmos.bcd);
+        registerPOD(cmos.ampm);
+        registerPOD(cmos.lock);
         registerPOD(cmos.reg);
         registerPOD(cmos.timer.div);
         registerPOD(cmos.timer.delay);
         registerPOD(cmos.timer.acknowledged);
         registerPOD(cmos.last.ended);
+        // Registers alone do not represent the running RTC. Installation
+        // must not call cmos_sync_time or advance the logical clock.
+        registerPOD(cmos.clock);
+        registerPOD(cmos.alarm);
+        registerPOD(cmos.clock_time_t);
+        registerPOD(cmos_sync_flag);
+        registerPOD(cmos_sync_sec);
+        registerPOD(cmos_sync_min);
+        registerPOD(cmos_sync_hour);
     }
 } dummy;
 }

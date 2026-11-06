@@ -8,8 +8,9 @@ env={k:v for k,v in os.environ.items() if not k.startswith('DOSBOX_TEST_')}
 fixture=os.environ.get('DOSBOX_TEST_CONSOLE_FIXTURE','sb-fifo')
 assert fixture in ('sb-fifo','font','ah86','pause','floppy','serial',
                    'gameport-timed','gameport-untimed','keyboard-d1',
-                   'xms-a20','ems','shared-file','filelpt'), fixture
+                   'xms-a20','ems','shared-file','filelpt','cmos'), fixture
 setup={
+ 'cmos':{'DOSBOX_TEST_CMOS':'1'},
  'filelpt':{'DOSBOX_TEST_FILELPT':'1','DOSBOX_TEST_FILELPT_PREFIX':'99','DOSBOX_TEST_FILELPT_FLAGS':'addLF cp:437'},
  'gameport-timed':{'DOSBOX_TEST_GAMEPORT':'timed'},
  'gameport-untimed':{'DOSBOX_TEST_GAMEPORT':'untimed'},
