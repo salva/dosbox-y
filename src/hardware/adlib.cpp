@@ -1838,6 +1838,11 @@ void Adlib::Module::SaveState( std::ostream& stream )
 
 	WRITE_POD( &cache, cache );
 	WRITE_POD( &chip, chip );
+	WRITE_POD( &last_opl_write, last_opl_write );
+	WRITE_POD( &single_opl_write_counter, single_opl_write_counter );
+	WRITE_POD( &adlib_pcm_boost, adlib_pcm_boost );
+	WRITE_POD( &adlib_pcm_gain, adlib_pcm_gain );
+	WRITE_POD( &adlib_pcm_dc, adlib_pcm_dc );
 }
 
 void Adlib::Module::LoadState( std::istream& stream )
@@ -1853,6 +1858,11 @@ void Adlib::Module::LoadState( std::istream& stream )
 
 	READ_POD( &cache, cache );
 	READ_POD( &chip, chip );
+	READ_POD( &last_opl_write, last_opl_write );
+	READ_POD( &single_opl_write_counter, single_opl_write_counter );
+	READ_POD( &adlib_pcm_boost, adlib_pcm_boost );
+	READ_POD( &adlib_pcm_gain, adlib_pcm_gain );
+	READ_POD( &adlib_pcm_dc, adlib_pcm_dc );
 }
 
 void POD_Save_Adlib(std::ostream& stream)
