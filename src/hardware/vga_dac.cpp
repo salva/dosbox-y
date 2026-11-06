@@ -21,6 +21,12 @@
 #include "logging.h"
 #include "render.h"
 #include "vga.h"
+#include "vga_applied_palette.h"
+
+static VGA_AppliedPalette applied_palette;
+void VGA_DAC_RebuildAppliedLookupTables() {
+    applied_palette.rebuild(vga.dac,GFX_Rshift,GFX_Gshift,GFX_Bshift,GFX_Amask);
+}
 
 extern bool vga_enable_3C6_ramdac;
 extern bool vga_8bit_dac;
@@ -137,6 +143,7 @@ static void VGA_DAC_SendColor( Bitu index, Bitu src ) {
             vga.dac.xlat32[index] = (uint32_t)(blue << 16U) | (uint32_t)(green << 8U) | (uint32_t)(red << 0U);
     }
 
+    applied_palette.apply(unsigned(index),red,green,blue,GFX_bpp<24);
     RENDER_SetPal( (uint8_t)index, red, green, blue );
 }
 
@@ -482,6 +489,9 @@ void POD_Save_VGA_Dac( std::ostream& stream )
 {
 	// - pure struct data
 	WRITE_POD( &vga.dac, vga.dac );
+	WRITE_POD( &tmp_dac, tmp_dac );
+	WRITE_POD( &VGA_DAC_DeferredUpdate, VGA_DAC_DeferredUpdate );
+	WRITE_POD( &applied_palette, applied_palette );
 
 
 	// no static globals found
@@ -492,11 +502,15 @@ void POD_Load_VGA_Dac( std::istream& stream )
 {
 	// - pure struct data
 	READ_POD( &vga.dac, vga.dac );
+	READ_POD( &tmp_dac, tmp_dac );
+	READ_POD( &VGA_DAC_DeferredUpdate, VGA_DAC_DeferredUpdate );
+	READ_POD( &applied_palette, applied_palette );
 
 
 	// no static globals found
 
-	// fix: regenerate xlat32/xlat16 caches from rgb[] using the current host pixel format;
-	// loading them raw from the save desyncs colours when host format differs from save-time
-	VGA_DAC_UpdateColorPalette();
+	// Repack only the independently applied histories. Current rgb[] can be
+	// newer than the displayed lookup tables; delivering it here loses deferred
+	// work and mutates Render's separately restored palette.
+	if (stream) VGA_DAC_RebuildAppliedLookupTables();
 }

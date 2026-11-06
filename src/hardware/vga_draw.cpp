@@ -8652,6 +8652,10 @@ void POD_Save_VGA_Draw( std::ostream& stream )
 	WRITE_POD( &temp, temp );
 	WRITE_POD( &FontMask, FontMask );
 	WRITE_POD( &bg_color_index, bg_color_index );
+	// Applied filter history affects future addressing after CRTC changes.
+	WRITE_POD( &hretrace_fx_avg, hretrace_fx_avg );
+	WRITE_POD( &vga_display_start_hretrace, vga_display_start_hretrace );
+	WRITE_POD( &is_vga_rendering_on_demand, is_vga_rendering_on_demand );
 }
 
 
@@ -8708,6 +8712,9 @@ void POD_Load_VGA_Draw( std::istream& stream )
 	READ_POD( &temp, temp );
 	READ_POD( &FontMask, FontMask );
 	READ_POD( &bg_color_index, bg_color_index );
+	READ_POD( &hretrace_fx_avg, hretrace_fx_avg );
+	READ_POD( &vga_display_start_hretrace, vga_display_start_hretrace );
+	READ_POD( &is_vga_rendering_on_demand, is_vga_rendering_on_demand );
 
 	//**********************************************
 	//**********************************************
