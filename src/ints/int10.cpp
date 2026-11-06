@@ -1941,6 +1941,8 @@ void INT10_Init() {
 }
 
 //save state support
+void POD_Save_Int10_Modes(std::ostream &stream);
+void POD_Load_Int10_Modes(std::istream &stream);
 bool VESA_NativeInterfaceValid();
 namespace
 {
@@ -1990,6 +1992,7 @@ public:
         bindings(&stream,nullptr);
         WRITE_POD(&int10.vesa_setmode,int10.vesa_setmode);
         WRITE_POD(&int10.text_row,int10.text_row);
+        POD_Save_Int10_Modes(stream);
     }
     void setBytes(std::istream &stream) override {
         bindings(nullptr,&stream);
@@ -1997,6 +2000,7 @@ public:
         if (!nativeBody() || !VESA_NativeInterfaceValid()) { stream.setstate(std::ios::failbit); return; }
         READ_POD(&int10.vesa_setmode,int10.vesa_setmode);
         READ_POD(&int10.text_row,int10.text_row);
+        POD_Load_Int10_Modes(stream);
     }
 } dummy;
 }

@@ -3017,6 +3017,20 @@ void *VGA_PageHandler_Func[16] =
 	(void *) &vgaph.empty,
 };
 
+// Stable identities for every original VGA aperture handler. The legacy
+// Memory table names only eight; retaining fresh text handlers for an unknown
+// source graphics mapping silently changes guest reads/writes on continuation.
+static PageHandler *vga_aperture_handlers[] = {
+ &vgaph.map_lfb_pc98,&vgaph.map_lfb_pc98_slow,&vgaph.map,&vgaph.map_slow,
+ &vgaph.slow,&vgaph.cgatext,&vgaph.mcgatext,&vgaph.tandy,&vgaph.tandy_slow,
+ &vgaph.cvga,&vgaph.cvga_slow,&vgaph.cvga_et4000_slow,&vgaph.uvga,&vgaph.uvga_fast,
+ &vgaph.pcjr,&vgaph.pcjr_slow,&vgaph.herc,&vgaph.herc_slow,
+ &vgaph.herc_incolor_mono,&vgaph.herc_incolor_graphics,&vgaph.lfb,&vgaph.lfb_slow,
+ &vgaph.mmio,&vgaph.ams,&vgaph.pc98,&vgaph.pc98_text,&vgaph.pc98_cg,
+ &vgaph.pc98_256mmio,&vgaph.pc98_256bank0,&vgaph.pc98_256bank1,
+ &vgaph.pc98_256planar,&vgaph.empty
+};
+
 void POD_Save_VGA_Memory( std::ostream& stream )
 {
 	// - static ptrs
@@ -3034,6 +3048,14 @@ void POD_Save_VGA_Memory( std::ostream& stream )
 
 	// - pure struct data
 	WRITE_POD( &vgapages, vgapages );
+    for (unsigned page=0xa0;page<0xc0;++page) {
+        auto *handler=MEM_GetPageHandler(page);
+        uint8_t id=0;
+        for (unsigned i=0;i<sizeof(vga_aperture_handlers)/sizeof(vga_aperture_handlers[0]);++i)
+            if (handler==vga_aperture_handlers[i]) id=uint8_t(i+1);
+        // Zero delegates RAM/ROM/other native mappings to Memory's owner.
+        WRITE_POD(&id,id);
+    }
 
 	// - static classes
 	//WRITE_POD( &vgaph, vgaph );
@@ -3057,6 +3079,13 @@ void POD_Load_VGA_Memory( std::istream& stream )
 
 	// - pure struct data
 	READ_POD( &vgapages, vgapages );
+    for (unsigned page=0xa0;page<0xc0;++page) {
+        uint8_t id=0;READ_POD(&id,id);
+        if (!stream || id>sizeof(vga_aperture_handlers)/sizeof(vga_aperture_handlers[0])) {
+            stream.setstate(std::ios::failbit);return;
+        }
+        if (id) MEM_SetPageHandler(page,1,vga_aperture_handlers[id-1]);
+    }
 
 	// - static classes
 	//READ_POD( &vgaph, vgaph );

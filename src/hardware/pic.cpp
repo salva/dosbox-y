@@ -1165,6 +1165,7 @@ extern void *PC98_Mouse_Tick_PIC_Event;						// Keyboard.cpp
 void PC98_Mouse_RestoreTick(void);
 
 extern void *PRINTER_EventHandler_PIC_Event;
+extern void Parallel_EventHandler(Bitu);
 extern void PRINTER_DiscardRestoredEvents();
 const void *pic_state_event_table[] = {
 	NULL,
@@ -1202,6 +1203,7 @@ const void *pic_state_event_table[] = {
 	PC98_Mouse_Tick_PIC_Event,	// preserve earlier callback indices
 	GUS_MidiTxDone_PIC_Event,
     PRINTER_EventHandler_PIC_Event, // restored interrupted job callback is inert
+    (void*)Parallel_EventHandler,
 };
 
 

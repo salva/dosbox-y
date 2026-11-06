@@ -3141,3 +3141,53 @@ public:
 void VESAMOED_ProgramStart(Program * * make) {
 	*make=new VESAMOED;
 }
+
+// Original Int10 traversal: mutable native tables (including sentinels), and
+// current descriptor identity. No BIOS/port replay or mode reconstruction.
+namespace {
+struct ModeTableSpan { VideoModeBlock *data; size_t count; };
+#define MODE_SPAN(name) {name,sizeof(name)/sizeof(name[0])}
+static ModeTableSpan mode_spans[] = {
+ MODE_SPAN(ModeList_VGA), MODE_SPAN(ModeList_VGA_Text_200lines),
+ MODE_SPAN(ModeList_VGA_Text_350lines), MODE_SPAN(ModeList_VGA_Tseng),
+ MODE_SPAN(ModeList_VGA_Paradise), MODE_SPAN(ModeList_EGA_200),
+ MODE_SPAN(ModeList_EGA), MODE_SPAN(ModeList_JEGA), MODE_SPAN(ModeList_OTHER),
+ MODE_SPAN(ModeList_MCGA), {&Hercules_Mode,1}, {&PC98_Mode,1},
+ MODE_SPAN(ModeList_DOSV), MODE_SPAN(ModeList_DOSV_SVGA),
+ MODE_SPAN(ModeList_DOSV_XGA), MODE_SPAN(ModeList_DOSV_XGA_24),
+ MODE_SPAN(ModeList_DOSV_SXGA), MODE_SPAN(ModeList_DOSV_SXGA_24),
+ MODE_SPAN(ModeList_DOSV_XGA_S3), MODE_SPAN(ModeList_DOSV_XGA_24_S3),
+ MODE_SPAN(ModeList_DOSV_SXGA_S3), MODE_SPAN(ModeList_DOSV_SXGA_24_S3)
+};
+#undef MODE_SPAN
+static VideoModeBlock detached_checkpoint_mode;
+}
+void POD_Save_Int10_Modes(std::ostream &stream) {
+ uint32_t table=0,index=0;
+ for (uint32_t t=0;t<sizeof(mode_spans)/sizeof(mode_spans[0]);++t) {
+  const auto &span=mode_spans[t];
+  for (uint32_t i=0;i<span.count;++i)
+   if (CurMode==span.data+i) {table=t+1;index=i;}
+  stream.write(reinterpret_cast<const char*>(span.data),sizeof(VideoModeBlock)*span.count);
+ }
+ // 0 null; table-count+1 detached value held by destination, not a source ptr.
+ if (CurMode && !table) table=sizeof(mode_spans)/sizeof(mode_spans[0])+1;
+ WRITE_POD(&table,table); WRITE_POD(&index,index);
+ if (table==sizeof(mode_spans)/sizeof(mode_spans[0])+1) WRITE_POD(CurMode,*CurMode);
+}
+void POD_Load_Int10_Modes(std::istream &stream) {
+ for (const auto &span:mode_spans)
+  stream.read(reinterpret_cast<char*>(span.data),sizeof(VideoModeBlock)*span.count);
+ uint32_t table=0,index=0;
+ READ_POD(&table,table); READ_POD(&index,index);
+ const uint32_t count=sizeof(mode_spans)/sizeof(mode_spans[0]);
+ if (!stream || table>count+1 || (table && table<=count && index>=mode_spans[table-1].count) ||
+     ((!table || table==count+1) && index)) {
+  stream.setstate(std::ios::failbit);return;
+ }
+ if (!table) {CurMode=nullptr;return;}
+ if (table==count+1) {
+  READ_POD(&detached_checkpoint_mode,detached_checkpoint_mode);
+  if (stream) CurMode=&detached_checkpoint_mode;
+ } else CurMode=mode_spans[table-1].data+index;
+}

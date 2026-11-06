@@ -5,7 +5,7 @@
 // native >=24bpp writes only xlat32; low-depth writes both (with a different
 // 32-bit packing rule). Unwritten entries remain explicit, not opaque host bits.
 struct VGA_AppliedPalette {
-    struct Color { uint8_t red=0,green=0,blue=0; bool valid=false; bool low_depth=false; };
+    struct Color { uint8_t red=0,green=0,blue=0; uint8_t valid=0; uint8_t low_depth=0; };
     Color narrow[256]{},wide[256]{};
     // Destination packing only. No palette I/O/render calls, register changes,
     // deferred-update delivery or ticks. Both banks retain independent history.

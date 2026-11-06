@@ -48,6 +48,9 @@ public:
 	const uint16_t* codepage_ptr; // pointer to the translation codepage if not null
 
 	bool OpenFile();
+    void SaveContinuation(std::ostream &stream) const;
+    void LoadContinuation(std::istream &stream);
+    bool imported_silent_close = false;
 	
 	bool ack_polarity = false;
 

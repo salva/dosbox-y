@@ -26,6 +26,13 @@
 #include "pic.h"
 #include "hardware.h" //OpenCaptureFile
 #include <stdio.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#if defined(WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "printer_charmaps.h"
 #if defined(WIN32)
@@ -123,6 +130,107 @@ CFileLPT::CFileLPT (Bitu nr, uint8_t initIrq, CommandLine* cmd, bool sq)
 
 char bufput[105];
 int bufct = 0;
+
+void CFileLPT::SaveContinuation(std::ostream &stream) const {
+    // Capture is observational; only regular open streams can be rebound.
+    // Action strings are native bindings, never executed during import/disposal.
+    struct stat st{};
+    if (bufct<0 || bufct>100 ||
+        (fileOpen && (!file || fstat(fileno(file),&st) || !S_ISREG(st.st_mode)))) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    uint32_t cp=0;
+    for (unsigned i=0;charmap[i].codepage;++i)
+        if (codepage_ptr==charmap[i].map) cp=charmap[i].codepage;
+    if (codepage_ptr && !cp) {stream.setstate(std::ios::failbit);return;}
+    writePOD(stream,filetype);writePOD(stream,base);writePOD(stream,irq);
+    writePOD(stream,timeout);writePOD(stream,addFF);writePOD(stream,addLF);
+    writeString(stream,action1);writeString(stream,action2);
+    writeString(stream,action3);writeString(stream,action4);
+    writePOD(stream,cp);writePOD(stream,fileOpen);
+    writeString(stream,fileOpen && filetype==FILE_CAPTURE ? pathprt : name);
+    writePOD(stream,datareg);writePOD(stream,controlreg);writePOD(stream,autofeed);
+    writePOD(stream,ack);writePOD(stream,ack_polarity);writePOD(stream,lastChar);
+    writePOD(stream,lastUsedTick);writePOD(stream,bufct);
+    stream.write(bufput,sizeof(bufput));
+}
+
+void CFileLPT::LoadContinuation(std::istream &stream) {
+    DFTYPE kind{};Bitu address=0,line=0;unsigned idle=0;bool ff=false,lf=false;
+    readPOD(stream,kind);readPOD(stream,address);readPOD(stream,line);
+    readPOD(stream,idle);readPOD(stream,ff);readPOD(stream,lf);
+    if (!stream || kind!=filetype || address!=base || line!=irq || idle!=timeout ||
+        ff!=addFF || lf!=addLF) {stream.setstate(std::ios::failbit);return;}
+    std::string actions[4];
+    for (auto &action:actions) readString(stream,action);
+    if (!stream || actions[0]!=action1 || actions[1]!=action2 ||
+        actions[2]!=action3 || actions[3]!=action4) {stream.setstate(std::ios::failbit);return;}
+    uint32_t cp=0;bool opened=false;std::string target;
+    readPOD(stream,cp);readPOD(stream,opened);readString(stream,target);
+    const uint16_t *translation=nullptr;
+    for (unsigned i=0;charmap[i].codepage;++i)
+        if (cp==charmap[i].codepage) translation=charmap[i].map;
+    if (!stream || (cp && !translation) || fileOpen || file ||
+        (filetype!=FILE_CAPTURE && target!=name)) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    readPOD(stream,datareg);readPOD(stream,controlreg);readPOD(stream,autofeed);
+    readPOD(stream,ack);readPOD(stream,ack_polarity);readPOD(stream,lastChar);
+    readPOD(stream,lastUsedTick);readPOD(stream,bufct);
+    stream.read(bufput,sizeof(bufput));
+    if (!stream || bufct<0 || bufct>100) {stream.setstate(std::ios::failbit);return;}
+    codepage_ptr=translation;
+    if (opened) {
+        // Never create/truncate/replay or rewind host content. Output streams
+        // continue at current EOF; source and destination independently close.
+        struct stat st{};
+        if (stat(target.c_str(),&st) || !S_ISREG(st.st_mode)) {
+            stream.setstate(std::ios::failbit);return;
+        }
+        int flags=O_RDWR|O_APPEND;
+#if defined(WIN32)
+        flags|=O_BINARY;
+#else
+        flags|=O_NONBLOCK;
+#endif
+        const int fd=open(target.c_str(),flags);
+        if (fd<0) {stream.setstate(std::ios::failbit);return;}
+        if (fstat(fd,&st) || !S_ISREG(st.st_mode)) {
+            close(fd);stream.setstate(std::ios::failbit);return;
+        }
+        FILE *bound=fdopen(fd,"ab+");
+        if (!bound) {close(fd);stream.setstate(std::ios::failbit);return;}
+        if (fseek(bound,0,SEEK_END)) {
+            fclose(bound);stream.setstate(std::ios::failbit);return;
+        }
+        setbuf(bound,nullptr);file=bound;fileOpen=true;imported_silent_close=true;
+        if (filetype==FILE_CAPTURE) pathprt=target;
+    }
+}
+
+namespace {
+class SerializeFileLPT : public SaveState::Component {
+public:
+ SerializeFileLPT() {SaveState::instance().registerComponent("FileLPT",*this);}
+ void getBytes(std::ostream &stream) override {
+  for (unsigned i=0;i<9;++i) {
+   auto *port=dynamic_cast<CFileLPT*>(parallelPortObjects[i]);
+   const bool present=port!=nullptr;writePOD(stream,present);
+   if (port) port->SaveContinuation(stream);
+  }
+ }
+ void setBytes(std::istream &stream) override {
+  for (unsigned i=0;i<9;++i) {
+   auto *port=dynamic_cast<CFileLPT*>(parallelPortObjects[i]);bool present=false;
+   readPOD(stream,present);
+   if (!stream || present!=(port!=nullptr)) {stream.setstate(std::ios::failbit);return;}
+   if (port) port->LoadContinuation(stream);
+   if (!stream) return;
+  }
+ }
+} serializeFileLPT;
+}
+
 static char sig1PCL[] = "\x1b%-12345X@", sig2PCL[] = "\x1b\x45", sigPS[] = "\n%!";
 void CFileLPT::doAction() {
     if (action1.size()||action2.size()||action3.size()) {
@@ -211,7 +319,7 @@ CFileLPT::~CFileLPT () {
 		file = nullptr;
 		lastChar = 0;
 		fileOpen=false;
-		doAction();
+		if (!imported_silent_close) doAction();
 	}
 	// remove tick handler
 	removeEvent(0);
@@ -247,7 +355,8 @@ bool CFileLPT::OpenFile() {
 
 
 bool CFileLPT::Putchar(uint8_t val)
-{	
+{
+    imported_silent_close = false;
 #if PARALLEL_DEBUG
 	log_par(dbg_putchar,"putchar  0x%2x",val);
 	if(dbg_plainputchar) fprintf(debugfp,"%c",val);
