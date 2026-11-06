@@ -20,6 +20,8 @@ consumers = os.environ.get('DOSBOX_TEST_CONSUMERS', producer).split(os.pathsep)
 assert all(consumers)
 # Prefix steps are explicit guest execution in the producer, before capture.
 cases = (
+    ('floppy-held', {'DOSBOX_TEST_FLOPPY':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('font-held', {'DOSBOX_TEST_FONT':'1','DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
      '0814:0201', 'code=42 resident=0 self-parent=0'),
     ('ah86-held', {'DOSBOX_TEST_AH86':'1','DOSBOX_TEST_AH86_ACTIVE':'1',
@@ -141,6 +143,9 @@ consumer_policy = ({'DOSBOX_TEST_CAPTURE_POLICY': '1'}
                    if os.environ.get('DOSBOX_TEST_CAPTURE_POLICY') else {})
 print(work, flush=True)
 selected = os.environ.get('DOSBOX_TEST_CASES', '').split(',') if os.environ.get('DOSBOX_TEST_CASES') else []
+# Known failing prior-core media regression is opt-in, never silently accepted.
+if not selected:
+    cases = tuple(case for case in cases if case[0] != 'floppy-held')
 if selected:
     assert set(selected) <= {case[0] for case in cases}, selected
     cases = tuple(case for case in cases if case[0] in selected)

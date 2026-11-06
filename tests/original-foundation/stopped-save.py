@@ -37,6 +37,15 @@ if os.environ.get('DOSBOX_TEST_INT27'):
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm'),('MOUSE','fresh-mouse.asm')):
  if os.environ.get('DOSBOX_TEST_'+option):
   subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),*(['-DVESA_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_VESA_SERVICE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_FLOPPY'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-floppy.asm')),'-o',str(w/'TINY.COM')],check=True)
+ image=bytearray(1440*1024)
+ # Small valid FAT12 medium; sector signature is the guest witness.
+ image[:11]=b'\xeb\x3c\x90DOSBOXY '
+ struct.pack_into('<HBHBHHBHHHII',image,11,512,1,1,2,224,2880,0xf0,9,18,2,0,0)
+ image[510:512]=b'\x55\xaa'
+ for offset in (512,5120): image[offset:offset+3]=b'\xf0\xff\xff'
+ (w/'floppy.img').write_bytes(image)
 if os.environ.get('DOSBOX_TEST_FONT'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-font.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_KEYBOARD_D1'):
@@ -86,6 +95,8 @@ def run():
  flag_command = 'flagsave FLAG.TXT\n' if flagged else ''
  conf=d/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[autoexec]\nmount c {w}\nc:\n{flag_command}debugbox TINY.COM\n')
  # Exercise represented geometry/timing, not just the default 16MB/3000 case.
+ if os.environ.get('DOSBOX_TEST_FLOPPY'):
+  conf.write_text(conf.read_text().replace('debugbox TINY.COM',f'imgmount a {w}/floppy.img -t floppy\ndebugbox TINY.COM'))
  if os.environ.get('DOSBOX_TEST_MEMSIZE'):
   memory=int(os.environ['DOSBOX_TEST_MEMSIZE'])
   assert 1 <= memory <= 256

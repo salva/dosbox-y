@@ -113,6 +113,38 @@ not merely a binary build. Root matrix now has40 cases including font-held;
 the full39-case run above predates that added case, which was run separately.
 `DOSBOX_TEST_MEMSIZE` now propagates to producer and matching fresh consumer.
 
+## Reproduced prior-core media defect requiring owner coordination
+
+Opt-in `DOSBOX_TEST_CASES=floppy-held` is a **known failing regression**, not a
+qualified41st matrix case. `fresh-floppy.asm` reads a generated valid FAT12
+1.44MB medium through INT13, holds a real DMA buffer at IP0200, and intends to
+verify saved bytes plus a current-medium read after explicit continuation.
+Generation is deterministic BPB/FAT/signature data, no checked-in disk image.
+On engine10 source70bbe/2d77, proc-a78e949881d0/run-ik_uiw24 captures successfully
+then fails its unchanged-Dos assertion; archive producer run-l8x4lkoh retained.
+The generated image is valid FAT12 per actual emulator log. Earlier nonformatted
+fixture proc-ba4b18897250/run-jlftmqa2 also failed, superseded only as fixture input.
+
+Exact source finding: `src/dos/dos_files.cpp:2642` global `Opts opts` is reused
+across drive and BIOS image records. `POD_Save_DOS_Files` writes it for local
+Drives before the later BIOS image loop assigns geometry. Subsequent saves thus
+serialize previous-save geometry into unrelated local-drive records. First versus
+post-refusal `Dos` differences at offsets66396..66415 and69800..69819 encode
+512/18/2/80/mediaf0 rather than zero, with no guest advance. This is capture scratch
+state leakage, not a justified host-content mutation or relaxed byte oracle.
+
+A separate fresh attempt from that first archive fails safely before evaluator:
+proc-904de828d3d2, fresh-native-entry/run-z3ybbeeq/native.log (actual filename
+see run directory), `Cannot restore save-state BIOS disk image`, after FAT12 drive
+construction. That command's final tail exit0 **does not make restore pass**;
+Python raises bridge EOF. The earlier malformed-medium attempt proc-e0a0de55daea
+also failed. No installed target was continued. Archive/source preserved.
+BIOS-loop reconstruction still needs root-cause resolution; no claim that fixing
+scratch-state leakage alone fixes attachment. This is the prior-core DOS media
+codec/attachment path covered by the accepted coordination restriction. Request
+its owner to repair or explicitly coordinate delegation before changing it.
+Do not weaken unchanged-owner assertions or hide the failing case.
+
 ## Remaining scope, not acceptance by mapping
 
 Finite map/ledger is a work aid, not line-by-line runtime certification. IDE's
