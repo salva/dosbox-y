@@ -1272,6 +1272,29 @@ void MIXER_Init() {
 void *MIXER_Mix_PIC_Timer = (void*)((uintptr_t)MIXER_Mix);
 
 
+#define MIXER_CONTINUATION_FIELDS(F) \
+ F(lowpass) F(lowpass_alpha) F(lowpass_freq) F(lowpass_order) \
+ F(freq_f) F(freq_fslew) F(freq_nslew) F(freq_nslew_want) \
+ F(rendering_to_n) F(rendering_to_d) F(rend_n) F(rend_d) \
+ F(freq_n) F(freq_d) F(freq_d_orig) F(current) F(last) F(delta) \
+ F(max_change) F(msbuffer) F(last_sample_write) F(msbuffer_o) F(msbuffer_i)
+
+static bool MixerContinuationValid(const MixerChannel &c)
+{
+ return c.freq_n && c.freq_d && c.freq_d_orig && c.freq_nslew &&
+  c.lowpass_order<=LOWPASS_ORDER && c.msbuffer_i<=c.msbuffer_o &&
+  c.msbuffer_o<=2048 && c.rend_n<=2048 && c.rendering_to_n<=2048;
+}
+
+static void MixerReadBool(std::istream &stream,bool &value)
+{
+ unsigned char byte=0;
+ static_assert(sizeof(bool)==1,"native bool framing");
+ stream.read(reinterpret_cast<char *>(&byte),1);
+ if (!stream || byte>1) {stream.setstate(std::ios::failbit);return;}
+ value=byte!=0;
+}
+
 void MixerChannel::SaveState( std::ostream& stream )
 {
 	// - pure data
@@ -1280,6 +1303,13 @@ void MixerChannel::SaveState( std::ostream& stream )
 	WRITE_POD( &volmul, volmul );
 	//WRITE_POD( &freq_add, freq_add );
 	WRITE_POD( &enabled, enabled );
+    if (!MixerContinuationValid(*this)) {stream.setstate(std::ios::failbit);return;}
+#define SAVE_FIELD(field) WRITE_POD(&field,field);
+    MIXER_CONTINUATION_FIELDS(SAVE_FIELD)
+#undef SAVE_FIELD
+    WRITE_POD(&lowpass_on_load,lowpass_on_load);
+    WRITE_POD(&lowpass_on_out,lowpass_on_out);
+    WRITE_POD(&current_loaded,current_loaded);
 }
 
 
@@ -1300,6 +1330,18 @@ void MixerChannel::LoadState( std::istream& stream )
 		stream.setstate(std::istream::failbit);
 		return;
 	}
+    // Owner-local stage retains native handler/name/list identity.
+    MixerChannel next=*this;
+#define LOAD_FIELD(field) READ_POD(&next.field,next.field);
+    MIXER_CONTINUATION_FIELDS(LOAD_FIELD)
+#undef LOAD_FIELD
+    MixerReadBool(stream,next.lowpass_on_load);
+    MixerReadBool(stream,next.lowpass_on_out);
+    MixerReadBool(stream,next.current_loaded);
+    if (!stream || !MixerContinuationValid(next)) {
+        stream.setstate(std::ios::failbit);return;
+    }
+    *this=next;
 	for (unsigned i = 0; i < 2; ++i) {
 		volmain[i] = incoming_volmain[i];
 		scale[i] = incoming_scale[i];
@@ -1311,10 +1353,9 @@ void MixerChannel::LoadState( std::istream& stream )
 	//********************************************
 	//********************************************
 
-	// reset mixer channel (system data)
-	mixer.pos = 0;
-	mixer.done = 0;
+	// Global accumulation has separate owner traversal; never reset it per channel.
 }
+#undef MIXER_CONTINUATION_FIELDS
 
 extern void POD_Save_Adlib(std::ostream& stream);
 extern void POD_Save_Disney(std::ostream& stream);
@@ -1335,6 +1376,24 @@ extern void POD_Load_Tandy_Sound(std::istream& stream);
 
 namespace
 {
+// Quiesce the local SDL consumer without importing/draining its native queue.
+class MixerStateLock {
+public:
+    MixerStateLock() {
+#ifdef C_SDL2
+        if (SDL2_AudioDevice) SDL_LockAudioDevice(SDL2_AudioDevice);
+#else
+        SDL_LockAudio();
+#endif
+    }
+    ~MixerStateLock() {
+#ifdef C_SDL2
+        if (SDL2_AudioDevice) SDL_UnlockAudioDevice(SDL2_AudioDevice);
+#else
+        SDL_UnlockAudio();
+#endif
+    }
+};
 class SerializeMixer : public SerializeGlobalPOD
 {
 public:
@@ -1348,7 +1407,13 @@ private:
 		//*************************************************
 		//*************************************************
 
+		MixerStateLock lock;
 		SerializeGlobalPOD::getBytes(stream);
+#define SAVE_MIXER(field) WRITE_POD(&mixer.field,mixer.field);
+        SAVE_MIXER(work) SAVE_MIXER(work_in) SAVE_MIXER(work_out) SAVE_MIXER(work_wrap)
+        SAVE_MIXER(pos) SAVE_MIXER(done) SAVE_MIXER(last_dac) SAVE_MIXER(dc_adj)
+        SAVE_MIXER(samples_this_ms) SAVE_MIXER(samples_rendered_ms)
+#undef SAVE_MIXER
 
 
 		POD_Save_Adlib(stream);
@@ -1367,7 +1432,15 @@ private:
 		//*************************************************
 		//*************************************************
 
+		MixerStateLock lock;
 		SerializeGlobalPOD::setBytes(stream);
+#define LOAD_MIXER(field) READ_POD(&mixer.field,mixer.field);
+        LOAD_MIXER(work) LOAD_MIXER(work_in) LOAD_MIXER(work_out) LOAD_MIXER(work_wrap)
+        LOAD_MIXER(pos) LOAD_MIXER(done) LOAD_MIXER(last_dac) LOAD_MIXER(dc_adj)
+        LOAD_MIXER(samples_this_ms) LOAD_MIXER(samples_rendered_ms)
+#undef LOAD_MIXER
+        if (!stream || mixer.work_in>=MIXER_BUFSIZE || mixer.work_out>=MIXER_BUFSIZE ||
+            mixer.work_wrap>MIXER_BUFSIZE) {stream.setstate(std::ios::failbit);return;}
         if (!stream) return;
 
         POD_Load_Adlib(stream);
@@ -1387,9 +1460,7 @@ private:
         POD_Load_Tandy_Sound(stream);
         if (!stream) return;
 
-		// reset mixer channel (system data)
-		mixer.pos = 0;
-		mixer.done = 0;
+        // Keep restored guest-time accumulation; SDL queue remains destination-local.
 	}
 
 } dummy;
