@@ -15,7 +15,20 @@ DOSBOX_TEST_FILELPT_FLAGS='addLF addFF cp:437'` and the usual Lua binary env.
 Interactive/Bridge, RPC stop conditions, full Lua production runtime and
 FileLPT99/cp437 on engine21 binaries. Full output retained at
 `work:///cards/card-n-c-l-a/processes/proc-66bf2b191bf2/stdout.log`.
-These do not certify nonregular/disposal/multiport/Windows behavior.
+These do not certify multiport/Windows behavior.
+
+Actual missing/FIFO/directory target refusals are now exercised by
+`DOSBOX_TEST_FILELPT_REFUSAL=missing|fifo|directory filelpt-restore.py` with the
+same binary env. `proc-17ad4237f638` && exit0 preserves producer bytes under a
+separate test-owned pathname, verifies no replacement creation or modification,
+nonzero FileLPT install failure, terminated process, closed control transport and
+unchanged source archive. DEBUG_Init connects the control transport before
+installation; it is not a published usable evaluator. Initial
+`proc-4fef622afc22` failed a too-strong no-connection assertion on this same
+missing-target route; its native log shows the correct FileLPT install failure,
+not successful restore. Corrected assertion observes terminal/closed transport,
+not absence of initialized transport. No production change was needed for these
+refusals. This does not prove every late cleanup failure or every resource close.
 
 ## Delivered owner state
 

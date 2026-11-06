@@ -120,6 +120,29 @@ def request(ident,command,accepted=True):
  assert f'BEGIN {ident} {"OK" if accepted else "ERR"}\n'.encode() in out,out
  return out
 try:
+ if os.environ.get('DOSBOX_TEST_RESTORE_REFUSAL'):
+  assert p.wait(timeout=25)!=0
+  text=(w/'native.log').read_text(errors='replace')
+  assert 'FileLPT' in text,text[-4000:]
+  assert hashlib.sha256(archive.read_bytes()).hexdigest()==before
+  listener.setblocking(False)
+  try:
+   transport,_=listener.accept()
+  except BlockingIOError:pass
+  else:
+   # DEBUG_Init opens the control transport before installation; this is
+   # not publication of a usable restored evaluator. It must now be closed.
+   transport.settimeout(2)
+   chunks=b''
+   while True:
+    chunk=transport.recv(65536)
+    if not chunk:break
+    chunks+=chunk
+   transport.close()
+   assert b'BEGIN ' not in chunks,chunks
+  assert 'failed during installation' in text,text[-4000:]
+  print(w,'FileLPT refusal terminated startup; transport closed; archive unchanged')
+  raise SystemExit(0)
  conn,_=listener.accept()
  time.sleep(3)
  if os.environ.get('DOSBOX_TEST_LIVE_REFUSAL'):

@@ -15,8 +15,25 @@ assert target.read_bytes()==b'current host prefix:'+b'A'*int(os.environ.get('DOS
 with target.open('ab') as f:f.write(b'EXTERNAL')
 before=target.read_bytes()
 env.update(DOSBOX_TEST_ARCHIVE=str(base/'first.sav'),DOSBOX_TEST_STEP_IP='0814:0201',DOSBOX_TEST_ROOT_EXIT='1',DOSBOX_TEST_ROOT_FACTS='code=42 resident=0 self-parent=0')
+refusal=os.environ.get('DOSBOX_TEST_FILELPT_REFUSAL')
+if refusal:
+ assert refusal in ('missing','fifo','directory')
+ # Preserve unique producer output; replace only this task-owned target.
+ target.rename(base/'printed-preserved.prt')
+ if refusal=='fifo':os.mkfifo(target)
+ elif refusal=='directory':target.mkdir()
+ env['DOSBOX_TEST_RESTORE_REFUSAL']='1'
 p=subprocess.run(['python3',str(here/'fresh-startup.py')],env=env,capture_output=True,text=True)
 (w/'restore.log').write_text(p.stdout+p.stderr);p.check_returncode()
+if refusal:
+ assert (base/'printed-preserved.prt').read_bytes()==before
+ if refusal=='missing':assert not target.exists()
+ elif refusal=='fifo':
+  import stat
+  assert stat.S_ISFIFO(target.stat().st_mode)
+ else:assert target.is_dir() and not list(target.iterdir())
+ print('FileLPT '+refusal+' startup refusal/closed transport/no host mutation PASS')
+ raise SystemExit(0)
 assert target.read_bytes()==before+b'X\n'+(b'\x0c' if os.environ.get('DOSBOX_TEST_FILELPT_WAIT') and 'addFF' in env.get('DOSBOX_TEST_FILELPT_FLAGS','') else b''),target.read_bytes()
 if os.environ.get('DOSBOX_TEST_FILELPT_ACTION'):
  assert (w/'action-ran').exists(),list(w.iterdir())
