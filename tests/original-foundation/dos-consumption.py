@@ -31,6 +31,11 @@ struct {uint16_t current=0x200;uint16_t psp(){return current;}uint16_t firstMCB=
 char dos_copybuf[32]={};uint16_t countryNo=1;int lfn_filefind_handle=0,bootdrive=3;
 bool uselfn=false;
 bool dos_kernel_disabled=false;
+// Native binding/HMA owners have their own full-consumer probes. Keep them
+// admitted and byte-neutral here to isolate this codec's scalar/resource cuts.
+struct NativeDOS {bool NativeCallbacksIntact(){return true;}} native_dos;
+NativeDOS *test=&native_dos;
+void DOS_HMAState(std::ostream*,std::istream*) {}
 namespace RestoredSession {bool validRoot(uint16_t root,bool){return root==dos.psp();}}
 int resources=0;
 #define RESOURCE(name) void POD_Save_DOS_##name(std::ostream &s){s.put('x');}\

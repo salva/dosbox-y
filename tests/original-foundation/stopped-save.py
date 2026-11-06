@@ -37,6 +37,14 @@ if os.environ.get('DOSBOX_TEST_INT27'):
 for option,fixture in (('SPEAKER','fresh-speaker.asm'),('VIDEO','fresh-video.asm'),('KEYBOARD','fresh-keyboard.asm'),('MOUSE','fresh-mouse.asm')):
  if os.environ.get('DOSBOX_TEST_'+option):
   subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_'+option+'_ACTIVE') else []),*(['-DVESA_SERVICE'] if option=='VIDEO' and os.environ.get('DOSBOX_TEST_VESA_SERVICE') else []),str(pathlib.Path(__file__).with_name(fixture)),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_KEYBOARD_D1'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-keyboard-d1.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_GAMEPORT'):
+ subprocess.run(['nasm','-f','bin',*(['-DTIMED'] if os.environ['DOSBOX_TEST_GAMEPORT']=='timed' else []),str(pathlib.Path(__file__).with_name('fresh-gameport.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_AH86'):
+ subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_AH86_ACTIVE') else []),str(pathlib.Path(__file__).with_name('fresh-ah86.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_PAUSE'):
+ subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-pause.asm')),'-o',str(w/'TINY.COM')],check=True)
 slot_mode=bool(os.environ.get('DOSBOX_TEST_SLOT'))
 file_state = bool(os.environ.get('DOSBOX_TEST_FILE_STATE'))
 unsupported_devices = bool(os.environ.get('DOSBOX_TEST_UNSUPPORTED_DEVICES'))
@@ -98,6 +106,9 @@ def run():
   conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nfpu='+os.environ['DOSBOX_TEST_FPU']+'\n'))
  if os.environ.get('DOSBOX_TEST_AUDIO'):
   conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
+ if os.environ.get('DOSBOX_TEST_GAMEPORT'):
+  assert os.environ['DOSBOX_TEST_GAMEPORT'] in ('timed','untimed')
+  conf.write_text(conf.read_text()+'\n[joystick]\njoysticktype=logical\ntimed='+str(os.environ['DOSBOX_TEST_GAMEPORT']=='timed').lower()+'\n')
  if os.environ.get('DOSBOX_TEST_BASIC_ROM'):
   rom=w/'BASIC.ROM';rom.write_bytes(bytes([0x90])*32768)
   conf.write_text(conf.read_text().replace('[dosbox]\n',f'[dosbox]\nibm rom basic={rom}\n'))

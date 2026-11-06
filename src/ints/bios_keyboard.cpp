@@ -50,6 +50,7 @@ extern bool kana_input;
 extern Bitu BIOS_PC98_KEYBOARD_TRANSLATION_LOCATION;
 
 static Bitu call_int16 = 0,call_irq1 = 0,irq1_ret_ctrlbreak_callback = 0,call_irq6 = 0,call_irq_pcjr_nmi = 0,call_int48_pcjr = 0;
+static Bitu irq1_pause_callback = 0;
 static uint8_t fep_line = 0x01;
 
 /* Nice table from BOCHS i should feel bad for ripping this */
@@ -709,8 +710,13 @@ static Bitu IRQ1_Handler(void) {
                 /* normal pause key, enter loop */
                 mem_writeb(BIOS_KEYBOARD_FLAGS2,flags2|8);
                 IO_Write(0x20,0x20);
-                while (mem_readb(BIOS_KEYBOARD_FLAGS2)&8) CALLBACK_Idle();  // pause loop
-                reg_ip+=5;  // skip out 20,20
+                if (machine==MCH_VGA) {
+                    SegSet16(cs,RealSeg(CALLBACK_RealPointer(irq1_pause_callback)));
+                    reg_ip=RealOff(CALLBACK_RealPointer(irq1_pause_callback));
+                } else {
+                    while (mem_readb(BIOS_KEYBOARD_FLAGS2)&8) CALLBACK_Idle();
+                    reg_ip+=5; // skip out 20,20
+                }
                 return CBRET_NONE;
             }
         } else {
@@ -1597,6 +1603,15 @@ extern bool startup_state_numlock;
 extern bool startup_state_capslock;
 extern bool startup_state_scrlock;
 
+static Bitu IRQ1_Pause(void) {
+    if (!(mem_readb(BIOS_KEYBOARD_FLAGS2)&8)) {
+        // EOI was issued on entry; finish at POP AX / IRET, not a second EOI.
+        SegSet16(cs,RealSeg(BIOS_DEFAULT_IRQ1_LOCATION));
+        reg_ip=RealOff(BIOS_DEFAULT_IRQ1_LOCATION)+0x13;
+    }
+    return CBRET_NONE;
+}
+
 static void InitBiosSegment(void) {
     if (IS_PC98_ARCH) {
         mem_writew(0x524/*tail*/,0x502);
@@ -1639,6 +1654,10 @@ void BIOS_UnsetupKeyboard(void) {
         CALLBACK_DeAllocate(call_irq1);
         call_irq1 = 0;
     }
+    if (irq1_pause_callback != 0) {
+        CALLBACK_DeAllocate(irq1_pause_callback);
+        irq1_pause_callback=0;
+    }
     if (call_irq_pcjr_nmi != 0) {
         CALLBACK_DeAllocate(call_irq_pcjr_nmi);
         call_irq_pcjr_nmi = 0;
@@ -1676,6 +1695,10 @@ void BIOS_SetupKeyboard(void) {
     }
 
     call_irq1=CALLBACK_Allocate();
+    if (machine==MCH_VGA) {
+        irq1_pause_callback=CALLBACK_Allocate();
+        CALLBACK_Setup(irq1_pause_callback,&IRQ1_Pause,CB_IRQ1_PAUSE,"IRQ 1 Pause");
+    }
     if (machine == MCH_PCJR) { /* PCjr keyboard interrupt connected to NMI */
         uint32_t a;
  

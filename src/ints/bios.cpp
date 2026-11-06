@@ -6934,7 +6934,28 @@ unsigned char KEYBOARD_AUX_SampleRate();
 void KEYBOARD_ClrBuffer(void);
 void KEYBOARD_AUX_LowerIRQ();
 
+extern unsigned int last_callback;
 static Bitu INT15_Handler(void) {
+    // Direct/APM calls retain synchronous semantics; only our real-mode vector
+    // stub owns guest wait/reentry. Never mistake a guest hook for that stub.
+    const bool vector_stub = !cpu.pmode && !(reg_flags & FLAG_VM) &&
+        SegValue(cs)==CB_SEG && last_callback<CB_MAX &&
+        CallBack_Handlers[last_callback]==INT15_Handler &&
+        CALLBACK_GetDescription(last_callback) &&
+        !strcmp(CALLBACK_GetDescription(last_callback),"Int 15 Bios");
+    const uint16_t stub = vector_stub ? RealOff(CALLBACK_RealPointer(last_callback)) : 0;
+    if (vector_stub && reg_eip==uint16_t(stub+13)) {
+        if (mem_readd(BIOS_WAIT_FLAG_COUNT)) {
+            if (int15_wait_force_unmask_irq) {
+                IO_Write(0x21,IO_Read(0x21) & ~4u);
+                IO_Write(0xa1,IO_Read(0xa1) & ~1u);
+            }
+        } else {
+            CALLBACK_SCF(false);
+            reg_eip=uint16_t(stub+4);
+        }
+        return CBRET_NONE;
+    }
     if( ( machine==MCH_AMSTRAD ) && ( reg_ah<0x07 ) ) {
         switch(reg_ah) {
             case 0x00:
@@ -7117,6 +7138,12 @@ static Bitu INT15_Handler(void) {
             /* Reprogram RTC to start */
             IO_Write(0x70,0xb);
             IO_Write(0x71,IO_Read(0x71)|0x40);
+            if (vector_stub && reg_eip==uint16_t(stub+4) &&
+                mem_readd(BIOS_WAIT_FLAG_COUNT)) {
+                // Setup once; completion never reloads CX:DX or restarts RTC.
+                reg_eip=uint16_t(stub+9);
+                return CBRET_NONE;
+            }
             while (mem_readd(BIOS_WAIT_FLAG_COUNT)) {
                 if (int15_wait_force_unmask_irq) {
                     /* make sure our wait function works by unmasking IRQ 2, and IRQ 8.
@@ -12647,7 +12674,7 @@ public:
         callback[3].Install(&INT14_Handler,CB_IRET_STI,"Int 14 COM-port");
 
         /* INT 15 Misc Calls */
-        callback[4].Install(&INT15_Handler,CB_IRET,"Int 15 Bios");
+        callback[4].Install(&INT15_Handler,CB_INT15,"Int 15 Bios");
 
         /* INT 17 Printer Routines */
         callback[5].Install(&INT17_Handler,CB_IRET_STI,"Int 17 Printer");

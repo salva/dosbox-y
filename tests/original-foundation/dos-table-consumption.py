@@ -56,8 +56,10 @@ int main(){
  assert(DOS_TableUpCase==9 && dos.tables.mediaid==1 && call_casemap==12);
  auto bad=bytes;bad[bad.size()-sizeof(dos_memseg)-sizeof(country_info)+0x12]^=1;assert(!load(bad));
  dos_memseg=0xd001;assert(!load(save()));dos_memseg=0xc7ff;assert(!load(save()));
- dos_memseg=0xc901;assert(load(bytes) && dos_memseg==0xc900);
- assert(load(bytes));
+ // Matching native allocations require the exact next-free cursor, not just
+ // an in-arena value; a different value could overwrite a retained binding.
+ dos_memseg=0xc901;assert(!load(bytes) && dos_memseg==0xc901);
+ dos_memseg=0xc900;assert(load(bytes));
  for(unsigned n=0;n<5;++n){ram[code+n]^=1;assert(!load(bytes));
    std::ostringstream refused;POD_Save_DOS_Tables(refused);assert(!refused);
    ram[code+n]^=1;assert(load(bytes));}

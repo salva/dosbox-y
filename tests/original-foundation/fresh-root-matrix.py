@@ -20,6 +20,22 @@ consumers = os.environ.get('DOSBOX_TEST_CONSUMERS', producer).split(os.pathsep)
 assert all(consumers)
 # Prefix steps are explicit guest execution in the producer, before capture.
 cases = (
+    ('ah86-held', {'DOSBOX_TEST_AH86':'1','DOSBOX_TEST_AH86_ACTIVE':'1',
+                    'DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
+    ('pause-held', {'DOSBOX_TEST_PAUSE':'1', 'DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
+    ('ah86-service', {'DOSBOX_TEST_AH86':'1'},
+     '0814:0101', 'code=42 resident=0 self-parent=0'),
+    ('gameport-untimed', {'DOSBOX_TEST_GAMEPORT':'untimed',
+                          'DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
+    ('gameport-timed', {'DOSBOX_TEST_GAMEPORT':'timed',
+                        'DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
+    ('keyboard-d1-held', {'DOSBOX_TEST_KEYBOARD_D1':'1',
+                          'DOSBOX_TEST_CAPTURE_IP':'0814:0200'},
+     '0814:0201', 'code=42 resident=0 self-parent=0'),
     # Native service consumers after explicit continuation, not active-device
     # capture, waveform, rendered-frame or physical-input parity claims.
     ('ihseg-iret', {'DOSBOX_TEST_IHSEG':'1'},
@@ -122,6 +138,10 @@ for key in ('DOSBOX_TEST_AUTO_CYCLES', 'DOSBOX_TEST_HELD_DELAY'):
 consumer_policy = ({'DOSBOX_TEST_CAPTURE_POLICY': '1'}
                    if os.environ.get('DOSBOX_TEST_CAPTURE_POLICY') else {})
 print(work, flush=True)
+selected = os.environ.get('DOSBOX_TEST_CASES', '').split(',') if os.environ.get('DOSBOX_TEST_CASES') else []
+if selected:
+    assert set(selected) <= {case[0] for case in cases}, selected
+    cases = tuple(case for case in cases if case[0] in selected)
 for name, setup, ip, facts in cases:
     capture = subprocess.run(
         ['python3', str(here / 'stopped-save.py')],
@@ -141,7 +161,7 @@ for name, setup, ip, facts in cases:
         result = subprocess.run(
             ['python3', str(here / 'fresh-startup.py')],
             env=dict(env, **{key:value for key,value in setup.items()
-                             if key in ('DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS','DOSBOX_TEST_CLEAR_TF')},
+                             if key in ('DOSBOX_TEST_GAMEPORT','DOSBOX_TEST_XMS_HMA_HELD','DOSBOX_TEST_HMA_WITH_EMS','DOSBOX_TEST_CLEAR_TF')},
                      **({'DOSBOX_TEST_SEARCH_MATCHING_ENTRY': '1'}
                              if setup.get('DOSBOX_TEST_SEARCH_MATCHING_ENTRY') else {}),
                      **consumer_policy,

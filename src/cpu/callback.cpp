@@ -645,6 +645,36 @@ Bitu CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress, bool use_
 		}
 		phys_writeb(physAddress+0x00,(uint8_t)0xCF);		//An IRET Instruction
 		return (use_cb?0x0e:0x0a);
+    case CB_IRQ1_PAUSE:
+        // Guest-owned interruptible wait: no native Idle suffix survives.
+        if (!use_cb) E_Exit("IRQ1 Pause requires a callback");
+        phys_writeb(physAddress+0,0xfe);
+        phys_writeb(physAddress+1,0x38);
+        phys_writew(physAddress+2,(uint16_t)callback);
+        phys_writeb(physAddress+4,0x9c); // PUSHF
+        phys_writeb(physAddress+5,0xfb); // STI
+        phys_writeb(physAddress+6,0xf4); // HLT
+        phys_writeb(physAddress+7,0x9d); // POPF
+        phys_writeb(physAddress+8,0xeb);
+        phys_writeb(physAddress+9,0xf6); // recheck native latch
+        return 10;
+    case CB_INT15:
+        // AH86 setup/completion stays native; only wait/interrupt state is guest.
+        if (!use_cb) E_Exit("INT15 requires a callback");
+        phys_writeb(physAddress+0,0xfe);
+        phys_writeb(physAddress+1,0x38);
+        phys_writew(physAddress+2,(uint16_t)callback);
+        phys_writeb(physAddress+4,0xcf); // ordinary/final IRET
+        phys_writeb(physAddress+5,0x9c); // PUSHF
+        phys_writeb(physAddress+6,0xfb); // STI
+        phys_writeb(physAddress+7,0xf4); // HLT
+        phys_writeb(physAddress+8,0x9d); // POPF
+        phys_writeb(physAddress+9,0xfe);
+        phys_writeb(physAddress+10,0x38);
+        phys_writew(physAddress+11,(uint16_t)callback);
+        phys_writeb(physAddress+13,0xeb);
+        phys_writeb(physAddress+14,0xf6); // back to PUSHF
+        return 15;
 	case CB_INT16:
 		phys_writeb(physAddress+0x00,(uint8_t)0xFB);		//STI
 		if (use_cb) {

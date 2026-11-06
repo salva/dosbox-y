@@ -16,10 +16,12 @@ constexpr unsigned MSCDEX_MAX_DRIVES=8;
 struct TMSF {uint8_t min,sec,fr;};
 unsigned native_count=1,stops=0,plays=0,loads=0;
 unsigned GetNumDrives(){return native_count;}
-void StopAudio(unsigned){++stops;}
-struct CMscdex {uint16_t defaultBufSeg=0,rootDriverHeaderSeg=0;void LoadState(std::istream&);};
+bool StopAudio(unsigned){++stops;return true;}
+// Callback identity is tested by mscdex-callback-consumption.py.
+struct CMscdex {uint16_t defaultBufSeg=0,rootDriverHeaderSeg=0;
+ bool NativeCallbacksIntact(){return true;}void LoadState(std::istream&);};
 '''+binding+r'''
-struct Native {void PlayAudioMSF(unsigned,uint32_t,uint32_t){++plays;}
+struct Native {bool PlayAudioMSF(unsigned,uint32_t,uint32_t){++plays;return true;}
  void LoadState(std::istream&){++loads;}}native,*mscdex=&native;
 '''+codec+r'''
 std::string wire(uint16_t count,uint8_t playing=0,uint8_t second=0){
