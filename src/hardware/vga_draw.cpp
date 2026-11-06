@@ -337,9 +337,11 @@ static VGA_RawLine_Handler VGA_DrawRawLine;
 static uint8_t *TempLine = NULL;
 static unsigned int TempLineSize = 0;
 static float hretrace_fx_avg = 0;
+#include "vga_text_history.h"
 
 bool TempLineAlloc(unsigned int w) {
 	if (TempLine) return false;
+    TextHistoryForget();
 
 	TempLineSize = w * 4 + 1024;
 	if ((TempLine=(uint8_t*)calloc(1,TempLineSize)) == NULL) {
@@ -351,6 +353,7 @@ bool TempLineAlloc(unsigned int w) {
 }
 
 void TempLineFree(void) {
+    TextHistoryForget();
 	if (TempLine) free(TempLine);
 	TempLine = NULL;
 }
@@ -3114,11 +3117,17 @@ static uint8_t* EGA_TEXT_Xlat8_Draw_Line(Bitu vidstart, Bitu line) {
 static uint8_t* VGA_TEXT_Xlat32_Draw_Line(Bitu vidstart, Bitu line) {
     /* Pixels are 8 bits wide (two four), which is NORMALLY used in 256-color mode.
      * Why would anyone set this bit in text mode? Super Megazeux tweakmode, 256-color text mode, of course! */
-    if ((vga.attr.mode_control & 0x40) && enable_supermegazeux_256colortext) return EGAVGA_TEXT_Combined_Draw_Line_SuperMegazeux(TempLine,vidstart,line);
-    return EGAVGA_TEXT_Combined_Draw_Line<MCH_VGA,uint32_t>(TempLine,vidstart,line);
+    TextHistoryBegin();
+    uint8_t *row;
+    if ((vga.attr.mode_control & 0x40) && enable_supermegazeux_256colortext)
+        row = EGAVGA_TEXT_Combined_Draw_Line_SuperMegazeux(TempLine,vidstart,line);
+    else row = EGAVGA_TEXT_Combined_Draw_Line<MCH_VGA,uint32_t>(TempLine,vidstart,line);
+    TextHistoryObserve();
+    return row;
 }
 
 static void VGA_TEXT_Xlat32_RawDraw_Line(uint8_t *dst,Bitu vidstart, Bitu line) {
+    TextHistoryForget();
     EGAVGA_TEXT_Combined_Draw_Line<MCH_RAW_SNAPSHOT,uint8_t>(dst,vidstart,line);
 }
 
@@ -3871,6 +3880,7 @@ struct BIOSlogo_t {
 static BIOSlogo_t BIOSlogo;
 
 static uint8_t *VGA_DrawLineBiosLogoOverlay(Bitu vidstart, Bitu line) {
+    if (BIOSlogo.DrawLine != VGA_TEXT_Xlat32_Draw_Line) TextHistoryForget();
 	uint8_t *r = BIOSlogo.DrawLine(vidstart,line);
 
 	/* Remember my snarky comments below about how somehow drawing on the scaline corrupts video memory
@@ -3892,6 +3902,7 @@ static uint8_t *VGA_DrawLineBiosLogoOverlay(Bitu vidstart, Bitu line) {
 					while (x < m && x < vga.draw.width) {
 						const unsigned char pixel = *src++;
 						const unsigned char *p = BIOSlogo.palette + (pixel * 3u);
+                        TextHistoryOverlay(p,bofs+size_t(x)*4);
 						*dst++ = (p[0] << GFX_Rshift) + (p[1] << GFX_Gshift) + (p[2] + GFX_Bshift); x++;
 					}
 				}
@@ -4040,22 +4051,27 @@ again:
                     bg_color_index = 0;
                     break;
             }
+            TextHistoryForget();
             if (vga.draw.bpp==8) {
+                TextHistoryUniform(uint8_t(bg_color_index),1);
                 memset(TempLine, bg_color_index, TempLineSize);
             } else if (vga.draw.bpp==16) {
                 uint16_t* wptr = (uint16_t*) TempLine;
                 uint16_t value = vga.dac.xlat16[bg_color_index];
+                TextHistoryUniform(value,2);
                 for (Bitu i = 0; i < TempLineSize/2; i++) {
                     wptr[i] = value;
                 }
             } else if (vga.draw.bpp==32) {
                 uint32_t* wptr = (uint32_t*) TempLine;
                 uint32_t value = vga.dac.xlat32[bg_color_index];
+                TextHistoryUniform(value,4);
                 for (Bitu i = 0; i < TempLineSize/4; i++) {
                     wptr[i] = value;
                 }
             }
 
+            TextHistoryXor(TempLine,vga_page_flip_occurred,vga_3da_polled,vga.draw.lines_done);
             if (vga_page_flip_occurred) {
                 memxor(TempLine,0xFF,vga.draw.width*(vga.draw.bpp>>3));
                 vga_page_flip_occurred = false;
@@ -4077,6 +4093,7 @@ again:
                     rawshot.render_y++;
                 }
             }
+            if (VGA_DrawLine != VGA_TEXT_Xlat32_Draw_Line && VGA_DrawLine != VGA_DrawLineBiosLogoOverlay) TextHistoryForget();
             uint8_t * data=VGA_DrawLine( vga.draw.address, vga.draw.address_line );
             /* WARNING: For magic reasons possibly related to gremlins added by the GNU C++ compiler or other otherworldly phenomena,
              *          modifying the rendered scanline pointed to by *data somehow corrupts the video memory of the guest, even though
@@ -4110,6 +4127,7 @@ again:
                 if (video_debug_overlay && vga.draw.width < render.src.width)
                     VGA_DrawDebugLine(TempLine+size_t(data-TempLine)+(vga.draw.width*((vga.draw.bpp+7u)>>3u)),render.src.width-vga.draw.width);
 
+                TextHistoryXor(data,vga_page_flip_occurred,vga_3da_polled,vga.draw.lines_done);
                 if (vga_page_flip_occurred) {
                     memxor(data,0xFF,vga.draw.width*(vga.draw.bpp>>3));
                     vga_page_flip_occurred = false;
@@ -4199,6 +4217,7 @@ static void VGA_DrawEGASingleLine(Bitu /*blah*/) {
     if (!skiprender) {
         if (GCC_UNLIKELY(vga.attr.disabled && !vga.dosboxig.svga)) {
             memset(TempLine, 0, TempLineSize);
+            TextHistoryUniform(0,1);
             RENDER_DrawLine(TempLine);
         } else {
             Bitu address = vga.draw.address;
@@ -4224,6 +4243,7 @@ static void VGA_DrawEGASingleLine(Bitu /*blah*/) {
                     rawshot.render_y++;
                 }
             }
+            if (VGA_DrawLine != VGA_TEXT_Xlat32_Draw_Line && VGA_DrawLine != VGA_DrawLineBiosLogoOverlay) TextHistoryForget();
             uint8_t * data=VGA_DrawLine(address, vga.draw.address_line ); 
             if (video_debug_overlay && vga.draw.width < render.src.width) VGA_DrawDebugLine(data+(vga.draw.width*((vga.draw.bpp+7u)>>3u)),render.src.width-vga.draw.width);
 
@@ -8673,6 +8693,14 @@ void POD_Save_VGA_Draw( std::ostream& stream )
 	WRITE_POD( &hretrace_fx_avg, hretrace_fx_avg );
 	WRITE_POD( &vga_display_start_hretrace, vga_display_start_hretrace );
 	WRITE_POD( &is_vga_rendering_on_demand, is_vga_rendering_on_demand );
+    if (!TextHistoryValid()) { stream.setstate(std::ios::failbit);return; }
+    WRITE_POD(&text_history.valid,text_history.valid);
+    WRITE_POD(&text_history.uniform,text_history.uniform);
+    WRITE_POD(&text_history.nibble,text_history.nibble);
+    WRITE_POD(&text_history.period,text_history.period);
+    WRITE_POD(&text_history.width,text_history.width);
+    WRITE_POD(&text_history.pixel,text_history.pixel);
+    WRITE_POD(&text_history.shifts,text_history.shifts);
 }
 
 
@@ -8732,6 +8760,14 @@ void POD_Load_VGA_Draw( std::istream& stream )
 	READ_POD( &hretrace_fx_avg, hretrace_fx_avg );
 	READ_POD( &vga_display_start_hretrace, vga_display_start_hretrace );
 	READ_POD( &is_vga_rendering_on_demand, is_vga_rendering_on_demand );
+    READ_POD(&text_history.valid,text_history.valid);
+    READ_POD(&text_history.uniform,text_history.uniform);
+    READ_POD(&text_history.nibble,text_history.nibble);
+    READ_POD(&text_history.period,text_history.period);
+    READ_POD(&text_history.width,text_history.width);
+    READ_POD(&text_history.pixel,text_history.pixel);
+    READ_POD(&text_history.shifts,text_history.shifts);
+    if (!stream || !TextHistoryValid()) {stream.setstate(std::ios::failbit);return;}
 
 	//**********************************************
 	//**********************************************

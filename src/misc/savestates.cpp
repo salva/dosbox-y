@@ -58,7 +58,7 @@
 static std::string state_build_identity() {
     std::ostringstream identity;
     const uint32_t endian=0x01020304;
-    identity << "original-owner-engine-20;endian=";
+    identity << "original-owner-engine-21;endian=";
     const auto *bytes=reinterpret_cast<const unsigned char *>(&endian);
     for (size_t i=0;i<sizeof(endian);++i) identity << unsigned(bytes[i]) << ',';
     identity << ";char=" << sizeof(char) << ";short=" << sizeof(short)
