@@ -62,6 +62,8 @@ if os.environ.get('DOSBOX_TEST_AH86'):
  subprocess.run(['nasm','-f','bin',*(['-DCAPTURE_ACTIVE'] if os.environ.get('DOSBOX_TEST_AH86_ACTIVE') else []),str(pathlib.Path(__file__).with_name('fresh-ah86.asm')),'-o',str(w/'TINY.COM')],check=True)
 if os.environ.get('DOSBOX_TEST_PAUSE'):
  subprocess.run(['nasm','-f','bin',str(pathlib.Path(__file__).with_name('fresh-pause.asm')),'-o',str(w/'TINY.COM')],check=True)
+if os.environ.get('DOSBOX_TEST_PRINTER'):
+ subprocess.run(['nasm','-f','bin','-DMODE='+os.environ['DOSBOX_TEST_PRINTER'],str(pathlib.Path(__file__).with_name('fresh-printer.asm')),'-o',str(w/'TINY.COM')],check=True)
 slot_mode=bool(os.environ.get('DOSBOX_TEST_SLOT'))
 file_state = bool(os.environ.get('DOSBOX_TEST_FILE_STATE'))
 unsupported_devices = bool(os.environ.get('DOSBOX_TEST_UNSUPPORTED_DEVICES'))
@@ -100,6 +102,8 @@ def run():
  listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(20)
  flag_command = 'flagsave FLAG.TXT\n' if flagged else ''
  conf=d/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n[autoexec]\nmount c {w}\nc:\n{flag_command}debugbox TINY.COM\n')
+ if os.environ.get('DOSBOX_TEST_PRINTER'):
+  conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(w)+'\n[parallel]\nparallel1=printer\n')
  # Exercise represented geometry/timing, not just the default 16MB/3000 case.
  if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):
   conf.write_text(conf.read_text().replace('[dosbox]\n','[dosbox]\nmachine=svga_et4000\n'))
@@ -315,6 +319,13 @@ def run():
     assert b'CS:IP=0814:0184' in step,step
    else:
     assert expected in step,step
+   if os.environ.get('DOSBOX_TEST_PRINTER'):
+    before_output={p.name:p.read_bytes() for p in w.glob('*.ps')}
+    for index in range(70):
+     request('printer-source-step'+str(index),'STEPIN')
+     after_output={p.name:p.read_bytes() for p in w.glob('*.ps')}
+     if after_output!=before_output: break
+    else: raise AssertionError('capture altered source printer: explicit continuation produced no page')
  finally:
   if conn:conn.close()
   if p.poll() is None:p.terminate()

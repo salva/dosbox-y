@@ -36,6 +36,8 @@ CPrinterRedir::~CPrinterRedir () {
 
 bool CPrinterRedir::Putchar(uint8_t val)
 {
+    // DOS writes and direct-port/BIOS polling share the same hardware fault.
+    if (!(PRINTER_readstatus(0,1)&0x08)) return false;
 	PRINTER_StrobeByte(val);
 
 #if PARALLEL_DEBUG

@@ -58,7 +58,7 @@
 static std::string state_build_identity() {
     std::ostringstream identity;
     const uint32_t endian=0x01020304;
-    identity << "original-owner-engine-14;endian=";
+    identity << "original-owner-engine-15;endian=";
     const auto *bytes=reinterpret_cast<const unsigned char *>(&endian);
     for (size_t i=0;i<sizeof(endian);++i) identity << unsigned(bytes[i]) << ',';
     identity << ";char=" << sizeof(char) << ";short=" << sizeof(short)
@@ -697,7 +697,7 @@ bool SaveState::ComponentOrder::operator()(const std::string &left,
     static const char *const order[] = {
         "BIOS layout", "Memory", "Shell bindings", "Dos", "XMS", "EMS", "CPU", "FPU", "CMOS", "DMA",
         "IO handler", "Int10", "IntTimer10", "Keyboard", "Joystick",
-        "Mouse", "Vga", "Mixer", "Midi", "SerialPorts", "Pic", "Dosbox-x", "Render"
+        "Mouse", "Vga", "Mixer", "Midi", "SerialPorts", "Printer", "Pic", "Dosbox-x", "Render"
     };
     auto rank = [&](const std::string &name) {
         size_t i = 0;

@@ -53,6 +53,8 @@ startup_hash=hashlib.sha256(startup_archive.read_bytes()).hexdigest()
 capture_ip=os.environ.get('DOSBOX_TEST_STEP_IP','0814:0101').encode()
 listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(25)
 conf=w/'fixture.conf';conf.write_text(f'[dosbox]\nmcp_server={listener.getsockname()[1]}\n[sdl]\noutput=surface\n[cpu]\ncore=normal\ncycles=fixed 3000\n[mixer]\nnosound=true\n[midi]\nmididevice=none\n')
+if os.environ.get('DOSBOX_TEST_PRINTER'):
+ conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(archive.parent)+'\n[parallel]\nparallel1=printer\n')
 if os.environ.get('DOSBOX_TEST_BANK_SERVICE'):
  conf.write_text(conf.read_text().replace('[dosbox]\n','[dosbox]\nmachine=svga_et4000\n'))
 if os.environ.get('DOSBOX_TEST_GAMEPORT'):
@@ -133,6 +135,7 @@ try:
   for name in ('CPU','Memory','Pic','Dosbox-x','Keyboard','IntTimer10','Mixer'):
    assert a.read(name)==b.read(name),('held state changed across delay',name)
   for name in ('Pic','Dosbox-x','Keyboard','IntTimer10'):
+   if name=='Pic' and os.environ.get('DOSBOX_TEST_PRINTER'): continue # owner-accepted Epson timeout discard
    assert source.read(name)==a.read(name),('guest owner changed during startup',name)
   # Mixer contains legacy native pointers (including OPL operator wiring).
   # Cross-process byte equality is not a semantic audio assertion. The held

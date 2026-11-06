@@ -60,6 +60,9 @@ extern bool showdbcs, dbcs_sbcs, autoboxdraw;
 extern bool halfwidthkana, mouselocked;
 
 static CPrinter* defaultPrinter = NULL;
+// A restored Epson cannot truthfully resume its host job. This destination-only
+// latch is never set by capture and is not cleared by guest INIT or form feed.
+static bool printer_restore_fault = false;
 
 #define PARAM16(I) ((uint16_t)(params[I+1] << 8) | params[I])
 #define PIXX ((Bitu)floor(curX*dpi+0.5))
@@ -1400,6 +1403,7 @@ bool CPrinter::processCommandChar(uint8_t ch)
 }
 
 static void PRINTER_EventHandler(Bitu param);
+void *PRINTER_EventHandler_PIC_Event = reinterpret_cast<void*>(PRINTER_EventHandler);
 
 void CPrinter::newPage(bool save, bool resetx)
 {
@@ -2556,8 +2560,15 @@ void CPrinter::finishMultipage()
 	}
 }
 
+bool CPrinter::hasUnfinishedOperation()
+{
+    return ESCSeen || FSSeen || ESCCmd || variableLength || bitGraph.remBytes ||
+        lastlead || outputHandle || !isBlank();
+}
+
 bool CPrinter::isBlank()
 {
+    if (!page) return true;
 	bool blank = true;
 
 	SDL_LockSurface(page);
@@ -2596,6 +2607,8 @@ uint8_t controlreg = 0x04;
 
 Bitu PRINTER_readstatus(Bitu port,Bitu iolen)
 {
+    // /ERROR low, SELECT low, BUSY asserted; no invented guest exception.
+    if (printer_restore_fault) return 0x40;
     (void)port;
     (void)iolen;
 	//LOG_MSG("PRINTER_readstatus CS:IP %8x:%8x",SegValue(cs),reg_eip);
@@ -2621,6 +2634,7 @@ Bitu PRINTER_readstatus(Bitu port,Bitu iolen)
 
 void FormFeed(bool pressed)
 {
+    if (printer_restore_fault) return;
 	if (pressed)
 		if (defaultPrinter)
         {
@@ -2633,6 +2647,7 @@ void FormFeed(bool pressed)
 
 void PrintScreen(const char *text, uint16_t len)
 {
+    if (printer_restore_fault) return;
     if (!defaultPrinter) defaultPrinter = new CPrinter(confdpi, confwidth, confheight, confoutputDevice, confmultipageOutput);
     for (int i=0; i<len; i++) defaultPrinter->printChar(text[i]);
     FormFeed(true);
@@ -2656,6 +2671,7 @@ void PrintText(bool pressed) {
 
 static void PRINTER_EventHandler(Bitu param)
 {
+    if (printer_restore_fault) return;
     (void)param;
 	//LOG_MSG("printerevent");
 	if (timeout_dirty)
@@ -2674,6 +2690,7 @@ static void PRINTER_EventHandler(Bitu param)
 
 void PRINTER_writecontrol(Bitu port,Bitu val,Bitu iolen)
 {
+    if (printer_restore_fault) {controlreg=uint8_t(val);return;}
     (void)port;
     (void)iolen;
 	//LOG_MSG("PRINTER_writecontrol CS:IP %8x:%8x",SegValue(cs),reg_eip);
@@ -2722,6 +2739,41 @@ void PRINTER_Shutdown(Section* sec)
 }
 
 bool inited = false;
+
+// The owner accepts interrupted Epson job loss, not silent success. Capture
+// only classifies it; restore sets a local hardware fault without creating,
+// flushing, resetting, advancing or replaying a printer/page/font/timer.
+void PRINTER_DiscardRestoredEvents()
+{
+    // No restoration replay or timer continuation, including clean idle jobs.
+    PIC_RemoveEvents(PRINTER_EventHandler);
+}
+
+uint8_t PRINTER_RestoreDisposition()
+{
+    // A scheduled idle timeout has no work after restoration, either: only
+    // nonblank/parser/spool state causes the hardware fault.
+    return printer_restore_fault ||
+        (defaultPrinter && defaultPrinter->hasUnfinishedOperation());
+}
+
+class SerializePrinter final : public SaveState::Component {
+public:
+    SerializePrinter() {SaveState::instance().registerComponent("Printer",*this);}
+    void getBytes(std::ostream &stream) override {
+        const uint8_t fault=PRINTER_RestoreDisposition();
+        writePOD(stream,fault);
+        writePOD(stream,dataregister);writePOD(stream,controlreg);
+    }
+    void setBytes(std::istream &stream) override {
+        uint8_t fault=0,data=0,control=0;
+        readPOD(stream,fault);readPOD(stream,data);readPOD(stream,control);
+        if (!stream || fault>1 || defaultPrinter) {stream.setstate(std::ios::failbit);return;}
+        printer_restore_fault=fault!=0;
+        dataregister=data;controlreg=control;
+    }
+} serializePrinter;
+
 bool PRINTER_isInited()
 {
 	return inited;

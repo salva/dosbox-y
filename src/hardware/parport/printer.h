@@ -127,6 +127,9 @@ public:
 	// Returns true if the current page is blank
 	bool isBlank();
 
+	// Read-only capture classification: allocation/old ACK is not a pending job.
+	bool hasUnfinishedOperation();
+
 private:
 
 	// used to fill the color "sub-palettes"

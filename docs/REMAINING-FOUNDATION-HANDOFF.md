@@ -6,6 +6,20 @@ acceptance**. Checkout `/work/dosbox-y/original-savestate-restart`, branch
 scope; original4b7ffec is provenance. Fresh disposable progressive import supersedes
 historical same-process/whole-preflight proposals; approved packets are unchanged.
 
+## Current successor applicability (2026-11-06)
+
+The earlier increment receipts below remain historical evidence on their named
+inputs, not current binary identities. Engine15/representation9 now includes
+`7f8a89412c1f78cb3c717bba67f41f38d7689829` Render cache/acquired-output/canvas
+continuation and the current Epson interrupted-operation disposition. See
+`RENDER-CONTINUATION-CORRECTION.md` and `EPSON-RESTORE-DISPOSITION.md` for current
+owner requirements, implementation, tests, exact binary/config hashes and known
+failed-check applicability. Full internal Epson serialization is no longer a
+requirement: only unfinished jobs fault on the destination; clean printers remain
+usable. Current real tests cover mid-ESC/page fault/no replay and source capture
+noninterference, not physical printer certification. The finite ledger still
+needs complete current source-grounded disposition; this is not whole completion.
+
 ## Delivered increments / API and CLI
 
 * `70bbe958b53967aaba28c7dbe965a25c5f035854` (tree
@@ -294,20 +308,19 @@ qualified. No final combined E2E on this input claimed.
 
 Finite419-path/283-production ledger and105 helper bodies are mapping evidence,
 not certification. Full source-grounded finite closure is still unfinished.
-Actual remaining seams include selected effective scan/layout/output histories
-and single text-column primitive (now routed through the VGA owner above, while
-its selected effective-address history representation remains unfinished),
-active parallel/printer parser/raster/timing/spool/future font-bank state
-(no original owner serializer in those directories; dummy UART now implemented
-above), and real provider/output
-consumers. Ordinary independent printer face lifetime repair does not settle them.
-Existing Render codec transports geometry/palette and reconstructs output; it
-must not be described as completed canvas/history parity without implementation
-and actual consumers. IDE's selected delta is catalogue-only, not active nonempty
-IDE qualification. Broader hardware/composed and installed-host work remains with
-parents, but this is not authority to silently parent-retain required missing
-foundation behavior. Continue bounded implementation and escalate only genuine
-material tradeoffs/unavailable decisions. No current external blocker demonstrated.
+The former geometry-only Render gap is repaired by 7f8a894; actual owner/SDL
+fresh-process hit-hit-miss evidence and remaining backend refusals are documented
+in RENDER-CONTINUATION-CORRECTION.md. Full Epson logical/font/spool checkpointing
+is superseded, not silently delegated: EPSON-RESTORE-DISPOSITION.md records the
+owner's interrupted-job hardware-fault requirement and real fresh consumer tests.
+Active FileLPT host resources are not qualified by those Epson receipts. Remaining
+work includes finite current effective VGA scan/layout/split/schedule/panning/
+visibility disposition and affected actual consumers, complete dated §7 semantic
+reconciliation, and parent-arranged independent assessment. IDE's selected delta
+is catalogue-only, not active nonempty IDE qualification. Broader exhaustive
+hardware/composed and installed-host work remains with parents; that is not
+authority to silently parent-retain still-required foundation behavior. Continue
+bounded implementation; no current external blocker demonstrated.
 
 Independent affected assessment is arranged by parent. Preserve existing PID208/
 port8080, old Xvfb584020/display106, uncertain inherited processes/archives/damaged
