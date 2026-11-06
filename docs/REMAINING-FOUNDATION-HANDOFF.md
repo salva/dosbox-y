@@ -8,6 +8,27 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
+Latest production `3d76253745d1e22c0f22b8799fdcd00079e45717`, tree
+`2f305168a502a4644a53d6180b1ed1cb7ab238c7`: see
+`MIXER-SAMPLE-SCALING-PARITY.md` for two selected signed-scaling fixes, current
+Lua/native hashes and final combined E2E/real exclusive/RPC/full Lua regressions.
+`proc-6934b1201df8` exit0 passes all46 default fresh-root cases on these binaries,
+`fresh-root-matrix/run-du089wig` (including RTC). This is meaningful foundation
+variation, not exhaustive hardware/pixel/waveform qualification.
+
+A distinct heavy-debug+Agent+SDL2/no-OpenGL/no-avcodec/**no-debug-Lua** profile
+is now built at card work `build-debug-no-lua`; configure.log/build.log retain
+receipt. `proc-5c0873dc3ccd` exit0, binary SHA256
+`a9fa1ed9114e468db42e72890d9031fe7eed3bb0cdd8aad4d58a5d890c806f1c`,
+config.h `812d6a66a7737a6ec2d330ecbe5842c4e880158f35b4ad7e5cce1c6ee7cdf4d8`,
+config.status `0e2299879931b792b150f187e11663e5cf04d93ab72a0942848214a99cec685b`.
+`proc-67d5c6b62f7a` passes actual no-Lua Interactive unavailable/native steps,
+RPC and seven fresh consumers RTC/serial/font/bank/shared-file/XMS-A20/speaker.
+`proc-abbdb1ba81c7` passes six Lua-produced→no-Lua-consumed fresh archives
+(RTC/font/bank/shared-file/XMS-A20/speaker), `run-8gfi_awa`. This debug-no-Lua
+profile does not replace native no-debug console tests or imply installed-host
+qualification. No backend/config/binary textual-equality guard introduced.
+
 Latest production is engine22/representation9: original CMOS registration now
 carries calendar/alarm/modes/native time/pending BIOS sync instead of silently
 substituting the fresh startup calendar. `CMOS-CALENDAR-CONTINUATION.md` pins
