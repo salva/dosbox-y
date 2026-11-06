@@ -8,6 +8,15 @@ historical same-process/whole-preflight proposals; approved packets are unchange
 
 ## Current successor applicability (2026-11-06)
 
+Current continuation receipts are consolidated in
+`INT10-APERTURE-FILELPT-CONTINUATION.md` and
+`PRINTER-PUBLICATION-REFUSAL.md`. Engine20 adds original Int10 mode identities,
+actual VGA aperture mappings, destination-local FileLPT open-stream continuation
+and native binding agreement. Ordinary PS/PNG publication now refuses detected
+write/close failure before page clear/actions. Prior sections below retain their
+named historical applicability, not current build identities. Whole finite
+foundation disposition and native-format VGA producer history remain unfinished.
+
 The earlier increment receipts below remain historical evidence on their named
 inputs, not current binary identities. Engine15/representation9 now includes
 `7f8a89412c1f78cb3c717bba67f41f38d7689829` Render cache/acquired-output/canvas

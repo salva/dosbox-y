@@ -2564,7 +2564,10 @@ void CPrinter::finishMultipage()
 			FILE* psfile = (FILE*)outputHandle;
 			fprintf(psfile, "%%%%Pages: %i\n", multiPageCounter);
 			fprintf(psfile, "%%%%EOF\n");
-			fclose(psfile);
+            const bool written = ferror(psfile) == 0;
+            const bool closed = fclose(psfile) == 0;
+            if (!written || !closed)
+                LOG_MSG("PRINTER: multipage trailer publication failed; partial host output remains");
 		}
 		else if (strcasecmp(output, "printer") == 0)
 		{

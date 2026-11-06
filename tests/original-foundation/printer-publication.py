@@ -69,3 +69,24 @@ flags=subprocess.check_output(['pkg-config','--cflags','--libs','libpng'],text=T
 subprocess.run(['c++','-std=c++14','-fsanitize=address,undefined',str(q),'-o',str(w/'png')]+flags,check=True)
 subprocess.run([str(w/'png')],check=True)
 print('Actual PNG publication tail real libpng/stdout full/null refusal/close ASan/UBSan PASS')
+# Terminal multipage close is an irreversible best-effort destructor boundary:
+# preserve an explicit failure diagnostic, close once, forget the native handle.
+a=s.index('void CPrinter::finishMultipage()')
+b=s.index('\nbool CPrinter::hasUnfinishedOperation',a)
+r=w/'finish.cpp'
+r.write_text('''#include <cstdio>
+#include <cstring>
+#include <cassert>
+unsigned diagnostics=0;
+#define LOG_MSG(...) (++diagnostics)
+struct CPrinter{const char*output="ps";void*outputHandle=nullptr;int multiPageCounter=3;
+ void finishMultipage();};
+'''+s[a:b]+'''
+int main(){CPrinter p;p.outputHandle=fopen("/dev/full","wb");assert(p.outputHandle);
+ p.finishMultipage();assert(!p.outputHandle&&diagnostics==1);
+ p.finishMultipage();assert(diagnostics==1);
+ p.outputHandle=fopen("/dev/null","wb");p.finishMultipage();assert(!p.outputHandle&&diagnostics==1);}
+''')
+subprocess.run(['c++','-std=c++14','-fsanitize=address,undefined',str(r),'-o',str(w/'finish')],check=True)
+subprocess.run([str(w/'finish')],check=True)
+print('Actual multipage terminal full/null diagnostic and single close ASan/UBSan PASS')
