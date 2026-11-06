@@ -35,6 +35,18 @@ Final binaries SHA256 Lua `3d539317c5a972bb2fd56aece4dff82d7fc1e00dcbe60680e523f
 native `e0b025a68f4af652bf23356638544729141f52ee5cde9f09e7afb420ea355fd0`,
 debug-no-Lua `502fbf173e8b3920d267f0633bb55115fe204a7881a7a72f2f6a341e98b49616`.
 
+## Existing regression entrypoints
+
+The old `mixer-channel.py` double encoded the obsolete four-field layout and
+asserted the now-incorrect output reset. It delegates to the unified actual-code
+history test. `mixer-consumption.py` now extracts current global owner layout,
+captures the actual prefix, checks eight failed-chip cutoffs and preservation of
+restored logical cursors; lock and chip doubles are explicit, not SDL validation.
+`proc-6bb4fdbf31d7` exit0 passes both plus unchanged mute eight-way and signed8
+all-value sanitizers and diff check on engine26 production. Initial stale
+extraction proc-d3df0aaa30e8 and missing macro/nontrivial-lock fixture compile
+proc-df3eab764527 failed; corrected test inputs, not production workarounds.
+
 Failed check retained: proc-e49bf97bea0d built, passed active Adlib, then refused
 cmos-held Mixer installation. The newly added global fraction-denominator check
 incorrectly rejected a legitimate zero-initialized unused fraction. Removed that
