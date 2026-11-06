@@ -17,6 +17,17 @@ The first engine14 combined E2E failed at native disposal. GDB hardware watchpoi
 
 Engine identity is now14; earlier engine13 evidence applies only to its original input. Intermediate engine14 archives preceding the cache-offset correction are development artifacts, not compatible releases.
 
+## Independent successor verification
+
+[[card:card-n-c-l-b]] independently reviewed the fa546d→1bf357 production delta
+and passed `render-lazy-cursor.py`, `render-consumption.py` and `render-sdl.py`
+on final source (`proc-75ed86190171`). The latter uses actual owner bodies and
+real SDL in distinct save/load processes, asserting RGB canvas, local cursor,
+aspect2/3 hit-hit-miss and no reacquisition. Four real combined fresh E2Es and
+all47 matrix cases to two consumers also pass final binaries; these corroborate
+integration/disposal, not every raster/backend. The prior concrete acquired-hit
+cursor defect is resolved; explicit unsupported-route refusals remain qualified.
+
 ## Remaining limitations
 
 The new presentation record explicitly refuses complex/traditional caches, locked/blit/xbrz/postrender-aspect and non-software-surface paths. This is bounded truthful refusal, **not** qualification of all selected presentation modes. `render-sdl.py` now exercises the production Render codec, lazy handler and GFX_RenderHistory body with a real SDL dummy window surface in separate save/load processes: RGB canvas, acquired local cursor/pitch, aspect2/3 hit-hit-miss without reacquisition (proc-5b3e4edeb367). It uses extracted production owners and fixture setup, not a full emulator scan producer; it does not certify every SDL backend. Full internal Epson fidelity is superseded by the explicit owner decision documented in `EPSON-RESTORE-DISPOSITION.md`; real mid-ESC/page fresh restore now faults only interrupted jobs. Engine15 supersedes engine14 for that added owner record. Final finite whole-brief disposition and independent assessment remain outstanding. MIDI/exhaustive composed hardware/installed-host qualification remain with their previously assigned scope, not reassigned here.

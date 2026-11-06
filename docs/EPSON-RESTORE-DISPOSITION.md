@@ -86,6 +86,17 @@ no OpenGL/avcodec. `proc-f9d66ff790e0` SHA256:
 | native config.h | 5a6293639a5798fdb3a5160d194f3529ca42ca09e7b0be24d0c11c0b298a132b |
 | native config.status | 0910ab26954778fe5b46731d809819a646228bc5e2384b81691cb6dd26565f1c |
 
+Independent successor assessment: [[card:card-n-c-l-b]] verified the current
+engine29 binaries on production d69e0b40/candidate1bf357. Its
+`proc-75ed86190171` independently passes all four actual fresh printer modes,
+including source continuation, pending direct/BIOS/DOS fault/no changed PS and
+clean new printing. Source review confirms allocation/stale ACK alone do not
+fault; the classifier observes pending parser/bitmap/DBCS, nonblank page or open
+multipage job. Raw0x40 and existing BIOS XOR0x48 are consistent active-low fault
+projections, not a guest exception. Capture only observes; PIC timeout removal
+and latch installation occur only at destination. No full interrupted-job
+fidelity is claimed or required by the revised owner decision.
+
 Author evidence is not independent assessment. This does not certify physical
 printers, all write/close failure branches, active FileLPT host resources, or all
 presentation/hardware modes. No service/publication/source switch/unknown cleanup.

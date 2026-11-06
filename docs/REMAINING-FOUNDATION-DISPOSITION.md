@@ -84,8 +84,31 @@ subsequent disposition documentation changes do not alter binaries.
 * Current ordinary owner sanitizers, three builds, combined E2Es and bank/VESA
   regression details and failed fixture qualifications in the two final port docs.
 
-Author delivery is not independent acceptance; parent arranges assessment of the
-complete candidate, especially the actual Render witness and interrupted-printer
-requirement. No service/publication/adoption/source switch/unknown cleanup occurred.
+Author delivery is not independent acceptance; the independent assessment below
+now supplies the bounded recommendation, not broader hardware qualification. No service/publication/adoption/source switch/unknown cleanup occurred.
 Preserved unrelated pycache remains; inherited resource effects/ownership remain
 as recorded in current status and accepted history.
+
+## Independent bounded acceptance recommendation
+
+[[card:card-n-c-l-b]] independently recommends acceptance of this complete bounded
+disposition at candidate `1bf357c90c10daad3d9e1399037c5fd623ceba68`, tree
+`16a8510b832157f51f22d10692aecf7d7fdc4201`, production d69e0b40 above.
+This includes the explicitly revised Epson requirement, not full interrupted-job
+fidelity. No production repair or independent rebuild was performed. All three
+reused binaries and generated headers/configuration were independently hashed;
+the assessor current status records exact pins and qualifications.
+
+Independent terminal evidence under `work:///cards/card-n-c-l-b/processes/`:
+`proc-75ed86190171` passes actual Epson unused/partial-page/partial-ESC/completed
+fresh consumers, acquired Render hit-hit-miss/aspect owner and separate-process
+SDL witnesses, four combined FILE/INLINE E2Es and exclusive/RPC/full Lua routes.
+`proc-22bbb7ee7660` passes all47 matrix cases to both Lua and debug-no-Lua fresh
+consumers on final binaries. `proc-9bff32e6e728` passes affected synthesis, VGA,
+FileLPT, screenshot, Voodoo, publication and actual native-console checks.
+DMA/RTC/Disney/Tandy/mixer/Adlib passes precede a fixture environment failure in
+`proc-bbbf8ed30d6d`. Missing configuration environment/header in that run and
+`proc-292a7817bb88` were corrected for subsequent checks, not production failures
+or passing whole chains. These are independent executions of authored tests,
+not independent authorship or physical hardware certification. Scope and
+publication/installed-host/exhaustive hardware exclusions above remain intact.
