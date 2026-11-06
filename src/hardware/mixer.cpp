@@ -437,9 +437,9 @@ inline void MixerChannel::loadCurrentSample(Bitu &len, const Type* &data) {
         const uint8_t xr = signeddata ? 0x00 : 0x80;
 
         len--;
-        current[0] = ((int8_t)((*data++) ^ xr)) << 8;
+        current[0] = int32_t((int8_t)((*data++) ^ xr)) * 256;
         if (stereo)
-            current[1] = ((int8_t)((*data++) ^ xr)) << 8;
+            current[1] = int32_t((int8_t)((*data++) ^ xr)) * 256;
         else
             current[1] = current[0];
     }
