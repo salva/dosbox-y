@@ -104,6 +104,8 @@ if os.environ.get('DOSBOX_TEST_PSE'):
  conf.write_text(conf.read_text().replace('[cpu]\n','[cpu]\nenable pse='+os.environ['DOSBOX_TEST_PSE']+'\n'))
 if os.environ.get('DOSBOX_TEST_AUDIO'):
  conf.write_text(conf.read_text().replace('nosound=true','nosound=false'))
+if os.environ.get('DOSBOX_TEST_PRINTER_POLICY'):
+ conf.write_text(conf.read_text()+'\n[printer]\n'+os.environ['DOSBOX_TEST_PRINTER_POLICY']+'\n')
 log=(w/'native.log').open('wb')
 p=subprocess.Popen([os.environ['DOSBOX_TEST_BINARY'],'-conf',str(conf),'-restore-state',str(startup_archive)],stdout=log,stderr=log,env=dict(os.environ,SDL_AUDIODRIVER='dummy',SDL_VIDEODRIVER='dummy',TERM='xterm'))
 conn=None;buf=b''

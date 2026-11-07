@@ -130,6 +130,11 @@ static std::string state_config_identity() {
                 property->propname=="saveslot" || property->propname=="savefile" ||
                 property->propname=="saveremark" || property->propname=="autosave" ||
                 property->propname=="forceloadstate")) continue;
+            // Epson destinations and helper launch policy are host-only, even
+            // with printer=false. Font/raster/parser/timing inputs stay checked.
+            if (name=="printer" && (property->propname=="docpath" ||
+                property->propname=="openwith" || property->propname=="openerror" ||
+                property->propname=="shellhide" || property->propname=="device")) continue;
             // Window title is host presentation, never guest hardware.
             if (name=="dosbox" && property->propname=="title") continue;
             // Registered config placeholder: no constructor or port consumer

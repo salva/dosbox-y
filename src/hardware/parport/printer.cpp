@@ -313,6 +313,34 @@ void CPrinter::selectCodepage(uint16_t cp)
 		curMap[i] = mapToUse[i];
 }
 
+#include "state_machine_inputs.h"
+#include FT_TRUETYPE_TABLES_H
+
+// Identify bytes through the resolved FreeType face, never by reopening a
+// guessed pathname. Unsupported non-SFNT faces make checkpoint admission
+// unavailable; ordinary printing remains usable.
+static void RecordPrinterFace(FT_Face face, int type)
+{
+    // The resolver has five effective file choices; all other Epson typeface
+    // selectors fall back to Roman, with OCR-B sharing OCR-A.
+    switch (Typeface(type)) {
+    case sansserif: case courier: case script: case ocra: break;
+    case ocrb: type=int(ocra);break;
+    default: type=int(roman);break;
+    }
+    const std::string role="Epson font "+std::to_string(type);
+    if (!face) {STATE_RecordMachineInput(role,nullptr,0);return;}
+    FT_ULong size=0;
+    if (FT_Load_Sfnt_Table(face,0,0,nullptr,&size) || !size) {
+        STATE_MachineInputsUnavailable();return;
+    }
+    std::vector<unsigned char> bytes(size);
+    if (FT_Load_Sfnt_Table(face,0,0,bytes.data(),&size)) {
+        STATE_MachineInputsUnavailable();return;
+    }
+    STATE_RecordMachineInput(role,bytes.data(),size);
+}
+
 // Resolve one independent face in the caller's library. Ordinary reload and
 // future-resource consumers must use the same ordered fallback policy.
 static FT_Face ResolvePrinterFont(FT_Library FTlib, Typeface LQtypeFace)
@@ -473,6 +501,7 @@ void CPrinter::updateFont()
     if (TTF_using() && printfont) curFont = GetTTFFace(FTlib, fontBytes);
 #endif
     if (!curFont) curFont = ResolvePrinterFont(FTlib, LQtypeFace);
+    RecordPrinterFace(curFont,int(LQtypeFace));
 
 	double horizPoints = 10.5;
 	double vertPoints = 10.5;
@@ -2860,6 +2889,23 @@ void PRINTER_Init()
             pInfo = NULL;
     }
 #endif
+	// Resolve the future glyph resources with the ordinary consumer's policy.
+    // This creates no printer/page and performs no output or timer work.
+    FT_Library identity_library=nullptr;
+    if (FT_Init_FreeType(&identity_library)) STATE_MachineInputsUnavailable();
+    else {
+        for (const int type : {int(roman),int(sansserif),int(courier),int(script),int(ocra)}) {
+            FT_Face face=nullptr;
+#if defined(USE_TTF)
+            std::shared_ptr<std::vector<unsigned char>> backing;
+            if (TTF_using() && printfont) face=GetTTFFace(identity_library,backing);
+#endif
+            if (!face) face=ResolvePrinterFont(identity_library,Typeface(type));
+            RecordPrinterFace(face,type);
+            if (face) FT_Done_Face(face);
+        }
+        FT_Done_FreeType(identity_library);
+    }
 	inited = true;
 }
 

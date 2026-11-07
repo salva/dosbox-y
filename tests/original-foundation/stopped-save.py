@@ -119,6 +119,8 @@ def run():
   conf.write_text(conf.read_text()+'\n[parallel]\nparallel1=file append:'+str(w/'printed.prt')+' '+os.environ.get('DOSBOX_TEST_FILELPT_FLAGS','addLF')+' timeout:'+os.environ.get('DOSBOX_TEST_FILELPT_TIMEOUT','100000')+'\n')
  if os.environ.get('DOSBOX_TEST_PRINTER'):
   conf.write_text(conf.read_text()+'\n[printer]\nprinter=true\nprintoutput=ps\nmultipage=false\ntimeout=1000\ndocpath='+str(w)+'\n[parallel]\nparallel1=printer\n')
+ if os.environ.get('DOSBOX_TEST_PRINTER_POLICY'):
+  conf.write_text(conf.read_text()+'\n[printer]\n'+os.environ['DOSBOX_TEST_PRINTER_POLICY']+'\n')
  # Exercise represented geometry/timing, not just the default 16MB/3000 case.
  if os.environ.get('DOSBOX_TEST_ADLIB'):
   conf.write_text(conf.read_text().replace('[autoexec]', '[sblaster]\nadlib pcm boost=true\n[autoexec]'))
@@ -337,10 +339,11 @@ def run():
    else:
     assert expected in step,step
    if os.environ.get('DOSBOX_TEST_PRINTER'):
-    before_output={p.name:p.read_bytes() for p in w.glob('*.ps')}
+    output_dir=pathlib.Path(os.environ.get('DOSBOX_TEST_PRINTER_SOURCE_OUTPUT',str(w)))
+    before_output={p.name:p.read_bytes() for p in output_dir.glob('*.ps')}
     for index in range(70):
      request('printer-source-step'+str(index),'STEPIN')
-     after_output={p.name:p.read_bytes() for p in w.glob('*.ps')}
+     after_output={p.name:p.read_bytes() for p in output_dir.glob('*.ps')}
      if after_output!=before_output: break
     else: raise AssertionError('capture altered source printer: explicit continuation produced no page')
  finally:
