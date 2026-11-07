@@ -1,5 +1,6 @@
 /* GPL-2.0-or-later. Lua-only worker; native operations use owned messages. */
 #include "lua_driver_worker.h"
+#include "lua_session_transport.h"
 #include <time.h>
 #include <cstring>
 #include <chrono>
@@ -33,7 +34,7 @@ const char *const context_type="dosbox.local.context";
 // blocking C function; bindings and native effects retain their own settlement.
 void closeHook(lua_State *L,lua_Debug *) {
     auto *w=*static_cast<Worker **>(lua_getextraspace(L));
-    if(w && !w->close_interrupted && w->handoff.closing()) {
+    if(w && !w->close_interrupted && (w->options.script==Options::Script::Session?w->handoff.interrupted():w->handoff.closing())) {
         // Disarm before raising: protected error handling must be able to
         // unwind without another close exception. Effect admission remains
         // revoked by the handoff, independently of this bytecode interrupt.
@@ -479,6 +480,51 @@ template<unsigned Index> void guardLibrary(lua_State *L,Worker &w,const char *li
     w.library_calls[Index]=lua_tocfunction(L,-1);lua_pop(L,1);
     lua_pushcfunction(L,guardedLibraryCall<Index>);lua_setfield(L,-2,name);lua_pop(L,1);
 }
+int sessionRead(lua_State *L) {
+    const auto n=luaL_checkinteger(L,1);
+    if(n<1 || n>65536)return luaL_error(L,"invalid session read size");
+    char bytes[65536];ssize_t count;
+    do {count=recv(sessionEndpoint().borrowed(),bytes,size_t(n),0);} while(count<0 && errno==EINTR);
+    if(count>0){lua_pushlstring(L,bytes,size_t(count));return 1;}
+    lua_pushnil(L);
+    if(count<0){lua_pushstring(L,strerror(errno));return 2;}
+    return 1;
+}
+int sessionWrite(lua_State *L) {
+    size_t n=0;const char *bytes=luaL_checklstring(L,1,&n);ssize_t count;
+    do {count=send(sessionEndpoint().borrowed(),bytes,n,MSG_NOSIGNAL);} while(count<0 && errno==EINTR);
+    if(count>0){lua_pushinteger(L,count);return 1;}
+    lua_pushnil(L);lua_pushstring(L,count<0?strerror(errno):"zero write progress");return 2;
+}
+int sessionFlush(lua_State *L) {lua_pushboolean(L,true);return 1;}
+int sessionStopping(lua_State *L) {
+    auto *w=*static_cast<Worker **>(lua_getextraspace(L));
+    lua_pushboolean(L,w->handoff.closing());return 1;
+}
+int managedSession(lua_State *L) {
+    // The module owns validation, evaluator, framing and admission. No POSIX
+    // module is required in this host state; functions below only borrow I/O.
+    static const char setup[]=R"lua(
+local read,write,flush,stopping,cwd=...
+local b,err=require('lua_repl_mcp.bootstrap').decode(
+ os.getenv('LUA_REPL_MCP_SESSION_FD'),
+ os.getenv('LUA_REPL_MCP_ALLOCATION_GENERATION'),os.getenv('LUA_REPL_MCP_LIMITS'))
+assert(b,err)
+local result=require('lua_repl_mcp.session').serve(
+ {read=read,write=write,flush=flush},
+ {allocation_generation=b.allocation_generation,limits=b.limits,
+  cwd=cwd,stopping=stopping})
+assert(result.reason=='closed' or result.reason=='eof' or result.reason=='host_stopping',
+ result.diagnostics or result.reason)
+)lua";
+    if(luaL_loadbuffer(L,setup,sizeof(setup)-1,"managed session")!=LUA_OK)return lua_error(L);
+    lua_pushcfunction(L,sessionRead);lua_pushcfunction(L,sessionWrite);
+    lua_pushcfunction(L,sessionFlush);lua_pushcfunction(L,sessionStopping);
+    char cwd[4096];
+    if(!getcwd(cwd,sizeof(cwd)))return luaL_error(L,"cannot determine session cwd");
+    lua_pushstring(L,cwd);
+    lua_call(L,5,0);return 0;
+}
 int entry(lua_State *L) {
     auto &w=*static_cast<Worker *>(lua_touserdata(L,1));
     luaL_openlibs(L);
@@ -513,6 +559,7 @@ end
 )lua";
     if(luaL_loadbuffer(L,helpers,sizeof(helpers)-1,"stop helpers")!=LUA_OK)return lua_error(L);
     lua_call(L,0,0);
+    if(w.options.script==Options::Script::Session)return managedSession(L);
     const int rc=w.options.script==Options::Script::File?luaL_loadfile(L,w.options.source.c_str()):
         luaL_loadbuffer(L,w.options.source.data(),w.options.source.size(),"=(lua-driver-code)");
     if(rc!=LUA_OK)return lua_error(L);

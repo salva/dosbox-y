@@ -80,7 +80,7 @@ class Handoff {
     Verdict verdict_;
     Request read_;
     Response read_response_;
-    bool closing_=false, lua_closed_=false;
+    bool closing_=false, lua_closed_=false, terminal_=false;
 public:
     Handoff()=default;
     Handoff(const Handoff &)=delete;
@@ -195,9 +195,17 @@ public:
     }
     void close() {
         std::lock_guard<std::mutex> lock(mutex_);
-        closing_=true;
+        terminal_=false;closing_=true;
         if(phase_==Phase::Request){request_={};phase_=Phase::Held;}
         changed_.notify_all();
+    }
+    // Terminal native lifetime revokes effects, but permits result flushing.
+    void terminal() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        terminal_=true;closing_=true;changed_.notify_all();
+    }
+    bool interrupted() {
+        std::lock_guard<std::mutex> lock(mutex_);return closing_ && !terminal_;
     }
     bool closing() {
         std::lock_guard<std::mutex> lock(mutex_);return closing_;

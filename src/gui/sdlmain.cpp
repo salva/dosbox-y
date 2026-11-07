@@ -145,6 +145,9 @@ char* revert_escape_newlines(const char* aMessage);
 #include "machine_service.h"
 #include "support.h"
 #include "debug.h"
+#if C_DEBUG_LUA
+#include "lua_session_transport.h"
+#endif
 #include "ide.h"
 #include "bitop.h"
 #include "ptrop.h"
@@ -7783,6 +7786,7 @@ bool DOSBOX_parse_argv() {
             fprintf(stderr,"  -debug-lua-script <path>                 Run trusted Lua at startup stopped state\n");
             fprintf(stderr,"  -debug-lua-validation-exit               Exit after successful startup Lua\n");
             fprintf(stderr,"  -lua-driver-file <path> | -lua-driver-code <chunk>\n");
+            fprintf(stderr,"  -lua-driver-session                      Managed FD3 session (exclusive with FILE/INLINE)\n");
             fprintf(stderr,"  -lua-driver-program <DOS path> (natural entry, no restore)\n");
             fprintf(stderr,"  -lua-driver-state <archive> unsupported; use -restore-state <archive>\n");
 #endif
@@ -7856,6 +7860,9 @@ bool DOSBOX_parse_argv() {
             control->opt_break_start = true;
         }
 #if C_DEBUG_LUA
+        else if (optname == "lua-driver-session") {
+            if (!control->lua_driver.select(optname,"")) return false;
+        }
         else if (LuaDriver::Options::isSwitch("-"+optname)) {
             if (!control->cmdline->NextOptArgv(tmp) ||
                 !control->lua_driver.select(optname,tmp)) return false;
@@ -8831,6 +8838,13 @@ int main(int argc, char* argv[]) SDL_MAIN_NOEXCEPT {
 
     /* -- parse command line arguments */
     if (!DOSBOX_parse_argv()) return 1;
+#if C_DEBUG_LUA
+    if(control->lua_driver.script==LuaDriver::Options::Script::Session) {
+        if(const char *error=LuaDriver::sessionEndpoint().adopt()) {
+            LOG_MSG("Lua managed session: %s",error);return 1;
+        }
+    }
+#endif
 
     if (control->opt_time_limit > 0)
         time_limit_ms = (Bitu)(control->opt_time_limit * 1000);

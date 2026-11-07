@@ -5,13 +5,17 @@
 #include <utility>
 namespace LuaDriver {
 struct Options {
-    enum class Script { None, File, Code };
+    enum class Script { None, File, Code, Session };
     Script script=Script::None;
     std::string source, program, archive;
     bool program_set=false, archive_set=false;
     // Caller consumes exactly one argv value before passing it here. Presence
     // is separate from content: an empty inline chunk is a valid script.
     bool select(const std::string &name,const std::string &value) {
+        if(name=="lua-driver-session") {
+            if(script!=Script::None || !value.empty())return false;
+            script=Script::Session;return true;
+        }
         if(name=="lua-driver-file" || name=="lua-driver-code") {
             if(script!=Script::None)return false;
             script=name=="lua-driver-file"?Script::File:Script::Code;
@@ -31,12 +35,19 @@ struct Options {
     // startup parsing. A value is exactly one argument, even if dash-prefixed.
     // Failure leaves both selection and caller cursor unchanged.
     static bool isSwitch(const std::string &arg) {
-        return arg=="-lua-driver-file" || arg=="-lua-driver-code" ||
+        return arg=="-lua-driver-session" || arg=="-lua-driver-file" || arg=="-lua-driver-code" ||
                arg=="-lua-driver-program" || arg=="-lua-driver-state";
     }
     bool consume(int argc,const char *const *argv,int &cursor,std::string &error) {
         if(cursor<0 || cursor>=argc || !argv || !argv[cursor] ||
            !isSwitch(argv[cursor]))return false;
+        if(std::string(argv[cursor])=="-lua-driver-session") {
+            Options next=*this;
+            if(!next.select("lua-driver-session","")) {
+                error="duplicate or conflicting Lua driver selector";return false;
+            }
+            *this=std::move(next);error.clear();return true;
+        }
         if(cursor+1>=argc || !argv[cursor+1]) {
             error="missing value for "+std::string(argv[cursor]);return false;
         }

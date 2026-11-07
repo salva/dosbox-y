@@ -25,5 +25,11 @@ int main() {
     assert(!parsed.consume(2,missing,cursor,error) && cursor==1 && !parsed.archive_set);
     const char *empty[]={"dosbox","-lua-driver-code",""};cursor=1;Options chunk;
     assert(chunk.consume(3,empty,cursor,error) && chunk.valid(false,false));
+    Options session;cursor=1;
+    const char *managed[]={"dosbox","-lua-driver-session","-other"};
+    assert(session.consume(3,managed,cursor,error) && cursor==1);
+    assert(session.script==Options::Script::Session && session.valid(false,false));
+    assert(!session.select("lua-driver-code",""));
+    assert(!session.valid(true,false) && !session.valid(false,true));
     Options dash;assert(dash.select("lua-driver-code","-x"));assert(dash.valid(false,false));
 }

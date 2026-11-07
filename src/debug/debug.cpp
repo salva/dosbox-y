@@ -60,6 +60,7 @@ static NativeDebug::Attachment instrumentation_attachment;
 #include <chrono>
 #if C_DEBUG_LUA
 #include "lua_driver_worker.h"
+#include "lua_session_transport.h"
 #include <thread>
 #include "debug_lua.h"
 #include "live_control.h"
@@ -6089,6 +6090,7 @@ bool Debugger_LocalDriverClosing() {return local_driver_handoff.closing();}
 static void LocalDriverRetire() {
     // luaClosed is published after lua_close; never join an unpublished waiter.
     local_driver_thread.join();
+    LuaDriver::sessionEndpoint().release();
     for(const auto &registration:local_driver_registrations) {
         bool cleared=false;
         // Disposal revokes our exact retained resources even after the machine
@@ -6128,10 +6130,11 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
             if(!native_execution.release(local_driver_attachment,local_driver_operation))
                 E_Exit("Lua driver exit release failed");
             local_driver_operation=0;
+            local_driver_handoff.terminal();
             if(!local_driver_handoff.complete(std::move(response)))
                 E_Exit("Lua driver exit response lost");
         }
-        local_driver_handoff.close();
+        local_driver_handoff.terminal();
         while(!local_driver_handoff.isLuaClosed()){GFX_Events();SDL_Delay(1);}
         LocalDriverRetire();
         return;
@@ -6383,7 +6386,12 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
 }
 void DEBUG_CloseLocalLuaDriver() {
     if(!local_driver_thread.joinable())return;
-    local_driver_handoff.close();
+    const bool terminal=RestoredSession::invocation().terminal();
+    if(terminal)local_driver_handoff.terminal();
+    else {
+        local_driver_handoff.close();
+        LuaDriver::sessionEndpoint().wake();
+    }
     // Native guest/service frames have unwound. Revoke only this attachment's
     // grant before waking its waiter; never execute guest work or replay here.
     const auto *request=native_execution.activeRequest();
