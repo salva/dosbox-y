@@ -17,7 +17,10 @@ one copied Observe/Pause exchange. Busy submission never replaces an exchange;
 the submitter owns it through take. `DEBUG_ServiceNativeControl()` consumes on the
 emulator thread; `DEBUG_ConsumeNativeControl()` is the same thread-only authority
 used directly by Agent Pause. Both attachment serial and operation are validated
-at consumption. Pending Pause returns Pending without cancellation or activation;
+at consumption. Agent Pause retains the ingress-selected execution binding, shared
+with that Continue producer until native admission or published by continued Step
+before Running. A successor replaces the binding, never retargets queued Pause.
+Pending Pause returns Pending without cancellation or activation;
 Active Pause enters the existing common native stop body, with settlement after
 unwind. Terminal is idempotent; released/stale identities return Unknown. Status
 is a copy, not stopped-register permission or completion acknowledgement.

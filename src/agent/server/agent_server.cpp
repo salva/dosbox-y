@@ -553,7 +553,9 @@ public:
 
     struct Session {
         std::uint64_t native_operation = 0;
-        std::string execution_operation_id;
+        // Shared only with queued Pause commands selecting this producer.
+        // A successor replaces the pointer, never the selected binding's value.
+        std::shared_ptr<std::uint64_t> execution_binding;
         std::string id;
         std::string target_command;
         SessionState state = SessionState::Starting;
@@ -1735,15 +1737,17 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             operation.id = operation_id;
             session->operations[operation_id] = operation;
             session->state = Impl::SessionState::Running;
-            session->execution_operation_id=operation_id;
+            const auto execution_binding=std::make_shared<std::uint64_t>(0);
+            session->execution_binding=execution_binding;
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, conditions](const std::uint64_t) {
+            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, conditions, execution_binding](const std::uint64_t) {
                     AgentRuntime& adapter = *impl->runtime;
                     std::string command_error;
                     if (adapter.Continue(conditions,&command_error)) {
                         std::lock_guard<std::mutex> command_lock(impl->mutex);
                         if (impl->session && impl->session->id==session_id) {
                             impl->session->native_operation=adapter.ExecutionOperation();
+                            *execution_binding=impl->session->native_operation;
                             impl->session->operations.at(operation_id).native_operation=
                                 impl->session->native_operation;
                         }
@@ -1791,19 +1795,18 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             session->operations[operation_id] = operation;
             session->pending_stop_kind = operation.stop_kind;
             const std::string session_id = session->id;
-            const std::string execution_id=session->execution_operation_id;
-            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, execution_id](const std::uint64_t) {
+            const auto execution_binding=session->execution_binding;
+            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, execution_binding](const std::uint64_t) {
                         AgentRuntime& adapter = *impl->runtime;
-                        // Resolve only the ingress-selected Continue, never the
-                        // current slot: it may already belong to a successor.
+                        // Resolve the ingress-selected producer (Continue or
+                        // continued Step), never the current successor slot.
                         std::uint64_t native_operation=0;
                         {
                             std::lock_guard<std::mutex> command_lock(impl->mutex);
                             if (!impl->session || impl->session->id != session_id)
                                 return;
-                            const auto selected=impl->session->operations.find(execution_id);
-                            if(selected!=impl->session->operations.end())
-                                native_operation=selected->second.native_operation;
+                            if(execution_binding)
+                                native_operation=*execution_binding;
                             impl->session->operations.at(operation_id).native_operation=native_operation;
                         }
                         std::string command_error;
@@ -2356,6 +2359,8 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
                         impl->session->state == Impl::SessionState::Stopped) {
                         operation->native_operation = adapter.ExecutionOperation();
                         impl->session->native_operation = operation->native_operation;
+                        impl->session->execution_binding =
+                            std::make_shared<std::uint64_t>(operation->native_operation);
                         impl->session->state = Impl::SessionState::Running;
                         impl->session->pending_stop_kind = "step";
                         impl->state_changed.notify_all();
