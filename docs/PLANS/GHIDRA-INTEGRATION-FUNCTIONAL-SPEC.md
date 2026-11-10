@@ -1,18 +1,22 @@
 # Ghidra integration — functional specification
 
 **Date:** 2026-11-10
-**Revision:** 2
-**Status:** Independently approved functional specification (revision 2; Sol, GLM 5.3 and DeepSeek). Not implemented or runtime-qualified.
+**Revision:** 4 (Lua-only revision 2)
+**Status:** Independently approved Lua-only revision 2 (Sol, GLM 5.3 and DeepSeek). Not implemented or runtime-qualified.
 
 ## 1. Authority and purpose
 
 This specification defines the intended product behavior of DOSBox-Y as a Ghidra
-Debugger backend. Its normative source is the independently approved
-[Ghidra integration analysis](GHIDRA-INTEGRATION-ANALYSIS.md), as committed at
-`d8710d20ea7eb92eb0457f1f4dfad399ffa0a18d`. That analysis provides evidence,
-rationale, architecture decisions and unresolved proof obligations; this document
-does not claim those obligations have been met. Conflicts with that approved
-source require review, not an implicit change of owner decision.
+Debugger backend. Its current companion authority is the revised
+[Ghidra integration analysis](GHIDRA-INTEGRATION-ANALYSIS.md), incorporating the
+owner's material correction: Lua end to end on the integration side, no Python
+runtime component. In the `original-savestate-restart` repository/worktree,
+analysis `d8710d20e` and specification `d2ac6b736` preserve prior
+reviewed behavior in history but their Python-specific clauses are superseded.
+This revision retains all 48 requirement IDs and non-Python races/stages. Sol,
+GLM 5.3 and DeepSeek independently approved the Lua-only revision, including its
+actor/carrier, packaging and typed boundaries. Approval does not prove implementation
+or consumer behavior.
 
 Requirements below use **shall** for mandatory behavior within their stated
 delivery scope. Requirement identifiers are stable and unique. Later-delivery
@@ -48,7 +52,7 @@ truthfully limited R1.
 |---|---|
 | Operator | Selects executable/configuration, imported Program, live actions, mapping and intentional trace saving/sharing |
 | Ghidra Debugger | Displays trace observations, static analysis and time selection; guards effect invocation against historical selection |
-| Trusted local launcher/Python adapter | Owns managed child/session lifecycle, the sole managed client, typed Trace RMI actions and observation publication |
+| Trusted external Lua integration host | Owns disposable child/session lifecycle, sole managed client, Lua Trace RMI schema/actions/serialization and observation publication; one local event loop |
 | Managed Lua session/native debugger | Sole selected frontend and native execution authority; admits operations, observations and instrumentation |
 | Static Program | Reusable original/imported analysis, labels, comments and types |
 | Trace/snapshot | Time-indexed captured observations, potentially incomplete; not a machine save |
@@ -79,8 +83,12 @@ A competing native attachment, including observer-only attachment, shall be
 refused until full detach and cleanup. UI focus never transfers control.
 
 **GI-LIFE-02 — Selected carrier (Stage 0 onward).** The integration shall use an
-external Python Trace RMI adapter over asynchronous managed Lua and the existing
-native owner. Synchronous helpers and affected existing Lua execution callers,
+external Lua Trace RMI integration host over asynchronous managed Lua and the existing
+native owner. The host shall own lifecycle and presentation; the sole embedded Lua
+worker shall own debugger binding dispatch. There shall be no Python package,
+process, adapter, generated client or runtime dependency. A small native codec/OS
+binding may support Lua but shall not own debugger schema, actions or projection.
+Synchronous helpers and affected existing Lua execution callers,
 including relevant live execution entry points, shall use the same core.
 Direct Agent RPC is neither a production carrier nor a fallback. Unrelated
 supported frontend/input/capture behavior shall be preserved. Difficulty in the
@@ -119,6 +127,31 @@ or pre-existing. Native attachment departure remains a reportable fact, not a
 separate UI capability. These controls obey GI-TIME-01 and GI-TERM-01–04 where
 applicable; channel ambiguity requires external disposal under GI-FAIL-02.
 
+For Linux R1, Java shall own the external Lua host's directly launched Process.
+The Lua host shall create the disposable DOSBox child through a small pre-exec
+lifecycle binding that arms `PR_SET_PDEATHSIG(SIGKILL)` and checks the exact expected
+parent captured before fork, before exec/readiness. The host shall report successful
+arm before native-ready. Parent death before arm must cause fail-closed setup on the
+parent check; death after arm uses kernel SIGKILL. Graceful disposal/reaping is
+Lua-owned. A stalled host shall be terminated through Java's retained Process,
+triggering the child's armed policy, without relying on a child handle transfer or
+code in the dead host. Host exit, child-armed and child exit are separate facts;
+without exact child-exit evidence disposal stays unconfirmed. SIGKILL makes no
+cleanup/finalizer/result-delivery guarantee or bounded exit promise. Containment
+covers the Java-owned Lua-host-plus-DOSBox-child chain, not an arbitrary process
+tree; the parent-death policy applies to the disposable DOSBox child. Qualified execution shall
+preserve the parent-thread/ordinary-exec/credential conditions of the Linux policy;
+other OS support requires a separately designed and qualified equivalent.
+
+R1 launch shall use one explicit bounded startup policy: 120000 ms from host launch
+through initial stopped trace publication/activation, shared by launcher/host without
+stage resets. The offer shall replace stock trace/connection wait budgets with the
+remaining deadline, report progress and allow cancellation before a trace exists.
+Timeout shall identify the pending stage (host launch, child creation/arm,
+FD3/bootstrap, native-ready, Trace RMI connection/negotiation/create/publication),
+retain prior known facts and dispose through the selected lifecycle. Timeout is not
+guest failure. Cleanup uses its separate bound; no indefinite startup is promised.
+
 ## 4. Asynchronous execution and results
 
 The following names describe behavior, not frozen function signatures.
@@ -153,7 +186,7 @@ shall not mean kill, worker close or process disposal.
 
 **GI-OP-04 — Native execution semantics (Stage 0/R1).** Continue shall preserve
 unrestricted Run without an invented ceiling. Step Into/Over shall use native
-operations, not Python instruction loops or disassembly-derived stepping.
+operations, not integration-host instruction loops or disassembly-derived stepping.
 Condition-free Active Run shall remain observable and pausable through the same
 sequential managed channel in a managed-Lua build with Agent/RPC disabled.
 No additional stop condition, second CPU loop or repeated synthetic phases may
@@ -164,7 +197,7 @@ but not a queued stopped-refresh backlog or an evaluator occupied for Run's dura
 session/operation identity, outcome (stopped, exited or failed), raw native reason,
 available end-state/revision identity, register validity and continuation
 availability. Context/revision authority shall derive from native lifetime and
-checkpoint facts, not adapter counters. Invalid contexts shall not be fabricated.
+checkpoint facts, not Lua-host counters. Invalid contexts shall not be fabricated.
 At an ordinary held stop, repeated observation shall preserve the result; exact
 release shall retire it before another execution occupies the slot. There shall
 be no unbounded result catalog or replay protocol. Breakpoint/manual stops shall
@@ -174,7 +207,9 @@ permit later execution when native ownership permits, not latch a false error.
 startup/entry, step completion, user breakpoint, requested Pause/manual stop,
 explicit condition match, budget exhaustion, cancellation, program/root exit,
 fault/error and owner/attachment/continuation loss. Budget shall retain its actual
-unit/meaning. New or unmapped reasons shall be `unclassified` with the raw value.
+unit/meaning. New or unmapped reasons in structurally valid terminals shall be
+`unclassified` with the raw value; continuation depends only on its explicit native
+field. Invalid protocol enums or terminal schemas fail rather than being normalized.
 A wait timeout is not a stop reason. Host exit/disposal is not a native cause;
 where causality is unknown, report target ended with cause unknown rather than
 inventing natural or requested exit.
@@ -338,7 +373,7 @@ ranges shall remain unavailable rather than zero-filled or accessed through a
 side-effectful fallback. Debugger inspectability is not proof of guest permission
 or CPU-effective translation.
 
-**GI-MEM-02 — Bounded complete reads (R1).** The adapter shall handle Ghidra's
+**GI-MEM-02 — Bounded complete reads (R1).** The Lua integration host shall handle Ghidra's
 automatic 4096-byte requests by bounded native reads respecting actual limits
 and known safe boundaries, including complete subdivision if a native limit is
 smaller. Only successful subranges may publish bytes; holes/failures shall remain
@@ -424,7 +459,7 @@ table, paging and A20 facts shall be explicit, including unavailable values.
 Equal selectors may have unequal loaded caches; current tables may differ from
 cached CPU translation. Effective queries shall use existing native CPU/MMU
 authority without guest effects or report unsupported. Publishing descriptors alone
-does not implement translation, pointers or decoding. No Python/Java MMU is allowed;
+does not implement translation, pointers or decoding. No Lua/Java MMU is allowed;
 no new language, Ghidra fork or all-mode representation is presumed approved.
 The fixed trace-language choice and any HMA GUI range-boundary issue require actual
 consumer qualification before extending R1's address claims.
@@ -440,7 +475,7 @@ Old session/context/breakpoint identities and historical objects shall have no
 authority over the new target. User-selected breakpoint intent may be reapplied
 only through fresh supported operations.
 
-**GI-REST-02 — Artifact separation (R2b).** Lua, Python and Ghidra interpreter/
+**GI-REST-02 — Artifact separation (R2b).** External-host Lua, embedded Lua and Ghidra interpreter/
 execution stacks, host pointers and debugger connections shall never be restored
 from the machine archive. A rejected archive/profile shall produce truthful
 failure and disposal status, not a usable-looking target. External saves suffice
@@ -466,13 +501,21 @@ exchange completion (including transport timeout) shall make the managed channel
 unusable even for a read: no next generation, observe, resend, protocol close or
 reconnect shall follow. External process disposal shall replace channel use and
 report confirmation or uncertainty. An operation ID cannot repair ambiguous framing.
+For Linux R1, the independent launch-control path asks the Lua host to dispose/reap
+without using poisoned FD3; a dead/hung host instead uses Java's retained host
+Process and the pre-armed child parent-death SIGKILL policy of GI-LIFE-04. Confirmed
+host termination alone never confirms child disposal. No pidfd/descriptor transfer,
+PID registry or surviving in-host emergency code is assumed.
 
 **GI-PKG-01 — Supported composition (R1 onward; Stage 0 backend artifacts under GI-PKG-02).** Initial packaging shall target Ghidra 12.2/
-Trace RMI 12.2, its required 64-bit JDK 25 and release-matched Python dependencies,
+Trace RMI 12.2, its required 64-bit JDK 25 and the qualified Lua 5.4 host/codec/OS composition,
 starting on the qualified Linux/SDL2 managed-Lua build with matching Lua ABI/modules.
 Ship the external agent, typed schema, launcher/help, required historical guard
-and managed-session bootstrap/client/disposal support. Reuse bundled `ghidratrace`,
-not a replacement protocol implementation. Agent/RPC, MCP and AI providers shall
+and managed-session bootstrap/client/disposal support. The Lua client shall implement
+the exact released language-neutral Trace RMI schema/framing/ordering using a qualified
+protobuf library; Lua owns schema/actions/projection. The bundled Python `ghidratrace`
+is reference material only, not a shipped/imported/generated client or dependency.
+No Python runtime component shall be required. Agent/RPC, MCP and AI providers shall
 not be runtime prerequisites. Other platforms/versions require their own evidence;
 Ghidra portability or alternate RPC transport is not such evidence. Install the
 integration in an isolated, version-matched environment; do not opportunistically
@@ -491,16 +534,17 @@ bytes, relabel it, add a second serving loop or probe/fallback between contracts
 Ordered generations, bounds and fatal ambiguous-exchange semantics shall apply
 to both evaluator and fixed records. R1 shall ship this qualified composition.
 
-**GI-TRUST-01 — Typed local boundary (Stage 0 onward; Ghidra surface R1 onward).** The trusted launcher/adapter shall
-exclusively own the inherited local managed channel and evaluator, with one
-exchange in flight. Live evaluator-backed calls shall use adapter-owned constant
-chunks and separately encoded, schema/range-checked data arguments. User data shall
-never be interpolated as Lua source, evaluated, or used to select arbitrary
-functions. Ghidra shall expose only the closed typed debugger methods and no
-general evaluator/console path. This is not a sandbox against the trusted local
-launcher; terminal refusal before evaluation remains mandatory even for racing calls.
-Native opaque contexts remain local; only copied native-validated identity data
-crosses the boundary.
+**GI-TRUST-01 — Typed local boundary (Stage 0 onward; Ghidra surface R1 onward).** The trusted external Lua host shall
+exclusively own the inherited local managed client channel, with one exchange in
+flight. Ghidra actions shall use fixed typed managed records with separately encoded,
+schema/range-checked data; the embedded worker's single dispatcher invokes fixed Lua
+bindings, without source evaluation. Any retained evaluator-backed trusted scripting
+call uses constant owned chunks and separately encoded arguments; it is not a Ghidra
+invocation path. User data shall never be interpolated as Lua source, evaluated or
+used to select arbitrary functions. Ghidra exposes only closed typed debugger methods,
+no evaluator/console. This is not a sandbox against the trusted local host. Departure
+refuses all live binding/evaluator requests before dispatch/evaluation, including races.
+Native opaque contexts remain local; only native-validated copied identities cross.
 
 **GI-TRUST-02 — Deployment and data (all deliveries, for their shipped surfaces).** Default connections shall be local/loopback;
 TCP reachability is not authentication and public unauthenticated control is not
@@ -522,7 +566,7 @@ publication fails. No latency/performance number is claimed before measurement.
 
 ## 11. Compact traceability and acceptance matrix
 
-Analysis references below are to the frozen source identified in §1. Each scenario
+Analysis references below are to the current companion identified in §1. Each scenario
 shall retain the exact combined build/package/profile identity and factual outcome,
 including failures. Use actual consumer paths plus focused ownership/conversion
 checks; do not substitute mocks or demand exhaustive device/transport coverage.
@@ -536,7 +580,7 @@ one extra runtime scenario per requirement.
 
 | Acceptance ID / delivery | Actual scenario and externally observable pass criteria | Requirements / analysis rationale |
 |---|---|---|
-| A0 / Stage 0 | Actual managed session, Agent disabled, condition-free real-mode loop: start returns before completion; same channel observes and Pauses Active; Pending Pause refuses without activation. Read the settled revision, observe terminal twice, release, reject old identity against successor. Repeat equivalent scripted behavior via sync helper; breakpoint/manual stop remains continuable. Prove one existing callback and pending-event close on the shared path before claiming callback migration; reject callbacks in external R1 profile. | GI-LIFE-01–02, GI-OP-01–07, GI-OBS-01, GI-PKG-02; analysis §§8–10, 13 |
+| A0 / Stage 0 | Actual managed session, Agent disabled, condition-free real-mode loop: Start returns admission before long-run completion; same channel observes and Pauses Active. Observe may see Pending/Active/Terminal; a native barrier creates a Pending opportunity, not guaranteed transport visibility. Test at native consumption that Pending Pause refuses without forced activation; gate UI truth, not a deterministic Pending sample. Read the settled revision, observe terminal twice, release, reject old identity against successor. Repeat equivalent scripted behavior via sync helper; breakpoint/manual stop remains continuable. Prove one existing callback and pending-event close on the shared path before claiming callback migration; reject callbacks in external R1 profile. | GI-LIFE-01–02, GI-OP-01–07, GI-OBS-01, GI-PKG-02; analysis §§8–10, 13 |
 | A0b / Stage 0 artifact gate | Record the delivered DOSBox-owned versioned host/client schema/dispatch identity. Demonstrate a fixed terminal record dispatched by that host, replacing this host's old dependency decoder/serve usage rather than forwarding to it or adding a second serving loop. Verify all affected DOSBox clients use the one contract; deliver updated `docs/managed-lua-session.md`, focused protocol/lifecycle tests, package metadata/notices and unchanged dependency pin/provenance. Inspect the affected `dbg.live` execution-binding migration to the singular core and preservation of unrelated input/capture surfaces. A0/A1 runtime success alone cannot pass this artifact gate. | GI-PKG-02, GI-LIFE-02, GI-TRUST-01; analysis §§8–9, 12–13 |
 | A1 / Stage 0 | COM exit between exchanges and fresh-restored-root exit just after a complete Active wait: receive identical typed terminal twice, reject post-departure guest effects/reads, exact release response precedes normal child exit. Native teardown does not await a departed evaluator. Fresh restored startup permits inspection without progress before explicit execution. Disconnect in delivery window reports lost receipt and confirmed/unconfirmed disposal. | GI-TERM-01–04, GI-LIFE-04, GI-FAIL-01–02; analysis §9 departure traces/proof |
 | A2 / R1 | Clean isolated/version-matched installation without opportunistic Ghidra mutation; actual Ghidra window: launch COM before mapping, then import/select/map static Program. Verify accepted/Pending is not RUNNING before native activation, Pause request is not STOPPED before settlement, and initial readiness is admitted stop rather than connection. Verify exactly one guest CPU execution thread, no host worker/audio/renderer threads and no hidden competing controller (cross-check A0/A5). Use nonaligned CS (including `1234:0100`, `AX=0200`, `JMP AX`, native destination `0x12540`), near-relative boundary and far-transfer cases; verify registers, bytes, frame-PC and SS:SP, aliases and explicit reference/p-code limitations or a qualified remedy. Set two user breakpoints from static analysis, identify actual hit, distinguish internal Step Over, Step Into/Over known call/write, Pause a continuous loop, exit/dispose. Verify enumerated lifecycle controls and absence of Detach; connected trace Close initiates disposal with confirmation separate from native exit. | GI-FLOW-01, GI-LIFE-01–04, GI-UI-01–03, GI-BP-01–02, GI-ADDR-01–03, GI-MAP-01–02, GI-PKG-01/03; analysis §§3–7, 10, 12–13 |
@@ -549,6 +593,34 @@ one extra runtime scenario per requirement.
 
 The following focused checks are mandatory parts of the named rows, not additional
 product features or an exhaustive test matrix:
+
+- **Lua-only revision-2 coverage (A0/A0b/A1/A2/A5):** qualify the external Lua host,
+  exact 12.2 protobuf framing/negotiation, XML schema, complete typed method
+  declarations, integer/register encoding and FIFO reverse invocation replies.
+  Interrupt priority must not reorder those replies. Verify actual launch environment,
+  installed Lua/module provenance, child/FD ownership and EOF distinct from reaped
+  exit; run the integration package without Python. Existing Python test fixtures
+  remain legitimate independent tests. Prove Pending activation at the held native
+  frontier with Agent disabled, rather than relying on an unreachable outer loop.
+  Exercise partial-frame non-destructive wake, continued terminal-only dispatch,
+  native settlement before owner unwind, and failed Release flush after consumption
+  without retry. Callback expiry uses a documented native-owned deadline independent
+  of the seven transport budgets. These refine the existing acceptance IDs, not add
+  another delivery stage or waive prior scenarios.
+
+  A0's Start reply is admission only. Transported Observe may see Pending, Active
+  or Terminal; a native barrier creates an opportunity, not a deterministic Pending
+  sample. At native consumption explicitly test Pending Pause refusal with no forced
+  activation; UI assertions require truthful state, not visibility of every state.
+  A1/A5 cover host death before/after child arm, parent change to a non-init subreaper,
+  Java disposal of a hung host, ignored TERM followed by live-host KILL, and missing
+  child-exit evidence staying unconfirmed. No child finalizer or descendant-tree
+  cleanup is inferred. A2 covers startup exceeding stock ten seconds but within
+  120000 ms, expiry/cancellation before native-ready and after ready during trace
+  creation/publication, visible stage facts and disposal. A2/A5 also cover explicit
+  host-selected trace oid, open-use/close identity and non-reuse, unknown raw reason
+  → unclassified with explicit continuation only, and invalid terminal schemas/enums
+  → protocol failure. These remain implementation acceptance obligations, not results.
 
 - **A0 — identity, callback and caller migration:** receive session identity at
   creation/readiness before Start; check its binding on subsequent responses.
@@ -608,7 +680,9 @@ mode/load/hit projection, client/package contract and Ghidra freshness behavior.
 The nonaligned-CS consumer experiment must settle truthful limitation versus
 necessary narrow remedy; advanced representation remains a later evidence-led
 decision. These are unresolved means/proofs, not permission to weaken the above
-behavior or to claim current support. Revision 2 incorporates the independently
-assessed R1 findings and is independently approved by Sol, GLM 5.3 and DeepSeek
-as a functional specification. Neither implementation nor runtime/product
-qualification is claimed.
+behavior or to claim current support. The earlier revision-2 review remains historical
+evidence for its original text. Independent Lua-only revision-2 approval covers the
+Lua Trace RMI codec/ordering, typed FD3 client and exact process-owner placement,
+preserving the reviewed native/terminal/historical races; their implementation proofs
+remain outstanding.
+Neither implementation nor runtime/product qualification is claimed.
