@@ -553,6 +553,7 @@ public:
 
     struct Session {
         std::uint64_t native_operation = 0;
+        std::string execution_operation_id;
         std::string id;
         std::string target_command;
         SessionState state = SessionState::Starting;
@@ -618,7 +619,7 @@ public:
     virtual void CaptureStoppedContext() {}
     virtual std::uint64_t ExecutionOperation() const { return 0; }
     virtual bool Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const = 0;
-    virtual bool Pause(std::string* error) const = 0;
+    virtual bool Pause(std::uint64_t operation, std::string* error) const = 0;
     virtual bool StartTargetAtEntry(const std::string& command,
                                     const std::vector<std::string>& arguments,
                                     const std::string& workdir,
@@ -682,7 +683,7 @@ public:
     AGENT_RUNTIME_FORWARD(IsReadyForTargetStart, bool IsReadyForTargetStart() const, ())
     AGENT_RUNTIME_FORWARD(EntryBreakpointSequence, std::uint64_t EntryBreakpointSequence() const, ())
     AGENT_RUNTIME_FORWARD(Continue, bool Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const, (conditions,error))
-    AGENT_RUNTIME_FORWARD(Pause, bool Pause(std::string* error) const, (error))
+    AGENT_RUNTIME_FORWARD(Pause, bool Pause(std::uint64_t operation, std::string* error) const, (operation, error))
     AGENT_RUNTIME_FORWARD(StartTargetAtEntry, bool StartTargetAtEntry(const std::string& command, const std::vector<std::string>& arguments, const std::string& workdir, std::string* error) const, (command, arguments, workdir, error))
     AGENT_RUNTIME_FORWARD(GetRegisters, bool GetRegisters(RegisterSnapshot* registers, std::string* error) const, (registers, error))
     AGENT_RUNTIME_FORWARD(Step, bool Step(StepMode mode, bool* continued, std::string* error) const, (mode, continued, error))
@@ -719,10 +720,11 @@ public:
     std::uint64_t ExecutionOperation() const override { return 1; }
     bool Continue(const std::vector<NativeDebug::StopCondition>&, std::string*) const override { return true; }
 
-    bool Pause(std::string*) const override
+    bool Pause(std::uint64_t operation, std::string*) const override
     {
+        if(operation!=ExecutionOperation()) return false;
         NativeDebug::Result terminal;
-        terminal.operation=ExecutionOperation();
+        terminal.operation=operation;
         terminal.terminal=NativeDebug::Terminal::Held;
         AGENT_NotifyDebuggerStopped(0, 0x100, &terminal);
         return true;
@@ -1733,6 +1735,7 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             operation.id = operation_id;
             session->operations[operation_id] = operation;
             session->state = Impl::SessionState::Running;
+            session->execution_operation_id=operation_id;
             const std::string session_id = session->id;
             if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, conditions](const std::uint64_t) {
                     AgentRuntime& adapter = *impl->runtime;
@@ -1788,20 +1791,23 @@ std::string AgentServer::HandleJsonRpcImpl(const std::shared_ptr<Impl>& impl, co
             session->operations[operation_id] = operation;
             session->pending_stop_kind = operation.stop_kind;
             const std::string session_id = session->id;
-            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id](const std::uint64_t) {
+            const std::string execution_id=session->execution_operation_id;
+            if (SubmitEmulationCommandLocked(impl, [impl, session_id, operation_id, execution_id](const std::uint64_t) {
                         AgentRuntime& adapter = *impl->runtime;
-                        // Continue binds its native operation on the emulation
-                        // thread. Request ingress may precede that binding, so
-                        // bind Pause here, before it can publish a terminal.
+                        // Resolve only the ingress-selected Continue, never the
+                        // current slot: it may already belong to a successor.
+                        std::uint64_t native_operation=0;
                         {
                             std::lock_guard<std::mutex> command_lock(impl->mutex);
                             if (!impl->session || impl->session->id != session_id)
                                 return;
-                            impl->session->operations.at(operation_id).native_operation =
-                                    impl->session->native_operation;
+                            const auto selected=impl->session->operations.find(execution_id);
+                            if(selected!=impl->session->operations.end())
+                                native_operation=selected->second.native_operation;
+                            impl->session->operations.at(operation_id).native_operation=native_operation;
                         }
                         std::string command_error;
-                        if (adapter.Pause(&command_error))
+                        if (adapter.Pause(native_operation,&command_error))
                             return;
 
                         std::lock_guard<std::mutex> command_lock(impl->mutex);

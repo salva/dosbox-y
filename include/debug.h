@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-#include "native_debug_execution.h"
+#include "native_debug_control.h"
 #include "native_control_owner.h"
 
 // Irrecoverable synchronous decoder return/exception: dispose this process.
@@ -81,6 +81,11 @@ NativeDebug::Admission DEBUG_RequestNativeExecution(NativeDebug::Request request
 bool DEBUG_ResumeNativeExecution(NativeDebug::Frontend frontend, bool watch, bool retrace, NativeDebug::Attachment attachment,
                                  const std::vector<NativeDebug::StopCondition> &conditions = {});
 bool DEBUG_NativeExecutionPending(void);
+// submit/take transfer copied data only; consumption and stop body stay native.
+bool DEBUG_SubmitNativeControl(NativeDebug::Control request);
+bool DEBUG_TakeNativeControl(NativeDebug::Status &response);
+void DEBUG_ServiceNativeControl();
+NativeDebug::Status DEBUG_ConsumeNativeControl(NativeDebug::Control request);
 // Ingress must not run during activation or its callback tail.
 bool DEBUG_NativeExecutionInFlight(void);
 // True only inside the post-service dispatcher for the active Phase grant.

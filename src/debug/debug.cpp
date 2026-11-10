@@ -5695,6 +5695,29 @@ static bool DEBUG_HoldNativeExecution(void) {
     DOSBOX_SetLoop(DEBUG_Loop);
     return true;
 }
+static NativeDebug::ControlMailbox native_control;
+bool DEBUG_SubmitNativeControl(NativeDebug::Control request) {
+    return native_control.submit(request);
+}
+bool DEBUG_TakeNativeControl(NativeDebug::Status &response) {
+    return native_control.take(response);
+}
+NativeDebug::Status DEBUG_ConsumeNativeControl(NativeDebug::Control request) {
+    auto status=request.kind==NativeDebug::Control::Kind::Pause?
+        native_execution.pause(request.attachment,request.operation):
+        native_execution.observe(request.attachment,request.operation);
+    if (status.result==NativeDebug::ControlResult::StopRequested) {
+#if C_DEBUG_LUA
+        void DEBUG_MarkNativeControlPause();
+        DEBUG_MarkNativeControlPause();
+#endif
+        DEBUG_HoldNativeExecution();
+    }
+    return status;
+}
+void DEBUG_ServiceNativeControl() {
+    native_control.service(DEBUG_ConsumeNativeControl);
+}
 static uint64_t DEBUG_ExecutionWallMilliseconds() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -5931,6 +5954,9 @@ static LuaDriver::WorkerResult local_driver_result;
 static std::thread local_driver_thread;
 static NativeDebug::Attachment local_driver_attachment;
 static bool local_driver_started=false;
+void DEBUG_MarkNativeControlPause() {
+    if (local_driver_started) local_driver_host_break=true;
+}
 // Selected natural EXEC departure is not target absence: retain the request
 // through native return restoration and the shell's actual cleanup fence.
 static uint64_t local_driver_selected_owner=0;
@@ -6105,6 +6131,7 @@ static void LocalDriverRetire() {
     LOG_MSG("Lua driver closed: %s",local_driver_result.completed?"completed":local_driver_result.error.c_str());
 }
 static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
+    DEBUG_ServiceNativeControl();
     if(seam.kind==NativeFrontier::Kind::Predispatch || seam.kind==NativeFrontier::Kind::PostTick) {
         const auto *active=native_execution.activeRequest();
         if((!active || !active->resume || active->frontend!=NativeDebug::Frontend::Lua ||
@@ -6226,6 +6253,7 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
         }
     }
     for(;;) {
+        DEBUG_ServiceNativeControl();
         if(local_driver_handoff.isLuaClosed()) {
             LocalDriverRetire();
             throw 1;
@@ -6366,6 +6394,11 @@ static void LocalDriverFrontier(void *,const NativeFrontier::Descriptor &seam) {
                     local_driver_target_cs=request.cs;local_driver_target_ip=request.ip;
                     local_driver_target_owner=current.invocation;
                     native_execution.stopRuntime().begin(execution.stop_any.size(),PIC_Ticks);
+                    local_driver_handoff.admitted(native_execution.observe(
+                        local_driver_attachment,local_driver_operation));
+                    // Admission exists now. Consume any already queued control
+                    // as Pending before the separate held-owner preparation turn.
+                    DEBUG_ServiceNativeControl();
                     local_driver_preparing=true;
                     DEBUG_DispatchNativeExecution();
                     local_driver_preparing=false;

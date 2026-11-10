@@ -87,7 +87,7 @@ public:
     bool IsReadyForTargetStart() const;
     std::uint64_t EntryBreakpointSequence() const;
     bool Continue(const std::vector<NativeDebug::StopCondition>& conditions, std::string* error) const;
-    bool Pause(std::string* error) const;
+    bool Pause(std::uint64_t operation, std::string* error) const;
     bool StartTargetAtEntry(const std::string& command,
                             const std::vector<std::string>& arguments,
                             const std::string& workdir,

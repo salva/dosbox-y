@@ -7,6 +7,7 @@ native_frontier.h \
 native_slice_observer.h \
 machine_service.h \
 native_debug_execution.h \
+native_debug_control.h \
 native_control_owner.h \
 native_input.h \
 native_clock.h \

@@ -76,6 +76,7 @@ class Handoff {
     std::condition_variable changed_;
     Request request_;
     Response response_;
+    NativeDebug::Status admission_;
     Event event_;
     Verdict verdict_;
     Request read_;
@@ -85,6 +86,15 @@ public:
     Handoff()=default;
     Handoff(const Handoff &)=delete;
     Handoff &operator=(const Handoff &)=delete;
+    // Admission is a copied native identity, not completion of the synchronous
+    // call. This seam lets the later async worker use the very same operation.
+    void admitted(NativeDebug::Status status) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        admission_=status;changed_.notify_all();
+    }
+    NativeDebug::Status admission() {
+        std::lock_guard<std::mutex> lock(mutex_);return admission_;
+    }
     bool ready() {
         std::lock_guard<std::mutex> lock(mutex_);
         if(closing_ || phase_!=Phase::Starting)return false;
@@ -102,6 +112,7 @@ public:
             if(phase_==Phase::Observing)verdict_.violation=true;
             return false;
         }
+        admission_={};
         request_=std::move(request);phase_=Phase::Request;changed_.notify_all();
         for (;;) {
             changed_.wait(lock,[this]{return phase_==Phase::Result || phase_==Phase::Event || closing_;});

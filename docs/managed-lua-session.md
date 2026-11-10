@@ -5,6 +5,57 @@
 semantics are unchanged. This entry uses the existing initialized Lua worker,
 native owner and bindings; it is trusted code, not a sandbox.
 
+## Native control seam (S0-A)
+
+This is shared native service preparation, **not public async Start/Wait or a new
+FD3 protocol**. Existing managed Lua calls still wait synchronously. Agent and Lua
+remain exclusive attachments; Agent parsing, command queue and catalog are not
+required by the native service.
+
+`DEBUG_SubmitNativeControl(Control)` / `DEBUG_TakeNativeControl(Status&)` provide
+one copied Observe/Pause exchange. Busy submission never replaces an exchange;
+the submitter owns it through take. `DEBUG_ServiceNativeControl()` consumes on the
+emulator thread; `DEBUG_ConsumeNativeControl()` is the same thread-only authority
+used directly by Agent Pause. Both attachment serial and operation are validated
+at consumption. Pending Pause returns Pending without cancellation or activation;
+Active Pause enters the existing common native stop body, with settlement after
+unwind. Terminal is idempotent; released/stale identities return Unknown. Status
+is a copy, not stopped-register permission or completion acknowledgement.
+
+The empty service is an atomic predicate before the condition-free Lua frontier
+return. Normal_Loop retains the Agent guard around its pump, but not around the
+native Pending return. Held Lua admission publishes `Handoff::admitted(Status)`
+before preparing/dispatch; `admission()` exposes that copied identity, reset at the
+next call. Publication does not activate. The held owner still performs enqueue →
+preparing → native dispatch. S0-C must adopt this seam for prompt async admission
+and exact retained Release; S0-D owns its actual same-FD3 serving contract.
+
+Focused recipes (out-of-tree configured heavy-debug/Lua builds, Agent off/on):
+
+```sh
+bash tests/machine-service/check-worker.sh
+for t in execution frontier control-owner control; do
+  c++ -std=c++14 -O2 -pthread -Iinclude tests/machine-service/$t.cpp -o "$SAIVAGE_CARD_WORK_ROOT/$t"
+  "$SAIVAGE_CARD_WORK_ROOT/$t"
+done
+c++ -std=c++14 -O2 -pthread -I"$AGENT_BUILD" -Iinclude \
+  tests/machine-service/agent-control-order.cpp src/agent/bridge/agent_bridge.cpp \
+  -o "$SAIVAGE_CARD_WORK_ROOT/agent-control-order"
+"$SAIVAGE_CARD_WORK_ROOT/agent-control-order"
+DOSBOX_TEST_BINARY=/absolute/debug/binary bash tests/machine-service/check-control-native.sh
+```
+
+The last recipe needs GDB, Xvfb and the ordinary production Lua fixture's tools.
+It deliberately holds the real Pending admission, consumes a refused Pause, then
+checks a stale operation against an Active successor and consumes its exact Pause.
+Its consumer continues through stopped reads, callback, Save and shutdown. GDB
+calls the production consumer, not the worker mailbox/FD3; this is native barrier
+proof, not full A0. The queue regression uses the real Agent queue with controlled
+native predicates, not the Agent server/session runtime. The 10-million-empty-
+service timing in `control.cpp` is fixture cost only, not a latency promise or
+measured emulator throughput. Combined A0/A0b/A1, callback lifetime redesign,
+affected live migration, fresh restore and installed qualification remain downstream.
+
 ## Combined input and installation
 
 Foundation: `7883a116990aef64402ca4f667e9506ba3691422`, engine29/representation9.

@@ -264,14 +264,21 @@ bool DebuggerAdapter::Continue(const std::vector<NativeDebug::StopCondition>& co
 #endif
 }
 
-bool DebuggerAdapter::Pause(std::string* error) const
+bool DebuggerAdapter::Pause(std::uint64_t operation, std::string* error) const
 {
     if (!RequireAvailable(error) || !RequireEmulationThread(error))
         return false;
 
 #if C_DEBUG
-    DEBUG_EnableDebugger();
-    return true;
+    NativeDebug::Control request;
+    request.kind=NativeDebug::Control::Kind::Pause;
+    request.attachment=DEBUG_AttachNativeExecution(NativeDebug::Frontend::Agent,0);
+    request.operation=operation;
+    const auto status=DEBUG_ConsumeNativeControl(request);
+    if (status.result==NativeDebug::ControlResult::StopRequested ||
+        status.result==NativeDebug::ControlResult::Terminal) return true;
+    if (error) *error="Native Pause refused (Pending, stale or departed operation)";
+    return false;
 #else
     return false;
 #endif

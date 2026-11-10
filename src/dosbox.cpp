@@ -573,6 +573,9 @@ static Bitu Normal_Loop(void) {
 #endif
 #if defined(C_DEBUG) && defined(C_DOSBOX_AGENT)
             dosbox_agent::AGENT_BridgePump();
+#endif
+#if C_DEBUG
+            DEBUG_ServiceNativeControl();
             if (DEBUG_NativeExecutionPending()) return 0;
 #endif
             NativeFrontier::frontiers().reach(NativeFrontier::Kind::Predispatch,

@@ -10,6 +10,12 @@ enum class Admission { Accepted, Busy, StaleContext, UnsafeContext, Capacity };
 enum class Terminal { Held, Budget, Error, LogOpenError, Exception, ContinuationLost, OwnerLost, AttachmentLost, ProgramExit };
 struct Context { uint64_t invocation=0, checkpoint=0; };
 struct Attachment { uint64_t serial=0; };
+enum class ControlResult { Unknown, Departed, Pending, Active, Terminal, StopRequested };
+struct Status {
+    ControlResult result=ControlResult::Unknown;
+    uint64_t attachment=0, operation=0;
+    State state=State::Empty;
+};
 struct Request {
     std::vector<StopCondition> stop_any;
     // Native-boundary completion is distinct from legacy numeric budgets.
@@ -101,6 +107,23 @@ public:
     uint64_t operation() const {return state_==State::Empty?0:result_.operation;}
     bool ownsActive(uint64_t operation) const {
         return operation && state_==State::Active && result_.operation==operation;
+    }
+    // Consumption is emulator-thread-only. Pending observation/Pause cannot
+    // activate or cancel the guest; identities are rechecked at use.
+    Status observe(Attachment attachment, uint64_t operation) const {
+        Status status;
+        if (!attachment.serial || attachment.serial!=attachment_.serial ||
+            !operation || operation!=this->operation()) return status;
+        status.attachment=attachment.serial;status.operation=operation;status.state=state_;
+        status.result=departing_?ControlResult::Departed:
+            state_==State::Pending?ControlResult::Pending:
+            state_==State::Active?ControlResult::Active:ControlResult::Terminal;
+        return status;
+    }
+    Status pause(Attachment attachment, uint64_t operation) const {
+        auto status=observe(attachment,operation);
+        if (status.result==ControlResult::Active) status.result=ControlResult::StopRequested;
+        return status;
     }
     Context context(uint64_t invocation) {
         if (!invocation || state_==State::Pending || state_==State::Active) return {};
